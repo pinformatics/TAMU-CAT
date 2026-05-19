@@ -1,21 +1,20 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
   <div class="c-page">
-    <section class="c-card u-stack u-stack--xl">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Faculty imports</p>
           <h1 class="c-page-title c-page-title--brand">Grade Import Batches</h1>
           <p class="c-page-subtitle">Staff-only workspace for previews, committed batches, and audit history.</p>
         </div>
-        <%= link_to "New batch", new_admin_grade_import_batch_path, class: button_classes(:primary) %>
+        <div class="u-actions">
+          <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
+          <%= link_to "New batch", new_admin_grade_import_batch_path, class: button_classes(:primary) %>
+        </div>
       </header>
+    </section>
 
+    <section class="c-card u-stack u-stack--xl">
       <section class="u-stack u-stack--md">
         <div>
           <div class="u-responsive-split">
@@ -27,7 +26,7 @@
 
         <div class="c-card c-card--flush u-overflow-hidden">
         <%= render TableComponent.new(
-          headers: ["Batch", "Status", "Mode", "Semester", "Uploaded By", "Files", "Evidence", "Pending", "Ratings", "Created", ""]
+          headers: ["Batch", "Status", "Mode", "Semester", "Uploaded By", "Notes", "Files", "Evidence", "Pending", "Ratings", "Created", ""]
         ) do %>
           <% @batches.each do |batch| %>
             <% batch_modes = batch.grade_import_files.filter_map { |file| file.parsed_content["mode"].presence || file.parsed_content.dig("grade_sheet_debug", "mode").presence }.uniq %>
@@ -44,6 +43,7 @@
               <td><%= mode_label %></td>
               <td><%= batch.program_semester&.name || "—" %></td>
               <td><%= batch.uploaded_by&.email %></td>
+              <td><%= truncate(batch.summary["import_notes"].to_s, length: 48).presence || "—" %></td>
               <td><%= "#{batch.processed_files}/#{batch.total_files}" %></td>
               <td><%= batch.evidence_count %></td>
               <td><%= batch.pending_count %></td>

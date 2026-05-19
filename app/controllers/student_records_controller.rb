@@ -20,6 +20,11 @@ class StudentRecordsController < ApplicationController
     load_index_context
 
     package = build_student_records_workbook(@student_records)
+    record_export_audit!(
+      export_type: "student_records_excel",
+      description: "Exported student records Excel workbook.",
+      metadata: { student_count: @students.size }
+    )
     send_data package.to_stream.read,
               filename: "student-records-#{Time.current.strftime('%Y%m%d-%H%M%S')}.xlsx",
               disposition: "attachment",

@@ -6,11 +6,11 @@ class Admin::ProgramSetupsControllerTest < ActionDispatch::IntegrationTest
     sign_in @admin
   end
 
-  test "shows program setup with back button in common toolbar" do
+  test "shows program setup with back button in brand header" do
     get admin_program_setup_path(tab: "tracks")
 
     assert_response :success
-    assert_select "div.c-toolbar" do
+    assert_select ".c-card.c-card--brand" do
       assert_select "a[href=?]", admin_dashboard_path
     end
   end

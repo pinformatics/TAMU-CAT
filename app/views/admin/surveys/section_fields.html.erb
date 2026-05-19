@@ -1,35 +1,35 @@
 <% section = section_fields.object %>
-<article class="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm"
+<article class="c-card c-card--tight c-card--muted u-stack u-stack--md"
          data-section-entry
          data-section-new-record="<%= section.persisted? ? 'false' : 'true' %>">
-  <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-    <div class="flex-1 space-y-2">
+  <div class="u-responsive-split u-items-start">
+    <div class="c-field u-flex-1">
       <%= section_fields.hidden_field :id %>
       <%= section_fields.hidden_field :_destroy, value: section.marked_for_destruction? ? 1 : 0 %>
       <%= section_fields.hidden_field :form_uid, value: section.form_uid %>
 
-      <%= section_fields.label :title, "Section title", class: "block text-sm font-medium text-slate-700" %>
+      <%= section_fields.label :title, "Section title", class: "c-label" %>
       <%= section_fields.text_field :title,
                                     class: input_classes,
                                     placeholder: "Student Experience" %>
     </div>
 
     <button type="button"
-            class="self-start rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100"
+            class="<%= button_classes(:danger, extra_classes: "btn-sm") %>"
             data-action="section-fields#remove">
       Remove section
     </button>
   </div>
 
-  <div class="space-y-2">
-    <%= section_fields.label :description, "Description (optional)", class: "block text-sm font-medium text-slate-700" %>
+  <div class="c-field">
+    <%= section_fields.label :description, "Description (optional)", class: "c-label" %>
     <%= section_fields.text_area :description,
                                  class: textarea_classes,
                                  placeholder: "Brief instructions shown before the grouped categories." %>
   </div>
 
-  <div class="flex flex-col gap-1">
-    <%= section_fields.label :position, "Display order", class: "block text-xs font-semibold uppercase tracking-wide text-slate-500" %>
+  <div class="c-field">
+    <%= section_fields.label :position, "Display order", class: "c-label" %>
     <%= section_fields.number_field :position, in: 0..200, class: input_classes %>
   </div>
 </article>

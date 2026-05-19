@@ -3,7 +3,7 @@ require "csv"
 class Admin::GradeImportBatchesController < Admin::BaseController
   IMPORT_EXTENSIONS = GradeImports::FileUploadRouter::SUPPORTED_EXTENSIONS
 
-  before_action :set_batch, only: %i[show commit rollback recommit semester destroy export_ratings error_report]
+  before_action :set_batch, only: %i[show commit rollback recommit semester destroy export_ratings error_report correction_file]
 
   def index
     @batches = GradeImportBatch.includes(:uploaded_by, :grade_import_files).order(created_at: :desc).limit(100)
@@ -23,7 +23,10 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @batch = GradeImportBatch.create!(
       uploaded_by: current_user,
       program_semester_id: grade_import_batch_params[:program_semester_id].presence,
-      summary: { "dry_run" => dry_run_requested? }
+      summary: {
+        "dry_run" => dry_run_requested?,
+        "import_notes" => grade_import_batch_params[:import_notes].to_s.strip.presence
+      }.compact
     )
 
     GradeImports::BatchProcessor.new(batch: @batch, files: files, dry_run: dry_run_requested?).call
@@ -57,6 +60,8 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @processed_row_count = @files.sum(&:imported_rows)
     @pending_row_count = @files.sum(&:pending_rows)
     @duplicate_warnings = @files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
+    @duplicate_upload_warnings = @files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i }
+    @validation_summary = validation_summary_for(@files)
   end
 
   def commit
@@ -132,6 +137,12 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   def export_ratings
     respond_to do |format|
       format.csv do
+        record_export_audit!(
+          export_type: "grade_import_derived_ratings_csv",
+          description: "Exported derived ratings CSV for grade import batch ##{@batch.id}.",
+          subject: @batch,
+          metadata: { batch_id: @batch.id }
+        )
         send_data ratings_csv,
                   filename: "grade-import-batch-#{@batch.id}-derived-ratings.csv",
                   type: "text/csv"
@@ -141,8 +152,26 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   end
 
   def error_report
+    record_export_audit!(
+      export_type: "grade_import_error_report_csv",
+      description: "Exported error report CSV for grade import batch ##{@batch.id}.",
+      subject: @batch,
+      metadata: { batch_id: @batch.id }
+    )
     send_data error_report_csv,
               filename: "grade-import-batch-#{@batch.id}-errors.csv",
+              type: "text/csv"
+  end
+
+  def correction_file
+    record_export_audit!(
+      export_type: "grade_import_correction_file_csv",
+      description: "Exported correction file CSV for grade import batch ##{@batch.id}.",
+      subject: @batch,
+      metadata: { batch_id: @batch.id }
+    )
+    send_data correction_file_csv,
+              filename: "grade-import-batch-#{@batch.id}-corrections.csv",
               type: "text/csv"
   end
 
@@ -157,7 +186,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   end
 
   def grade_import_batch_params
-    params.permit(:program_semester_id)
+    params.permit(:program_semester_id, :import_notes)
   end
 
   def match_rate_for(files)
@@ -255,5 +284,87 @@ class Admin::GradeImportBatchesController < Admin::BaseController
         end
       end
     end
+  end
+
+  def correction_file_csv
+    CSV.generate(headers: true) do |csv|
+      csv << [
+        "Row Type",
+        "File Name",
+        "Status",
+        "Row Number",
+        "Student Identifier Type",
+        "Student Identifier",
+        "Student Name",
+        "Student UIN",
+        "Student Email",
+        "Course Code",
+        "Assignment",
+        "Competency",
+        "Raw Grade",
+        "Result Level",
+        "Course Target Level",
+        "Message",
+        "Correction Notes"
+      ]
+
+      @batch.grade_import_files.order(:id).find_each do |file|
+        Array(file.parse_errors).each do |error|
+          csv << [
+            "failed",
+            file.file_name,
+            file.status,
+            error["row"],
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            error["message"] || error.to_s,
+            nil
+          ]
+        end
+      end
+
+      @batch.grade_import_pending_rows.pending_student_match.includes(:grade_import_file).order(:grade_import_file_id, :row_number, :id).find_each do |row|
+        csv << [
+          "pending_student_match",
+          row.grade_import_file&.file_name,
+          row.status,
+          row.row_number,
+          row.student_identifier_type,
+          row.student_identifier,
+          row.student_name,
+          row.student_uin,
+          row.student_email,
+          row.course_code,
+          row.assignment_name,
+          row.competency_title,
+          row.raw_grade,
+          row.mapped_level,
+          row.course_target_level,
+          "Student could not be matched automatically. Add or correct UIN/email/name, then reconcile or re-upload.",
+          nil
+        ]
+      end
+    end
+  end
+
+  def validation_summary_for(files)
+    {
+      total_files: files.size,
+      failed_files: files.count { |file| file.status == "failed" },
+      imported_rows: files.sum(&:imported_rows),
+      pending_rows: files.sum(&:pending_rows),
+      failed_rows: files.sum(&:error_rows),
+      duplicate_file_uploads: files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i },
+      duplicate_rows: files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
+    }
   end
 end

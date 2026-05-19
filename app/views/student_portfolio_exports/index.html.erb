@@ -1,28 +1,21 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <%= link_to "Back", dashboard_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
   <div class="c-page">
     <section class="u-stack u-stack--lg">
-      <header class="c-card c-card--brand">
-        <div class="u-responsive-split">
-          <div class="u-stack u-stack--xs">
-            <p class="c-eyebrow">Exports</p>
-            <h1 class="c-page-title c-page-title--brand">Portfolio Export</h1>
-            <p class="c-page-subtitle">Download student Google Sites portfolio URLs with student and advisor details.</p>
-          </div>
+      <header class="c-card c-card--brand c-page-header">
+        <div>
+          <p class="c-eyebrow">Exports</p>
+          <h1 class="c-page-title c-page-title--brand">Portfolio Export</h1>
+          <p class="c-page-subtitle">Download student Google Sites portfolio URLs with student and advisor details.</p>
+        </div>
 
-          <div class="u-actions">
-            <%= link_to "Reports Excel", export_reports_excel_path, class: button_classes(:secondary), data: { turbo: false } %>
-            <%= link_to "Student Records Excel", export_student_records_excel_path, class: button_classes(:secondary), data: { turbo: false } %>
-            <%= link_to "Download Excel",
-                        download_student_portfolio_export_path(request.query_parameters),
-                        class: button_classes(:primary),
-                        data: { turbo: false } %>
-          </div>
+        <div class="u-actions">
+          <%= link_to "Back", dashboard_path, class: button_classes(:secondary) %>
+          <%= link_to "Reports Excel", export_reports_excel_path, class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export may include student-level records. Continue only for a legitimate educational interest." } %>
+          <%= link_to "Student Records Excel", export_student_records_excel_path, class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export includes student-level records. Continue only for a legitimate educational interest." } %>
+          <%= link_to "Download Excel",
+                      download_student_portfolio_export_path(request.query_parameters),
+                      class: button_classes(:primary),
+                      data: { turbo: false, turbo_confirm: "FERPA reminder: this export includes student-level portfolio data. Continue only for a legitimate educational interest." } %>
         </div>
       </header>
 

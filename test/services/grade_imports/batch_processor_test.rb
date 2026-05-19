@@ -52,6 +52,37 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 5, rating.aggregated_level
   end
 
+  test "direct competency mastery points never replace result-derived competency ratings" do
+    path = build_direct_competency_workbook(
+      sheet_name: "PHPM_790_001",
+      rows: [
+        [
+          @student.user.name,
+          @student.student_id,
+          @student.uin,
+          2,
+          5
+        ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "direct_competency_mastery_target.xlsx") ],
+      dry_run: true
+    ).call
+
+    evidence = batch.reload.grade_competency_evidences.first
+    rating = batch.grade_competency_ratings.first
+
+    assert_equal "completed", batch.status
+    assert_equal 2, evidence.mapped_level
+    assert_equal 5, evidence.course_target_level
+    assert_equal 2, rating.aggregated_level
+  end
+
   test "canvas direct competency workbook imports primary format and ignores hpmc columns" do
     path = build_primary_direct_competency_workbook(
       sheet_name: "PHPM_631_600",
@@ -145,6 +176,30 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "Policy Analysis", evidence.competency_title
     assert_equal 5, evidence.mapped_level
     assert_equal 1, batch.grade_competency_ratings.count
+  end
+
+  test "canvas import normalizes inconsistent course codes before matching and storing evidence" do
+    path = build_canvas_workbook(
+      grade_sheet_name: "Canvas Grades",
+      course_code: "PHPM 791 002",
+      rows: [
+        [ @student.user.name, 8001, @student.uin, @student.uin, "PHPM_791_002 Spring", 94 ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "canvas_course_code_cleanup.xlsx") ],
+      dry_run: true
+    ).call
+
+    evidence = batch.reload.grade_competency_evidences.first
+
+    assert_equal "completed", batch.status
+    assert_equal "PHPM-791-002", evidence.course_code
+    assert_equal "Policy Analysis", evidence.competency_title
   end
 
   test "canvas workbook matches scientific notation sis identifiers as uins" do
@@ -248,17 +303,96 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     upload = uploaded_excel_file(path, "duplicate_direct.xlsx")
 
     GradeImports::BatchProcessor.new(batch: first_batch, files: [ upload ], dry_run: true).call
-    GradeImports::BatchProcessor.new(
-      batch: second_batch,
-      files: [ uploaded_excel_file(path, "duplicate_direct.xlsx") ],
-      dry_run: true
-    ).call
+
+    assert_no_difference -> { GradeCompetencyEvidence.count } do
+      assert_no_difference -> { GradeCompetencyRating.count } do
+        GradeImports::BatchProcessor.new(
+          batch: second_batch,
+          files: [ uploaded_excel_file(path, "duplicate_direct.xlsx") ],
+          dry_run: true
+        ).call
+      end
+    end
 
     duplicate_count = second_batch.grade_import_files.first.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count")
 
     assert_equal 1, first_batch.reload.grade_competency_evidences.count
     assert_equal 0, second_batch.reload.grade_competency_evidences.count
+    assert_equal 1, first_batch.grade_competency_ratings.count
+    assert_equal 0, second_batch.grade_competency_ratings.count
     assert_equal 1, duplicate_count
+  end
+
+  test "duplicate upload warning records previous matching file checksum" do
+    path = build_direct_competency_workbook(
+      sheet_name: "PHPM_792_003",
+      rows: [
+        [
+          @student.user.name,
+          @student.student_id,
+          @student.uin,
+          5,
+          4
+        ]
+      ]
+    )
+
+    first_batch = create_batch
+    second_batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: first_batch,
+      files: [ uploaded_excel_file(path, "duplicate_warning_first.xlsx") ],
+      dry_run: true
+    ).call
+    GradeImports::BatchProcessor.new(
+      batch: second_batch,
+      files: [ uploaded_excel_file(path, "duplicate_warning_second.xlsx") ],
+      dry_run: true
+    ).call
+
+    duplicate_uploads = second_batch.reload.grade_import_files.first.parsed_content["duplicate_file_uploads"]
+
+    assert_equal 1, second_batch.grade_import_files.first.parsed_content["duplicate_file_upload_count"]
+    assert_equal first_batch.id, duplicate_uploads.first["batch_id"]
+  end
+
+  test "direct competency import keeps valid rows when another row fails validation" do
+    path = build_direct_competency_workbook(
+      sheet_name: "PHPM_790_001",
+      rows: [
+        [
+          @student.user.name,
+          @student.student_id,
+          @student.uin,
+          9,
+          3
+        ],
+        [
+          @student.user.name,
+          @student.student_id,
+          @student.uin,
+          4,
+          3
+        ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "partial_direct_competency.xlsx") ],
+      dry_run: true
+    ).call
+
+    file = batch.reload.grade_import_files.first
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal 1, file.imported_rows
+    assert_equal 1, file.error_rows
+    assert_equal 1, batch.grade_competency_evidences.count
+    assert_includes file.parse_errors.first["message"], "result must be an integer between 1 and 5"
   end
 
   private

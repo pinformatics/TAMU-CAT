@@ -264,7 +264,9 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
   test "admin can export competencies as csv" do
     sign_in @admin
 
-    get export_admin_competencies_path(format: :csv)
+    assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+      get export_admin_competencies_path(format: :csv)
+    end
 
     assert_response :success
     assert_equal "text/csv", response.media_type
@@ -273,6 +275,35 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes csv.headers, "Student ID"
     assert_includes csv.headers, "Course Competency Rule"
     assert csv.any?, "Expected exported CSV to include at least one row"
+  end
+
+  test "admin csv export uses the same semester-scoped course ratings as the matrix" do
+    sign_in @admin
+    student = students(:student)
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    fall = program_semesters(:fall_2025)
+
+    create_course_rating(student: student, competency_title: competency_title, level: 2.0, semester: fall)
+    create_course_rating(student: student, competency_title: competency_title, level: 4.0, semester: program_semesters(:spring_2025))
+    create_course_rating(student: student, competency_title: competency_title, level: 5.0, semester: nil)
+
+    payload = Admin::CompetencyMatrix.new(
+      params: { q: @student.email, semester: fall.name },
+      actor_user: @admin
+    ).call
+    matrix_row = payload[:students].find { |row| row[:id] == student.student_id }
+
+    assert_in_delta 2.0, matrix_row.dig(:ratings, competency_title, :course_rating), 0.001
+
+    get export_admin_competencies_path(format: :csv, q: @student.email, semester: fall.name)
+
+    assert_response :success
+    csv = CSV.parse(response.body, headers: true)
+    export_row = csv.find { |row| row["Student ID"].to_i == student.student_id && row["Competency"] == competency_title }
+
+    refute_nil export_row
+    assert_equal "2.0", export_row["Course Rating"]
+    assert_equal fall.name, export_row["Semester Filter"]
   end
 
   test "advisor export remains scoped to assigned students" do
@@ -318,9 +349,10 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
 
   private
 
-  def create_course_rating(student:, competency_title:, level:)
+  def create_course_rating(student:, competency_title:, level:, semester: nil)
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,
+      program_semester: semester,
       status: "completed",
       summary: { "dry_run" => false }
     )

@@ -1,20 +1,17 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <%= link_to "Back to Surveys", admin_surveys_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
   <div class="c-page">
-    <section class="c-card u-stack u-stack--xl">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Survey admin</p>
-          <h1 class="c-page-title">Survey Change Log</h1>
+          <h1 class="c-page-title c-page-title--brand">Survey Change Log</h1>
           <p class="c-page-subtitle">Review recent admin activity across surveys. Filter by action type to focus on specific updates.</p>
         </div>
+        <%= link_to "Back to Surveys", admin_surveys_path, class: button_classes(:secondary) %>
       </header>
+    </section>
 
+    <section class="c-card u-stack u-stack--xl">
       <section class="u-stack u-stack--md">
         <div>
           <h2 class="c-section-title c-heading-inline">Recent activity</h2>

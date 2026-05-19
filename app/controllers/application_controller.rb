@@ -189,4 +189,25 @@ class ApplicationController < ActionController::Base
       format.any { head :unprocessable_entity }
     end
   end
+
+  def record_export_audit!(export_type:, description:, subject: nil, metadata: {})
+    return unless current_user
+
+    AdminActivityLog.record!(
+      admin: current_user,
+      action: "student_data_export",
+      description: description,
+      subject: subject,
+      metadata: {
+        export_type: export_type,
+        controller: controller_name,
+        action: action_name,
+        format: request.format.symbol,
+        path: request.fullpath,
+        filters: params.to_unsafe_h.except("controller", "action", "format")
+      }.merge(metadata || {})
+    )
+  rescue StandardError => e
+    Rails.logger.warn("[ExportAudit] Failed to record export audit: #{e.class}: #{e.message}")
+  end
 end

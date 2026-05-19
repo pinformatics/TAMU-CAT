@@ -1,30 +1,35 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row items-center u-w-full gap-3">
-      <%= link_to "Back to Surveys", admin_surveys_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
-  <div class="c-container c-container--dashboard c-page">
-    <section class="c-card p-8 md:p-10 u-stack u-stack--xl">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Survey admin</p>
-          <h1 class="c-page-title">Question Bank</h1>
-          <p class="c-page-subtitle">Create, edit, and remove prompts that can be assigned to surveys.</p>
+          <h1 class="c-page-title c-page-title--brand">Question Bank</h1>
+          <p class="c-page-subtitle">Manage reusable prompts, question types, and their survey assignments from one place.</p>
         </div>
-        <%= link_to "New Question", new_admin_question_path, class: button_classes(:primary) %>
-      </header>
 
-    <section class="u-stack u-stack--md">
-      <div>
-        <h2 class="c-section-title c-heading-inline">Questions</h2>
-        <p class="text-sm text-slate-600">Manage reusable prompts, question types, and their survey assignments from one place.</p>
+        <div class="u-actions">
+          <%= link_to "Back to Surveys", admin_surveys_path, class: button_classes(:secondary) %>
+          <%= link_to "New Question", new_admin_question_path, class: button_classes(:primary) %>
+        </div>
+      </header>
+    </section>
+
+    <section class="c-card c-card--flush u-overflow-hidden">
+      <div class="c-panel-header c-panel-header--with-border">
+        <div class="u-responsive-split u-w-full">
+          <div class="u-stack u-stack--sm">
+            <h2 class="c-panel-title">Questions</h2>
+            <p class="c-panel-subtitle">Review prompts by order, type, category, and survey assignment.</p>
+          </div>
+          <span class="c-status-badge c-status-badge--muted"><%= pluralize(@questions.size, "question") %></span>
+        </div>
       </div>
 
-    <div class="c-card c-card--flush">
       <% if @questions.blank? %>
-        <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-600">No questions have been created yet.</div>
+        <div class="c-empty-state">
+          <p class="c-empty-state__body">No questions have been created yet.</p>
+        </div>
       <% else %>
         <div class="c-table-wrapper">
           <table class="c-table c-table--zebra">
@@ -35,36 +40,38 @@
                 <th>Type</th>
                 <th>Categories</th>
                 <th>Surveys</th>
-                <th class="actions-column">Actions</th>
+                <th class="u-text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               <% @questions.each do |question| %>
-                <tr class="c-table-row">
+                <% category = question.category %>
+                <% survey = category&.survey %>
+                <tr>
                   <td class="c-table__meta"><%= question.question_order %></td>
-                  <td class="c-table__title"><%= question.question %></td>
+                  <td><div class="c-table__title"><%= question.question %></div></td>
                   <td class="c-table__meta"><%= question.question_type.humanize %></td>
-                  <% category = question.category %>
-                  <% survey = category&.survey %>
-                  <td class="c-table__meta">
+                  <td>
                     <% if category.present? %>
                       <span class="c-pill c-pill--muted"><%= category.name %></span>
                     <% else %>
                       <span class="c-pill c-pill--muted">Unassigned</span>
                     <% end %>
                   </td>
-                  <td class="c-table__meta">
+                  <td>
                     <% if survey.present? %>
                       <span class="c-pill c-pill--muted"><%= survey.title %></span>
                     <% else %>
                       <span class="c-pill c-pill--muted">Unassigned</span>
                     <% end %>
                   </td>
-                  <td class="c-table__actions">
-                    <%= link_to "Edit", edit_admin_question_path(question), class: button_classes(:secondary) %>
-                    <%= link_to "Delete", admin_question_path(question),
-                      data: { turbo_method: :delete, turbo_confirm: "Delete this question? It will be removed from any surveys it's assigned to." },
-                      class: button_classes(:danger) %>
+                  <td>
+                    <div class="u-actions u-actions--nowrap">
+                      <%= link_to "Edit", edit_admin_question_path(question), class: button_classes(:secondary) %>
+                      <%= link_to "Delete", admin_question_path(question),
+                        data: { turbo_method: :delete, turbo_confirm: "Delete this question? It will be removed from any surveys it's assigned to." },
+                        class: button_classes(:danger) %>
+                    </div>
                   </td>
                 </tr>
               <% end %>
@@ -72,8 +79,6 @@
           </table>
         </div>
       <% end %>
-    </div>
-    </section>
     </section>
   </div>
 </main>

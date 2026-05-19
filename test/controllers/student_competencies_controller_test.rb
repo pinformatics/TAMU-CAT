@@ -105,9 +105,41 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, @competency_title
   end
 
+  test "student can download competencies as pdf" do
+    fake_pdf = Object.new
+    def fake_pdf.pdf_from_string(_html, *_args)
+      "%PDF-1.4"
+    end
+
+    sign_in @student_user
+
+    WickedPdf.stub(:new, fake_pdf) do
+      get student_competencies_path(format: :pdf)
+    end
+
+    assert_response :success
+    assert_includes response.media_type, "application/pdf"
+    assert_equal "%PDF-1.4", response.body
+  end
+
+  test "student dashboard includes all semesters option and honors source filters" do
+    sign_in @student_user
+
+    get student_competencies_path(semester: "all", sources: [ "self" ])
+
+    assert_response :success
+    assert_select "select[name='semester'] option[selected='selected']", "All semesters"
+    assert_select "input[name='sources[]'][value='self'][checked='checked']"
+    assert_select "th", text: "Self"
+    assert_select "th", text: "Course", count: 0
+    assert_select "th", text: "End of Program Target", count: 0
+    refute_includes response.body, "\"label\":\"Course\""
+  end
+
   test "future release date hides course ratings from student dashboard" do
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,
+      program_semester: @survey.program_semester,
       status: "completed",
       summary: { "dry_run" => false }
     )

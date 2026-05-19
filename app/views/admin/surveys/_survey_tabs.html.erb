@@ -1,9 +1,9 @@
-<nav class="c-card p-3" aria-label="Survey editor tabs">
-  <div role="tablist" aria-label="Survey editor" class="grid gap-2 md:grid-cols-3">
+<nav class="c-card c-card--tight" aria-label="Survey editor tabs">
+  <div role="tablist" aria-label="Survey editor" class="u-grid u-grid--dense" style="--u-grid-min: 12rem">
     <button type="button"
             role="tab"
             id="tab-settings"
-            class="<%= button_classes(:primary, extra_classes: 'btn-sm u-w-full justify-center') %>"
+            class="<%= button_classes(:primary, extra_classes: 'btn-sm u-w-full u-justify-center') %>"
             data-survey-tabs-target="tab"
             data-tab-id="settings"
             data-action="survey-tabs#switchTab keydown->survey-tabs#handleKeydown"
@@ -16,7 +16,7 @@
     <button type="button"
             role="tab"
             id="tab-builder"
-            class="<%= button_classes(:secondary, extra_classes: 'btn-sm u-w-full justify-center') %>"
+            class="<%= button_classes(:secondary, extra_classes: 'btn-sm u-w-full u-justify-center') %>"
             data-survey-tabs-target="tab"
             data-tab-id="builder"
             data-action="survey-tabs#switchTab keydown->survey-tabs#handleKeydown"
@@ -29,7 +29,7 @@
     <button type="button"
             role="tab"
             id="tab-legend"
-            class="<%= button_classes(:secondary, extra_classes: 'btn-sm u-w-full justify-center') %>"
+            class="<%= button_classes(:secondary, extra_classes: 'btn-sm u-w-full u-justify-center') %>"
             data-survey-tabs-target="tab"
             data-tab-id="legend"
             data-action="survey-tabs#switchTab keydown->survey-tabs#handleKeydown"

@@ -403,6 +403,17 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, admin_competencies_path
   end
 
+  test "advisor dashboard shows students needing attention" do
+    sign_in @advisor
+
+    get advisor_dashboard_path
+
+    assert_response :success
+    assert_includes response.body, "Students Needing Attention"
+    assert_includes response.body, students(:student).user.display_name
+    assert_includes response.body, "Detailed competencies"
+  end
+
   test "update_student_advisor updates assignment" do
     sign_in @admin
     student = students(:student)

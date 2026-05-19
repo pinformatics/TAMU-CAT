@@ -24,6 +24,9 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_response :success
+    assert_includes response.body, "Cohort Comparison"
+    assert_includes response.body, "Student by Domain Heatmap"
+    assert_includes response.body, "FERPA reminder"
   end
 
   test "show allows advisor access" do
@@ -85,7 +88,9 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
   test "export_excel allows admin access" do
     sign_in @admin
 
-    get export_reports_excel_path
+    assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+      get export_reports_excel_path
+    end
 
     assert_response :success
   end

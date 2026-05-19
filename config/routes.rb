@@ -70,7 +70,11 @@ Rails.application.routes.draw do
     end
     get "target_levels", to: "target_levels#index", as: :target_levels
     patch "target_levels", to: "target_levels#update"
-    resources :course_grade_release_dates, only: %i[index new create edit update destroy]
+    resources :course_grade_release_dates, only: %i[index new create edit update destroy] do
+      collection do
+        patch :bulk_update
+      end
+    end
     resources :grade_import_batches, only: %i[index new create show destroy] do
       member do
         post :commit
@@ -79,6 +83,7 @@ Rails.application.routes.draw do
         patch :semester
         get :export_ratings
         get :error_report
+        get :correction_file
       end
     end
     resources :program_tracks, only: %i[create update destroy]

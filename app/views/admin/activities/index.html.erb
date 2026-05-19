@@ -1,20 +1,17 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar c-toolbar--spaced">
-    <div class="c-toolbar__row u-justify-between u-w-full">
-      <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
   <div class="c-page">
-    <section class="c-card u-stack u-stack--xl">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Admin activity</p>
-          <h1 class="c-page-title">Recent Activities</h1>
+          <h1 class="c-page-title c-page-title--brand">Recent Activities</h1>
           <p class="c-page-subtitle">A single timeline for survey change logs, student submissions, and advisor feedback activity.</p>
         </div>
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
       </header>
+    </section>
 
+    <section class="c-card u-stack u-stack--xl">
       <section class="u-stack u-stack--md">
         <header class="u-stack u-stack--sm">
           <h2 class="c-section-title c-heading-inline">Activity feed</h2>

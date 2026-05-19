@@ -1,20 +1,17 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row items-center u-w-full gap-3">
-      <%= link_to "Back to Question Bank", admin_questions_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
-  <div class="c-container c-container--dashboard c-page">
-    <section class="c-card p-8 md:p-10 u-stack u-stack--lg">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Survey admin</p>
-          <h1 class="c-page-title">New Question</h1>
+          <h1 class="c-page-title c-page-title--brand">New Question</h1>
           <p class="c-page-subtitle">Add a new prompt to the question bank.</p>
         </div>
+        <%= link_to "Back to Question Bank", admin_questions_path, class: button_classes(:secondary) %>
       </header>
+    </section>
 
+    <section class="c-card u-stack u-stack--lg">
       <%= render "form", question: @question %>
     </section>
   </div>

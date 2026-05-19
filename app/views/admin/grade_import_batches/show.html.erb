@@ -1,12 +1,19 @@
-<main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <%= link_to "Back to batches", admin_grade_import_batches_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
+<% button_help = {
+  back_to_batches: "Return to the grade import batch history without changing this batch.",
+  commit_preview: "Publish this preview so its imported course competency ratings appear in student, admin, and report views.",
+  recommit_batch: "Restore this rolled-back batch so its preserved competency data becomes visible again.",
+  export_csv: "Download the derived competency ratings created from this batch.",
+  correction_file: "Download failed and pending rows in a correction-friendly CSV.",
+  error_report: "Download only the parser and validation errors for this batch.",
+  rollback_batch: "Hide this committed batch from downstream competency views while preserving its rows.",
+  delete_batch: "Permanently remove this batch and its imported rows, including duplicate fingerprints.",
+  update_semester: "Apply the selected semester to this batch so semester filters include it correctly.",
+  new_batch: "Start a new grade import batch upload."
+} %>
 
+<main class="c-main c-main--dashboard">
   <div class="c-page">
-    <section class="c-card u-stack u-stack--xl">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Faculty imports</p>
@@ -21,21 +28,68 @@
         </div>
 
         <div class="u-actions">
+          <%= link_to "Back to batches",
+                admin_grade_import_batches_path,
+                class: button_classes(:secondary),
+                title: button_help[:back_to_batches],
+                aria: { label: button_help[:back_to_batches] } %>
           <% if @batch.committable_dry_run? %>
-            <%= button_to "Commit preview", commit_admin_grade_import_batch_path(@batch), method: :post, class: button_classes(:primary), form: { data: { turbo_confirm: "Publish this preview so its course competency ratings appear in the app?" } } %>
+            <%= button_to "Commit preview",
+                  commit_admin_grade_import_batch_path(@batch),
+                  method: :post,
+                  class: button_classes(:primary),
+                  title: button_help[:commit_preview],
+                  aria: { label: button_help[:commit_preview] },
+                  form: { data: { turbo_confirm: "Publish this preview so its course competency ratings appear in the app?" } } %>
           <% end %>
           <% if @batch.recommittable_rollback? %>
-            <%= button_to "Recommit batch", recommit_admin_grade_import_batch_path(@batch), method: :post, class: button_classes(:primary), form: { data: { turbo_confirm: "Make this rolled-back batch visible in the app again?" } } %>
+            <%= button_to "Recommit batch",
+                  recommit_admin_grade_import_batch_path(@batch),
+                  method: :post,
+                  class: button_classes(:primary),
+                  title: button_help[:recommit_batch],
+                  aria: { label: button_help[:recommit_batch] },
+                  form: { data: { turbo_confirm: "Make this rolled-back batch visible in the app again?" } } %>
           <% end %>
-          <%= link_to "Export CSV", export_ratings_admin_grade_import_batch_path(@batch, format: :csv), class: button_classes(:secondary) %>
-          <%= link_to "Error report", error_report_admin_grade_import_batch_path(@batch), class: button_classes(:secondary) %>
+          <%= link_to "Export CSV",
+                export_ratings_admin_grade_import_batch_path(@batch, format: :csv),
+                class: button_classes(:secondary),
+                title: button_help[:export_csv],
+                aria: { label: button_help[:export_csv] },
+                data: { turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." } %>
+          <%= link_to "Correction file",
+                correction_file_admin_grade_import_batch_path(@batch, format: :csv),
+                class: button_classes(:secondary),
+                title: button_help[:correction_file],
+                aria: { label: button_help[:correction_file] },
+                data: { turbo_confirm: "FERPA reminder: this correction file may include student identifiers and course data. Continue only for a legitimate educational interest." } %>
+          <%= link_to "Error report",
+                error_report_admin_grade_import_batch_path(@batch),
+                class: button_classes(:secondary),
+                title: button_help[:error_report],
+                aria: { label: button_help[:error_report] },
+                data: { turbo_confirm: "FERPA reminder: this error report may include student identifiers and course data. Continue only for a legitimate educational interest." } %>
           <% unless @batch.rolled_back? || @batch.dry_run? %>
-            <%= button_to "Rollback batch", rollback_admin_grade_import_batch_path(@batch), method: :post, class: button_classes(:danger), form: { data: { turbo_confirm: "Hide this committed batch from competencies, reports, and other downstream views?" } } %>
+            <%= button_to "Rollback batch",
+                  rollback_admin_grade_import_batch_path(@batch),
+                  method: :post,
+                  class: button_classes(:danger),
+                  title: button_help[:rollback_batch],
+                  aria: { label: button_help[:rollback_batch] },
+                  form: { data: { turbo_confirm: "Hide this committed batch from competencies, reports, and other downstream views?" } } %>
           <% end %>
-          <%= button_to "Delete batch", admin_grade_import_batch_path(@batch), method: :delete, class: button_classes(:danger), form: { data: { turbo_confirm: "Permanently delete this batch and all imported rows? This removes duplicate fingerprints so the same files can be uploaded again." } } %>
+          <%= button_to "Delete batch",
+                admin_grade_import_batch_path(@batch),
+                method: :delete,
+                class: button_classes(:danger),
+                title: button_help[:delete_batch],
+                aria: { label: button_help[:delete_batch] },
+                form: { data: { turbo_confirm: "Permanently delete this batch and all imported rows? This removes duplicate fingerprints so the same files can be uploaded again." } } %>
         </div>
       </header>
+    </section>
 
+    <section class="c-card u-stack u-stack--xl">
       <% if @batch.summary["rolled_back_at"].present? %>
         <div class="c-callout">
           Rolled back at <%= @batch.summary["rolled_back_at"] %>.
@@ -51,6 +105,31 @@
         Pending rows need student identifier reconciliation before they contribute to derived ratings. Duplicate rows are suppressed by import fingerprint and remain available in the file diagnostics.
       </div>
 
+      <% if @batch.summary["import_notes"].present? %>
+        <div class="c-callout">
+          <strong>Import notes:</strong> <%= @batch.summary["import_notes"] %>
+        </div>
+      <% end %>
+
+      <% if @batch.dry_run? %>
+        <div class="c-callout <%= @validation_summary[:failed_files].zero? ? 'c-callout--info' : 'c-callout--warning' %>">
+          <strong>Preview validation:</strong>
+          <%= pluralize(@validation_summary[:imported_rows], "imported row") %>,
+          <%= pluralize(@validation_summary[:pending_rows], "pending student match") %>,
+          <%= pluralize(@validation_summary[:failed_rows], "failed row") %>,
+          <%= pluralize(@validation_summary[:duplicate_rows], "duplicate row") %>,
+          and <%= pluralize(@validation_summary[:duplicate_file_uploads], "duplicate file upload warning") %>.
+          Review the mapping preview and correction file before committing.
+        </div>
+      <% end %>
+
+      <% if @duplicate_upload_warnings.positive? %>
+        <div class="c-callout c-callout--warning">
+          <strong>Duplicate upload warning:</strong>
+          This batch includes <%= pluralize(@duplicate_upload_warnings, "file") %> with a checksum seen in an earlier batch. Duplicate rows are suppressed, but review the source and batch notes before committing.
+        </div>
+      <% end %>
+
       <section class="c-card c-card--tight">
         <%= form_with url: semester_admin_grade_import_batch_path(@batch), method: :patch, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
           <div class="c-filter-bar__field">
@@ -60,7 +139,10 @@
                   include_blank: "No semester",
                   class: "c-select" %>
           </div>
-          <%= submit_tag "Update semester", class: button_classes(:secondary) %>
+          <%= submit_tag "Update semester",
+                class: button_classes(:secondary),
+                title: button_help[:update_semester],
+                aria: { label: button_help[:update_semester] } %>
           <span class="c-help">Use this to repair legacy imports so semester-filtered competency views include the batch.</span>
         <% end %>
       </section>
@@ -90,6 +172,11 @@
           <span class="c-eyebrow">Derived Ratings</span>
           <strong class="c-value c-value--xl"><%= @batch.rating_count %></strong>
           <p class="c-help"><%= pluralize(@duplicate_warnings, "duplicate suppressed row") %></p>
+        </div>
+        <div class="c-card c-card--tight c-stat">
+          <span class="c-eyebrow">Duplicate Files</span>
+          <strong class="c-value c-value--xl"><%= @duplicate_upload_warnings %></strong>
+          <p class="c-help">Prior uploads with the same checksum</p>
         </div>
       </section>
 
@@ -141,6 +228,169 @@
               <% end %>
             </tbody>
           </table>
+        </div>
+      </details>
+
+      <details class="c-card c-card--flush c-section-group" open>
+        <summary class="c-section-group__header">
+          <h2>Column Mapping Preview</h2>
+          <span>Review before commit</span>
+        </summary>
+        <div class="u-stack u-stack--md u-p-md">
+          <% @files.each do |file| %>
+            <% parsed = file.parsed_content || {} %>
+            <% debug = parsed["grade_sheet_debug"] || {} %>
+            <% mappings = Array(parsed["mapping_rows_preview"]) %>
+            <% assignments = Array(debug["assignment_columns_preview"]) %>
+            <% direct_competencies = Array(parsed["direct_competencies_preview"] || debug["direct_competencies_preview"]) %>
+            <details class="c-accordion">
+              <summary class="c-accordion__summary">
+                <span class="c-accordion__title"><%= file.file_name %></span>
+                <span class="c-accordion__meta">
+                  <%= (parsed["mode"] || debug["mode"] || "unknown").to_s.humanize %>
+                  <% if parsed["selected_grade_sheet"].present? %>
+                    · grade sheet <%= parsed["selected_grade_sheet"] %>
+                  <% end %>
+                  <% if parsed["selected_mapping_sheet"].present? %>
+                    · mapping sheet <%= parsed["selected_mapping_sheet"] %>
+                  <% end %>
+                </span>
+              </summary>
+
+              <% if parsed["duplicate_file_uploads"].present? %>
+                <div class="c-callout c-callout--warning u-mt-sm">
+                  Same file checksum was previously uploaded in
+                  <%= parsed["duplicate_file_uploads"].map { |upload| "batch ##{upload['batch_id'] || upload[:batch_id]}" }.join(", ") %>.
+                </div>
+              <% end %>
+
+              <div class="c-table-wrapper u-mt-sm">
+                <table class="c-table c-table--sm">
+                  <tbody>
+                    <tr>
+                      <th>Student identifier column</th>
+                      <td><%= debug["student_identifier_column"].presence || "Detected from Student ID / SIS fields" %></td>
+                    </tr>
+                    <tr>
+                      <th>Rows scanned</th>
+                      <td><%= debug["rows_scanned"].presence || file.total_rows %></td>
+                    </tr>
+                    <tr>
+                      <th>Matched students</th>
+                      <td><%= debug["matched_student_count"].presence || "—" %></td>
+                    </tr>
+                    <tr>
+                      <th>Pending students</th>
+                      <td><%= file.pending_rows %></td>
+                    </tr>
+                    <tr>
+                      <th>Failed rows</th>
+                      <td><%= file.error_rows %></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <% if assignments.any? %>
+                <div class="u-mt-md">
+                  <h3 class="c-heading-inline">Canvas Assignment Columns</h3>
+                  <div class="c-table-wrapper">
+                    <table class="c-table c-table--sm">
+                      <thead>
+                        <tr>
+                          <th>Column</th>
+                          <th>Canvas header</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% assignments.first(30).each do |assignment| %>
+                          <tr>
+                            <td><%= assignment["index"] || assignment[:index] %></td>
+                            <td class="c-table__title"><%= assignment["name"] || assignment[:name] %></td>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              <% end %>
+
+              <% if mappings.any? %>
+                <div class="u-mt-md">
+                  <h3 class="c-heading-inline">Mapping Rows</h3>
+                  <div class="c-table-wrapper">
+                    <table class="c-table c-table--sm">
+                      <thead>
+                        <tr>
+                          <th>Row</th>
+                          <th>Match</th>
+                          <th>Course</th>
+                          <th>Competency</th>
+                          <th>Score Basis</th>
+                          <th>Range</th>
+                          <th>Level</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% mappings.first(30).each do |mapping| %>
+                          <tr>
+                            <td><%= mapping["source_row_number"] || mapping[:source_row_number] %></td>
+                            <td><%= [mapping["assignment_match_type"] || mapping[:assignment_match_type], mapping["assignment_match_value"] || mapping[:assignment_match_value]].compact.join(": ") %></td>
+                            <td><%= (mapping["course_code"] || mapping[:course_code]).presence || "Any course" %></td>
+                            <td class="c-table__title"><%= mapping["competency_title"] || mapping[:competency_title] %></td>
+                            <td><%= mapping["score_basis"] || mapping[:score_basis] %></td>
+                            <td><%= mapping["min_grade"] || mapping[:min_grade] %>–<%= mapping["max_grade"] || mapping[:max_grade] %></td>
+                            <td><%= mapping["competency_level"] || mapping[:competency_level] %></td>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              <% elsif direct_competencies.any? %>
+                <div class="u-mt-md">
+                  <h3 class="c-heading-inline">Direct Competency Columns</h3>
+                  <div class="c-table-wrapper">
+                    <table class="c-table c-table--sm">
+                      <thead>
+                        <tr>
+                          <th>Result column</th>
+                          <th>Mastery points column</th>
+                          <th>Competency</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% direct_competencies.first(30).each do |column| %>
+                          <tr>
+                            <td><%= column["result_header"] || column[:result_header] %></td>
+                            <td><%= column["mastery_points_header"] || column[:mastery_points_header] %></td>
+                            <td class="c-table__title"><%= column["competency_title"] || column[:competency_title] %></td>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              <% end %>
+
+              <% if file.parse_errors.present? || debug["mapping_warnings_preview"].present? || debug["duplicate_warnings_preview"].present? %>
+                <div class="u-mt-md">
+                  <h3 class="c-heading-inline">Diagnostics</h3>
+                  <ul class="c-help u-stack u-stack--xs">
+                    <% Array(file.parse_errors).first(20).each do |error| %>
+                      <li>Row <%= error["row"] || "—" %>: <%= error["message"] || error %></li>
+                    <% end %>
+                    <% Array(debug["mapping_warnings_preview"]).first(10).each do |warning| %>
+                      <li>Mapping row <%= warning["row"] || "—" %>: <%= warning["message"] || warning %></li>
+                    <% end %>
+                    <% Array(debug["duplicate_warnings_preview"]).first(10).each do |warning| %>
+                      <li>Duplicate row <%= warning["row"] || "—" %>: <%= warning["message"] || warning %></li>
+                    <% end %>
+                  </ul>
+                </div>
+              <% end %>
+            </details>
+          <% end %>
         </div>
       </details>
 
@@ -237,8 +487,16 @@
       </details>
 
       <div class="u-actions u-actions--start">
-        <%= link_to "Back to batches", admin_grade_import_batches_path, class: button_classes(:secondary) %>
-        <%= link_to "New batch", new_admin_grade_import_batch_path, class: button_classes(:primary) %>
+        <%= link_to "Back to batches",
+              admin_grade_import_batches_path,
+              class: button_classes(:secondary),
+              title: button_help[:back_to_batches],
+              aria: { label: button_help[:back_to_batches] } %>
+        <%= link_to "New batch",
+              new_admin_grade_import_batch_path,
+              class: button_classes(:primary),
+              title: button_help[:new_batch],
+              aria: { label: button_help[:new_batch] } %>
       </div>
     </section>
   </div>

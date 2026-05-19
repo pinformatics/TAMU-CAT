@@ -1,32 +1,129 @@
-<main class="c-main">
-  <div class="c-toolbar c-toolbar--spaced">
-    <div class="c-toolbar__row">
-      <% if current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
-        <%= link_to "← Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
-      <% else %>
-        <%= link_to "← Back", advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
-      <% end %>
-    </div>
-  </div>
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Reports</p>
+          <h1 class="c-page-title c-page-title--brand">Program Reports</h1>
+          <p class="c-page-subtitle">Monitor cohort progress, advisor alignment, and competency trends in real time.</p>
+        </div>
 
-  <section class="c-card c-card--spacious u-stack u-stack--xl">
-    <header class="c-page-header">
-      <div>
-        <p class="c-eyebrow">Reports</p>
-        <h1 class="c-page-title c-page-title--brand">Program Reports</h1>
-        <p class="c-page-subtitle">Monitor cohort progress, advisor alignment, and competency trends in real time.</p>
+        <div class="u-actions">
+          <% if current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
+            <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+          <% else %>
+            <%= link_to "Back", advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+          <% end %>
+        </div>
+      </header>
+    </section>
+
+    <section class="c-card c-card--spacious u-stack u-stack--xl">
+      <div class="c-callout c-callout--warning">
+        <p>
+          <strong>FERPA reminder:</strong> Reports and exports may include student-level education records. Confirm the requester has a legitimate educational interest before downloading or sharing PDF, Excel, or CSV files.
+        </p>
       </div>
-    </header>
 
-    <div
-      class="c-analytics-root c-card c-card--flush"
-      data-controller="reports"
-      data-reports-pdf-url-value="<%= export_reports_pdf_path("dashboard") %>"
-      data-reports-excel-url-value="<%= export_reports_excel_path %>"
-    ></div>
+      <div
+        class="c-analytics-root c-card c-card--flush"
+        data-controller="reports"
+        data-reports-pdf-url-value="<%= export_reports_pdf_path("dashboard") %>"
+        data-reports-excel-url-value="<%= export_reports_excel_path %>"
+      ></div>
 
-    <noscript>
-      <p class="c-callout c-callout--warning">Analytics require JavaScript. Please enable it to view the interactive dashboard.</p>
-    </noscript>
-  </section>
+      <noscript>
+        <p class="c-callout c-callout--warning">Analytics require JavaScript. Please enable it to view the interactive dashboard.</p>
+      </noscript>
+    </section>
+
+    <section class="c-card c-card--spacious u-stack u-stack--lg">
+      <header class="c-panel-header">
+        <div>
+          <p class="c-eyebrow">Program review</p>
+          <h2 class="c-section-title c-heading-inline">Cohort Comparison</h2>
+          <p class="c-help">Averages use the same student/advisor/course visibility rules as the competency matrix.</p>
+        </div>
+      </header>
+
+      <% if @report_insights[:cohort_comparison].present? %>
+        <div class="c-table-wrapper">
+          <table class="c-table">
+            <thead>
+              <tr>
+                <th>Cohort</th>
+                <th>Students</th>
+                <th>Self Avg</th>
+                <th>Advisor Avg</th>
+                <th>Course Avg</th>
+                <th>Below Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% @report_insights[:cohort_comparison].each do |row| %>
+                <tr>
+                  <td class="c-table__title"><%= row[:program_year] == "Unassigned" ? "Unassigned" : "Class of #{row[:program_year]}" %></td>
+                  <td><%= row[:student_count] %></td>
+                  <td><%= row[:self_average].presence || "—" %></td>
+                  <td><%= row[:advisor_average].presence || "—" %></td>
+                  <td><%= row[:course_average].presence || "—" %></td>
+                  <td><%= row[:below_target_count] %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <div class="c-empty-state">
+          <p class="c-empty-state__body">No cohort comparison data is available for the current filters.</p>
+        </div>
+      <% end %>
+    </section>
+
+    <section class="c-card c-card--spacious u-stack u-stack--lg">
+      <header class="c-panel-header">
+        <div>
+          <p class="c-eyebrow">Competency heatmap</p>
+          <h2 class="c-section-title c-heading-inline">Student by Domain Heatmap</h2>
+          <p class="c-help">Each cell shows the best available domain average, preferring course-derived scores and falling back to self-assessment.</p>
+        </div>
+      </header>
+
+      <% if @report_insights[:heatmap].present? %>
+        <div class="c-table-wrapper">
+          <table class="c-table c-table--sm">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <% @report_insights[:heatmap].first[:domains].each do |domain| %>
+                  <th><%= domain[:name] %></th>
+                <% end %>
+              </tr>
+            </thead>
+            <tbody>
+              <% @report_insights[:heatmap].each do |row| %>
+                <tr>
+                  <td>
+                    <span class="c-table__title"><%= row[:student_name] %></span>
+                    <span class="c-table__meta"><%= [row[:track], row[:program_year].present? ? "Class of #{row[:program_year]}" : nil].compact.join(" · ") %></span>
+                  </td>
+                  <% row[:domains].each do |domain| %>
+                    <td>
+                      <span class="c-heatmap-cell c-heatmap-cell--<%= domain[:status] %>">
+                        <%= domain[:average].presence || "—" %>
+                      </span>
+                    </td>
+                  <% end %>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <div class="c-empty-state">
+          <p class="c-empty-state__body">No heatmap data is available for the current filters.</p>
+        </div>
+      <% end %>
+    </section>
+  </div>
 </main>

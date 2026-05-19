@@ -1,24 +1,26 @@
-<section class="c-card space-y-6">
-  <header class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
-    <div class="space-y-1">
-      <h2 class="text-lg font-semibold text-slate-900">Survey metadata</h2>
-      <p class="text-sm text-slate-600">Configure survey identity, availability, and track assignment.</p>
-    </div>
+<section class="c-card u-stack u-stack--lg">
+  <header class="c-panel-header c-panel-header--with-border">
+    <div class="u-responsive-split u-w-full">
+      <div class="u-stack u-stack--sm">
+        <h2 class="c-panel-title">Survey Metadata</h2>
+        <p class="c-panel-subtitle">Configure survey identity, availability, and track assignment.</p>
+      </div>
 
-    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-      <label class="c-toggle cursor-pointer">
-        <%= form.check_box :is_active, class: "c-toggle__input" %>
-        <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
-        <span class="space-y-0.5">
-          <span class="c-toggle__label block">Survey is active</span>
-          <span class="block text-xs text-slate-500">Inactive surveys stay hidden from advisors.</span>
-        </span>
-      </label>
+      <div class="c-card c-card--tight c-card--muted u-shadow-none">
+        <label class="c-toggle u-cursor-pointer">
+          <%= form.check_box :is_active, class: "c-toggle__input" %>
+          <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+          <span class="u-stack u-stack--xs">
+            <span class="c-toggle__label">Survey is active</span>
+            <span class="c-help">Inactive surveys stay hidden from advisors.</span>
+          </span>
+        </label>
+      </div>
     </div>
   </header>
 
-  <div class="grid gap-6 md:grid-cols-2">
-    <div class="c-field md:col-span-2">
+  <div class="u-grid u-grid--form">
+    <div class="c-field u-col-span-all">
       <%= form.label :title, "Survey title", class: "c-label" %>
       <%= form.text_field :title,
                           required: true,
@@ -65,7 +67,7 @@
       <%= form.datetime_local_field :available_until, class: "#{input_classes} c-input u-max-w-md" %>
     </div>
 
-    <div class="c-field md:col-span-2">
+    <div class="c-field u-col-span-all">
       <%= form.label :description, "Summary", class: "c-label" %>
       <%= form.text_area :description, class: textarea_classes, placeholder: "Explain where this survey fits in the advising process." %>
     </div>
@@ -73,37 +75,39 @@
 </section>
 
 <% if SurveyOffering.data_source_ready? && survey.persisted? && survey.offerings.any? %>
-  <section class="c-card space-y-6">
-    <header class="space-y-1 border-b border-slate-200 pb-4">
-      <h2 class="text-lg font-semibold text-slate-900">Review meeting dates</h2>
-      <p class="text-sm text-slate-600">Edit the review meeting window shown to students (per offering).</p>
-    </header>
+  <section class="c-card c-card--flush u-overflow-hidden">
+    <div class="c-panel-header c-panel-header--with-border">
+      <div class="u-stack u-stack--sm">
+        <h2 class="c-panel-title">Review Meeting Dates</h2>
+        <p class="c-panel-subtitle">Edit the review meeting window shown to students per offering.</p>
+      </div>
+    </div>
 
     <div class="c-table-wrapper">
       <table class="c-table c-table--sm c-table--divide">
-        <thead class="bg-slate-50">
+        <thead>
           <tr>
-            <th class="px-5 py-3 text-left font-semibold text-slate-700">Track</th>
-            <th class="px-5 py-3 text-left font-semibold text-slate-700">Class of</th>
-            <th class="px-5 py-3 text-left font-semibold text-slate-700">Stage</th>
-            <th class="px-5 py-3 text-left font-semibold text-slate-700">Review start</th>
-            <th class="px-5 py-3 text-left font-semibold text-slate-700">Review end</th>
+            <th>Track</th>
+            <th>Class of</th>
+            <th>Stage</th>
+            <th>Review start</th>
+            <th>Review end</th>
           </tr>
         </thead>
-        <tbody class="bg-white">
+        <tbody>
           <% sorted_offerings = survey.offerings.sort_by { |row| [row.track.to_s, row.class_of.to_i, row.stage.to_s] } %>
           <%= form.fields_for :offerings, sorted_offerings do |offering_fields| %>
             <% offering = offering_fields.object %>
             <tr>
-              <td class="px-5 py-4 text-slate-800"><%= offering.track %></td>
-              <td class="px-5 py-4 text-slate-800"><%= offering.class_of.presence || "All" %></td>
-              <td class="px-5 py-4 text-slate-800"><%= offering.stage.to_s.titleize %></td>
-              <td class="px-5 py-4">
+              <td><%= offering.track %></td>
+              <td><%= offering.class_of.presence || "All" %></td>
+              <td><%= offering.stage.to_s.titleize %></td>
+              <td>
                 <%= offering_fields.hidden_field :id %>
-                <%= offering_fields.date_field :review_meetings_start, class: "#{input_classes} c-input max-w-[11rem] text-sm px-2 py-1.5" %>
+                <%= offering_fields.date_field :review_meetings_start, class: "#{input_classes} c-input c-input--compact" %>
               </td>
-              <td class="px-5 py-4">
-                <%= offering_fields.date_field :review_meetings_end, class: "#{input_classes} c-input max-w-[11rem] text-sm px-2 py-1.5" %>
+              <td>
+                <%= offering_fields.date_field :review_meetings_end, class: "#{input_classes} c-input c-input--compact" %>
               </td>
             </tr>
           <% end %>

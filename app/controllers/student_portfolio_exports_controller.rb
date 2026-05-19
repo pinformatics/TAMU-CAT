@@ -11,6 +11,11 @@ class StudentPortfolioExportsController < ApplicationController
   def show
     exporter = StudentPortfolioExporter.new(actor_user: current_user, params: filter_params)
     package = exporter.workbook
+    record_export_audit!(
+      export_type: "student_portfolio_excel",
+      description: "Exported student portfolio workbook.",
+      metadata: { filters: filter_params.to_h }
+    )
 
     send_data package.to_stream.read,
               filename: "student-portfolio-urls-#{Time.current.strftime('%Y%m%d-%H%M')}.xlsx",

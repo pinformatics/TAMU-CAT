@@ -1,22 +1,17 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-justify-between u-w-full u-gap-md">
-      <div class="u-shrink-0">
-        <%= link_to "← Back", admin_dashboard_path, class: "btn btn-secondary", data: { turbo: false } %>
-      </div>
-    </div>
-  </div>
-
   <div class="c-page">
-    <section class="c-card u-stack u-stack--xl">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">People admin</p>
-          <h1 class="c-page-title">People Management</h1>
+          <h1 class="c-page-title c-page-title--brand">People Management</h1>
           <p class="c-page-subtitle">Manage member access and student assignments from one workspace.</p>
         </div>
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
       </header>
+    </section>
 
+    <section class="c-card u-stack u-stack--xl">
       <% tabs = [
         ["Members", "members", "Roles, permissions, and account cleanup"],
         ["Students", "students", "Advisors, tracks, and assignment groups"]

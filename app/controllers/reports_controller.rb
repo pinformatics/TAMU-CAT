@@ -4,22 +4,29 @@ class ReportsController < ApplicationController
   before_action :ensure_reports_access!
 
   def show
+    @report_insights = Reports::CompetencyInsights.new(user: current_user, params: reports_filter_params).call
   end
 
   def export_pdf
-  payload = aggregator.export_payload
-  section = normalize_export_section(reports_params[:section])
-  y_axis_mode = normalize_y_axis_mode(reports_params[:y_axis])
+    payload = aggregator.export_payload
+    section = normalize_export_section(reports_params[:section])
+    y_axis_mode = normalize_y_axis_mode(reports_params[:y_axis])
 
     unless defined?(WickedPdf)
       render plain: "PDF export unavailable. WickedPdf is not configured.", status: :service_unavailable
       return
     end
 
+    record_export_audit!(
+      export_type: "reports_pdf",
+      description: "Exported program reports PDF.",
+      metadata: { section: section.presence || "dashboard", y_axis: y_axis_mode }
+    )
+
     html = render_to_string(
       template: "reports/export",
       layout: "report_pdf",
-  locals: { payload: payload, export_section: section, y_axis_mode: y_axis_mode }
+      locals: { payload: payload, export_section: section, y_axis_mode: y_axis_mode }
     )
 
     pdf = WickedPdf.new.pdf_from_string(html, page_size: "Letter", orientation: "Landscape")
@@ -31,8 +38,13 @@ class ReportsController < ApplicationController
   end
 
   def export_excel
-  payload = aggregator.export_payload
+    payload = aggregator.export_payload
     package = Reports::ExcelExporter.new(payload).generate
+
+    record_export_audit!(
+      export_type: "reports_excel",
+      description: "Exported program reports Excel workbook."
+    )
 
     send_data package.to_stream.read,
               filename: "health-reports-#{Time.current.strftime('%Y%m%d-%H%M')}.xlsx",

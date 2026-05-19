@@ -1,16 +1,16 @@
 <% track_options = (@available_tracks + survey.track_list).uniq.compact.sort %>
-<% input_classes = "block u-w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" %>
-<% textarea_classes = "#{input_classes} min-h-[5rem]" %>
-<% checkbox_classes = "h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" %>
+<% input_classes = "c-input" %>
+<% textarea_classes = "#{input_classes} c-textarea" %>
+<% checkbox_classes = "c-choice" %>
 
 <%= form_with(model: [:admin, survey],
               local: true,
-              class: "survey-form u-w-full space-y-8",
+              class: "survey-form u-w-full u-stack u-stack--xl",
               data: { controller: "survey-tabs" }) do |form| %>
   <% if survey.errors.any? %>
-    <div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-      <h2 class="mb-2 text-base font-semibold"><%= pluralize(survey.errors.count, "error") %> prevented this survey from being saved:</h2>
-      <ul class="list-disc space-y-1 pl-5">
+    <div class="c-callout c-callout--danger">
+      <h2 class="c-panel-title"><%= pluralize(survey.errors.count, "error") %> prevented this survey from being saved:</h2>
+      <ul>
         <% survey.errors.each do |error| %>
           <li><%= error.full_message %></li>
         <% end %>
@@ -21,11 +21,11 @@
   <header class="c-card c-card--brand">
     <div class="c-page-header">
       <div class="u-stack u-stack--md">
-        <h2 class="text-xl font-semibold tracking-tight text-slate-900">Survey setup</h2>
-        <p class="text-sm text-slate-600">This builder mirrors the student survey layout. Use the sidebar to add and navigate sections, categories, and questions.</p>
+        <h2 class="c-section-title">Survey Setup</h2>
+        <p class="c-page-subtitle">This builder mirrors the student survey layout. Use the sidebar to add and navigate sections, categories, and questions.</p>
       </div>
 
-      <div class="text-xs text-slate-500" aria-live="polite">
+      <div class="c-muted-meta" aria-live="polite">
         <span>Autosave disabled</span>
       </div>
     </div>
@@ -33,7 +33,7 @@
 
   <%= render "admin/surveys/survey_tabs" %>
 
-  <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" data-survey-tabs-target="panel" data-tab-panel="settings" aria-hidden="false" class="space-y-8">
+  <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" data-survey-tabs-target="panel" data-tab-panel="settings" aria-hidden="false" class="u-stack u-stack--xl">
     <%= render "admin/surveys/survey_settings_form",
                form: form,
                survey: survey,
@@ -42,18 +42,18 @@
                textarea_classes: textarea_classes,
                checkbox_classes: checkbox_classes %>
 
-    <div class="sticky bottom-4 z-20 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
+    <div class="u-sticky-action-bar">
       <div class="c-form-actions u-actions">
-        <%= link_to "Cancel", admin_surveys_path, class: "btn btn-secondary" %>
+        <%= link_to "Cancel", admin_surveys_path, class: button_classes(:secondary) %>
         <% if survey.persisted? %>
           <%= button_tag "Change Deadline for Everyone",
                          type: "submit",
                          name: "force_deadline_for_everyone",
                          value: "1",
                          data: { turbo_confirm: "Clear all individual assignment deadlines and make everyone follow the survey due date, including completed responses?" },
-                         class: "btn btn-secondary" %>
+                         class: button_classes(:secondary) %>
         <% end %>
-        <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: "btn btn-primary") %>
+        <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: button_classes(:primary)) %>
       </div>
     </div>
   </section>
@@ -67,14 +67,14 @@
                checkbox_classes: checkbox_classes %>
   </section>
 
-  <section id="panel-legend" role="tabpanel" aria-labelledby="tab-legend" data-survey-tabs-target="panel" data-tab-panel="legend" aria-hidden="true" class="hidden space-y-8">
+  <section id="panel-legend" role="tabpanel" aria-labelledby="tab-legend" data-survey-tabs-target="panel" data-tab-panel="legend" aria-hidden="true" class="hidden u-stack u-stack--xl">
     <%= render "admin/surveys/survey_legend_form",
                form: form,
                survey: survey %>
 
-    <div class="c-toolbar c-toolbar--spaced sticky bottom-4 z-20 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
-      <div class="c-toolbar__row justify-end u-w-full">
-        <div class="flex flex-wrap items-center gap-3">
+    <div class="u-sticky-action-bar">
+      <div class="c-toolbar__row u-justify-end u-w-full">
+        <div class="u-actions">
           <%= link_to "Cancel", admin_surveys_path, class: button_classes(:secondary) %>
           <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: button_classes(:primary)) %>
         </div>

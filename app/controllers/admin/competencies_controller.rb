@@ -20,25 +20,49 @@ class Admin::CompetenciesController < ApplicationController
 
   def show
     @student = accessible_student_scope.includes(:user, advisor: :user).find(params[:id])
-    @payload = StudentCompetencyDashboard.new(student: @student, params: params.permit(:semester)).call
+    @payload = StudentCompetencyDashboard.new(student: @student, params: student_competency_params).call
     @competency_page_title = "#{@student.user&.display_name || @student.full_name} Competencies"
     @competency_page_subtitle = "Detailed competency performance, source context, and trend history for this student."
     @competency_back_path = admin_competencies_path
     @competency_form_path = admin_competency_path(@student)
-    @competency_export_path = admin_competency_path(@student, format: :csv, semester: @payload.dig(:filters, :semester))
+    @competency_export_path = admin_competency_path(@student, format: :csv, semester: export_semester_param, sources: @payload.dig(:filters, :sources))
+    @competency_pdf_path = admin_competency_path(@student, format: :pdf, semester: export_semester_param, sources: @payload.dig(:filters, :sources))
 
     respond_to do |format|
       format.html { render "student_competencies/show" }
       format.csv do
+        record_export_audit!(
+          export_type: "student_competencies_csv",
+          description: "Exported detailed competency CSV for #{@student.user&.email || @student.student_id}.",
+          subject: @student,
+          metadata: { student_id: @student.student_id }
+        )
         send_data @payload[:csv],
                   filename: "student-competencies-#{@student.student_id}-#{Time.current.strftime('%Y%m%d-%H%M')}.csv",
                   type: "text/csv"
+      end
+      format.pdf do
+        record_export_audit!(
+          export_type: "student_competencies_pdf",
+          description: "Exported detailed competency PDF for #{@student.user&.email || @student.student_id}.",
+          subject: @student,
+          metadata: { student_id: @student.student_id }
+        )
+        send_competency_pdf(
+          template: "student_competencies/pdf",
+          filename: "student-competencies-#{@student.student_id}-#{Time.current.strftime('%Y%m%d-%H%M')}.pdf"
+        )
       end
     end
   end
 
   def export
     payload = competency_payload
+    record_export_audit!(
+      export_type: "competency_matrix_csv",
+      description: "Exported competency matrix CSV.",
+      metadata: { filters: payload[:filters] }
+    )
 
     send_data competencies_csv(payload),
               filename: "competencies-matrix-#{Time.current.strftime('%Y%m%d-%H%M')}.csv",
@@ -78,6 +102,29 @@ class Admin::CompetenciesController < ApplicationController
 
   def competency_filter_params
     params.permit(:q, :track, :program_year, :advisor_id, :semester, :domain, competencies: [])
+  end
+
+  def student_competency_params
+    params.permit(:semester, sources: [])
+  end
+
+  def export_semester_param
+    @payload.dig(:filters, :semester).presence || StudentCompetencyDashboard::ALL_SEMESTERS_VALUE
+  end
+
+  def send_competency_pdf(template:, filename:)
+    unless defined?(WickedPdf)
+      render plain: "PDF export unavailable. WickedPdf is not configured.", status: :service_unavailable
+      return
+    end
+
+    html = render_to_string(template: template, layout: "pdf", formats: [ :html ])
+    pdf = WickedPdf.new.pdf_from_string(html, page_size: "Letter", orientation: "Portrait")
+
+    send_data pdf,
+              filename: filename,
+              disposition: "attachment",
+              type: "application/pdf"
   end
 
   def competencies_csv(payload)

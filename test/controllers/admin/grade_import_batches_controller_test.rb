@@ -221,6 +221,65 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Duplicate rows are suppressed"
   end
 
+  test "show displays import notes, correction link, validation summary, and mapping preview" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: {
+        "dry_run" => true,
+        "import_notes" => "Canvas export from PHPM 631 after final grades."
+      }
+    )
+    batch.grade_import_files.create!(
+      file_name: "mapping-preview.xlsx",
+      file_checksum: "checksum-mapping-preview",
+      status: "processed",
+      total_rows: 2,
+      imported_rows: 1,
+      pending_rows: 1,
+      error_rows: 1,
+      parse_errors: [ { "row" => 4, "message" => "Unknown competency_title 'Bad Competency'" } ],
+      parsed_content: {
+        "mode" => "canvas",
+        "selected_grade_sheet" => "PHPM_631_600",
+        "selected_mapping_sheet" => "mapping",
+        "mapping_rows_preview" => [
+          {
+            "source_row_number" => 2,
+            "assignment_match_type" => "exact",
+            "assignment_match_value" => "Final Project",
+            "course_code" => "PHPM-631-600",
+            "competency_title" => "Policy Analysis",
+            "score_basis" => "points",
+            "min_grade" => 90,
+            "max_grade" => 100,
+            "competency_level" => 5
+          }
+        ],
+        "grade_sheet_debug" => {
+          "mode" => "canvas",
+          "student_identifier_column" => 2,
+          "assignment_columns_preview" => [ { "index" => 5, "name" => "Final Project" } ],
+          "matched_student_count" => 1,
+          "duplicate_warning_count" => 0
+        }
+      }
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "Import notes:"
+    assert_includes response.body, "Canvas export from PHPM 631"
+    assert_includes response.body, "Correction file"
+    assert_includes response.body, "Preview validation:"
+    assert_includes response.body, "Column Mapping Preview"
+    assert_includes response.body, "Final Project"
+    assert_includes response.body, "Policy Analysis"
+    assert_includes response.body, "Unknown competency_title"
+  end
+
   test "show renders pending student matches as compact student list" do
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,
@@ -254,6 +313,49 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "123456789"
     refute_includes response.body, "Hidden Assignment"
     refute_includes response.body, "PHPM-701-001"
+  end
+
+  test "correction file includes failed parse errors and pending student rows" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed_with_errors",
+      summary: { "dry_run" => true }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "corrections.xlsx",
+      file_checksum: "checksum-corrections",
+      status: "processed",
+      parse_errors: [ { "row" => 5, "message" => "grade is not numeric" } ],
+      error_rows: 1
+    )
+    batch.grade_import_pending_rows.create!(
+      grade_import_file: file,
+      student_identifier: "999999999",
+      student_identifier_type: "uin",
+      student_name: "Missing Student",
+      student_uin: "999999999",
+      assignment_name: "Final Project",
+      course_code: "PHPM-631-600",
+      competency_title: "Policy Analysis",
+      raw_grade: 88,
+      mapped_level: 4,
+      course_target_level: 5,
+      row_number: 6,
+      source_key: "source-corrections",
+      import_fingerprint: "fingerprint-corrections"
+    )
+
+    get correction_file_admin_grade_import_batch_path(batch, format: :csv)
+
+    assert_response :success
+    parsed = CSV.parse(response.body, headers: true)
+
+    assert_equal "failed", parsed[0]["Row Type"]
+    assert_equal "grade is not numeric", parsed[0]["Message"]
+    assert_equal "pending_student_match", parsed[1]["Row Type"]
+    assert_equal "Missing Student", parsed[1]["Student Name"]
+    assert_equal "PHPM-631-600", parsed[1]["Course Code"]
+    assert_equal "5", parsed[1]["Course Target Level"]
   end
 
   test "destroy deletes batch import rows and frees duplicate fingerprints" do

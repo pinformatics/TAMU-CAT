@@ -1,38 +1,36 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <div class="u-shrink-0">
-        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
-      </div>
-    </div>
-  </div>
-
   <div class="c-page">
-    <section class="c-card u-stack u-stack--xl">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Admin tools</p>
-          <h1 class="c-page-title">Maintenance Mode</h1>
+          <h1 class="c-page-title c-page-title--brand">Maintenance Mode</h1>
           <p class="c-page-subtitle">Redirect the site to the public maintenance page for non-admin users.</p>
         </div>
 
-        <div class="c-resource-card__status">
+        <div class="u-actions">
+          <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
           <span class="c-status-badge <%= @maintenance_enabled ? 'c-status-badge--success' : 'c-status-badge--muted' %>">
             <%= @maintenance_enabled ? "Enabled" : "Disabled" %>
           </span>
-          <span class="c-muted-meta">
-            <%= @maintenance_enabled ? "Students/advisors are redirected." : "Normal access is active." %>
-          </span>
         </div>
       </header>
+    </section>
 
-      <div class="u-grid u-grid--form">
-      <section class="c-card u-stack u-stack--md">
-        <div class="u-responsive-split">
-          <div class="u-stack u-stack--sm u-max-w-lg">
-            <h2 class="c-section-title c-heading-inline">Site-wide redirect</h2>
+    <section class="u-stack u-stack--lg">
+      <section class="c-card c-card--spacious u-stack u-stack--lg">
+        <div class="u-responsive-split u-items-start">
+          <div class="u-stack u-stack--sm">
+            <p class="c-eyebrow">Current status</p>
+            <h2 class="c-section-title c-heading-inline">
+              <%= @maintenance_enabled ? "Maintenance redirect is active" : "Normal access is active" %>
+            </h2>
             <p class="c-lede">
-              When enabled, non-admin users are redirected to the public maintenance page.
+              <% if @maintenance_enabled %>
+                Non-admin users are redirected to the public maintenance page. Admins can still sign in and manage the portal.
+              <% else %>
+                Students and advisors can access the portal normally. Turn this on only when the site should be unavailable during support work.
+              <% end %>
             </p>
           </div>
 
@@ -49,19 +47,24 @@
           <% end %>
         </div>
 
-        <div class="c-card c-card--tight c-card--muted u-stack u-stack--sm">
-          <p class="c-lede">
-            Maintenance page:
-            <%= link_to maintenance_path, class: "u-text-primary" do %>
+        <div class="c-callout <%= @maintenance_enabled ? 'c-callout--warning' : 'c-callout--info' %>">
+          <div class="c-callout__title">
+            <%= @maintenance_enabled ? "Students and advisors are redirected" : "Maintenance mode is off" %>
+          </div>
+          <p>
+            Public page:
+            <%= link_to maintenance_path, class: "u-link" do %>
               <strong>/maintenance</strong>
             <% end %>
           </p>
-          <p class="c-lede">Admins can continue to sign in and use admin pages.</p>
         </div>
       </section>
 
-      <section class="c-card u-stack u-stack--md">
-        <h2 class="c-section-title c-heading-inline">What stays available</h2>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <div>
+          <p class="c-eyebrow">Availability</p>
+          <h2 class="c-section-title c-heading-inline">What stays available</h2>
+        </div>
 
         <div class="c-timeline" role="list">
           <div class="c-timeline__item" role="listitem">
@@ -89,7 +92,6 @@
           </div>
         </div>
       </section>
-      </div>
     </section>
   </div>
 </main>

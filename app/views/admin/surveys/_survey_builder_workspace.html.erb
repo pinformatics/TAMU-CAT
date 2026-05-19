@@ -28,53 +28,49 @@
      [group_key, pos, c.id.to_i.nonzero? || 9_999_999, c.object_id]
    end %>
 
-<div class="c-builder-layout grid grid-cols-1 gap-8 lg:items-start lg:gap-10" data-controller="survey-builder">
+<div class="c-builder-layout u-grid" data-controller="survey-builder">
   <aside class="u-stack u-stack--xl sidebar-nav c-builder-sidebar" data-survey-builder-target="sidebar">
-    <div class="sticky top-24 space-y-4 u-sticky-scroll c-builder-sidebar__sticky">
-      <div class="sidebar-panel-content c-builder-sidebar__content space-y-4">
+    <div class="u-sticky-scroll c-builder-sidebar__sticky">
+      <div class="sidebar-panel-content c-builder-sidebar__content u-stack u-stack--md">
       <div class="c-builder-panel">
-        <p class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 c-builder-panel__title">
-          <span aria-hidden="true">🧰</span>
+        <p class="c-builder-panel__title">
           <span>Builder</span>
         </p>
-        <div class="mt-3 c-toolbar__row c-builder-toolbar">
+        <div class="c-toolbar__row c-builder-toolbar u-mt-sm">
           <button type="button"
-                  class="<%= button_classes(:secondary, extra_classes: 'btn-block btn-sm justify-start') %>"
+                  class="<%= button_classes(:secondary, extra_classes: 'btn-block btn-sm u-justify-start') %>"
                   data-action="survey-builder#addSection"
                   data-survey-builder-target="addSectionButton">
-            <span aria-hidden="true">➕</span>
             <span>Section</span>
           </button>
           <button type="button"
-                  class="<%= button_classes(:secondary, extra_classes: 'btn-block btn-sm justify-start') %>"
+                  class="<%= button_classes(:secondary, extra_classes: 'btn-block btn-sm u-justify-start') %>"
                   data-action="survey-builder#addCategory"
                   data-survey-builder-target="addCategoryButton">
-            <span aria-hidden="true">➕</span>
             <span>Category</span>
           </button>
           <button type="button"
-                  class="<%= button_classes(:secondary, extra_classes: 'btn-block btn-sm justify-start') %>"
+                  class="<%= button_classes(:secondary, extra_classes: 'btn-block btn-sm u-justify-start') %>"
                   data-action="survey-builder#addQuestion"
                   data-survey-builder-target="addQuestionButton">
-            <span aria-hidden="true">➕</span>
             <span>Question</span>
           </button>
         </div>
 
         <div class="c-builder-panel__section">
           <%= form.submit(survey.persisted? ? "Save changes" : "Create survey",
-                          class: button_classes(:primary, extra_classes: "btn-block btn-sm justify-center")) %>
+                          class: button_classes(:primary, extra_classes: "btn-block btn-sm u-justify-center")) %>
         </div>
 
-        <div class="c-builder-panel__section space-y-2">
+        <div class="c-builder-panel__section u-stack u-stack--sm">
           <button type="button"
-                  class="<%= button_classes(:secondary, extra_classes: 'btn-block btn-sm justify-center') %>"
+                  class="<%= button_classes(:secondary, extra_classes: 'btn-block btn-sm u-justify-center') %>"
                   data-survey-builder-target="focusModeButton"
                   data-action="survey-builder#toggleFocusMode">
             Focus mode: On
           </button>
           <button type="button"
-                  class="<%= button_classes(:subtle, extra_classes: 'btn-block btn-sm justify-center') %>"
+                  class="<%= button_classes(:subtle, extra_classes: 'btn-block btn-sm u-justify-center') %>"
                   data-action="survey-builder#expandAll">
             Expand all
           </button>
@@ -82,40 +78,38 @@
       </div>
 
       <nav class="nav-stacked c-builder-panel">
-        <p class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 c-builder-panel__title">
-          <span aria-hidden="true">🧩</span>
+        <p class="c-builder-panel__title">
           <span>Sections</span>
         </p>
-        <div class="mt-3">
+        <div class="u-mt-sm">
           <input type="search"
                  placeholder="Search outline"
-               class="c-input c-search-input u-w-full pr-16 c-builder-search"
+               class="c-input c-search-input u-w-full c-builder-search"
                  data-survey-builder-target="navSearchInput"
                  data-action="input->survey-builder#filterOutline">
         </div>
-        <div class="c-builder-nav mt-2 space-y-1" data-survey-builder-target="sectionsNav"></div>
+        <div class="c-builder-nav u-mt-sm u-stack u-stack--xs" data-survey-builder-target="sectionsNav"></div>
         <div class="c-builder-panel__section">
-          <p class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 c-builder-panel__title">
-            <span aria-hidden="true">🗂️</span>
+          <p class="c-builder-panel__title">
             <span>Layout</span>
           </p>
-          <div class="c-builder-nav mt-2 space-y-1" data-survey-builder-target="categoriesNav"></div>
+          <div class="c-builder-nav u-mt-sm u-stack u-stack--xs" data-survey-builder-target="categoriesNav"></div>
         </div>
       </nav>
       </div>
     </div>
   </aside>
 
-  <div class="u-stack u-stack--xl c-builder-content lg:min-w-0" data-survey-builder-target="content">
-    <section class="c-card c-builder-workspace c-builder-canvas space-y-6"
+  <div class="u-stack u-stack--xl c-builder-content u-min-w-0" data-survey-builder-target="content">
+    <section class="c-card c-builder-workspace c-builder-canvas u-stack u-stack--lg"
              data-controller="section-fields category-fields"
              data-survey-builder-target="sectionsContainer categoriesContainer">
-      <header class="space-y-1 c-builder-workspace__header">
-        <h2 class="text-lg font-semibold text-slate-900 c-builder-workspace__title">Survey Content</h2>
-        <p class="text-sm text-slate-600 c-builder-workspace__subtitle">Manage sections, categories, questions, and sub-questions in display order.</p>
+      <header class="u-stack u-stack--sm c-builder-workspace__header">
+        <h2 class="c-panel-title c-builder-workspace__title">Survey Content</h2>
+        <p class="c-panel-subtitle c-builder-workspace__subtitle">Manage sections, categories, questions, and sub-questions in display order.</p>
       </header>
 
-      <div class="space-y-8" data-section-fields-target="container">
+      <div class="u-stack u-stack--xl" data-section-fields-target="container">
         <% ordered_sections_for_render.each do |section_record| %>
           <% categories_for_section = ordered_categories_for_render.select { |c| c.section_form_uid.to_s == section_record.form_uid.to_s && known_section_uids.include?(section_record.form_uid.to_s) } %>
           <% categories_html = capture do %>
@@ -159,7 +153,7 @@
            uid = c.section_form_uid.to_s
            uid.blank? || !known_section_uids.include?(uid)
          } %>
-      <div class="space-y-6" data-no-section-group data-no-section-group-list data-category-fields-target="container">
+      <div class="u-stack u-stack--lg" data-no-section-group data-no-section-group-list data-category-fields-target="container">
         <% no_section_categories.each do |category_record| %>
           <%= form.fields_for :categories, category_record do |category_fields| %>
             <%= render "admin/surveys/category_fields",
@@ -195,7 +189,7 @@
       <% survey.categories.target.delete(new_category) %>
       <template data-category-fields-target="template"><%= category_template %></template>
 
-      <div class="flex flex-wrap gap-3 pt-2">
+      <div class="u-actions u-actions--start">
         <button type="button"
                 class="c-builder-add-button"
                 data-action="section-fields#add">
@@ -210,10 +204,10 @@
       </div>
     </section>
 
-    <div class="sticky-bottom sticky bottom-4 z-20 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur c-builder-sticky-actions u-sticky-action-bar">
+    <div class="c-builder-sticky-actions u-sticky-action-bar">
       <div class="c-form-actions u-actions">
-        <%= link_to "Cancel", admin_surveys_path, class: "btn btn-secondary" %>
-        <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: "btn btn-primary") %>
+        <%= link_to "Cancel", admin_surveys_path, class: button_classes(:secondary) %>
+        <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: button_classes(:primary)) %>
       </div>
     </div>
   </div>

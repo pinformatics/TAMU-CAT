@@ -1,18 +1,13 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <%= link_to "Back to batches", admin_grade_import_batches_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
   <div class="c-page">
     <section class="u-stack u-stack--lg">
-      <header class="c-card c-card--brand">
+      <header class="c-card c-card--brand c-page-header">
         <div>
           <p class="c-eyebrow">Faculty imports</p>
           <h1 class="c-page-title c-page-title--brand">New Grade Import Batch</h1>
           <p class="c-page-subtitle">Upload workbooks and preview matches before committing.</p>
         </div>
+        <%= link_to "Back to batches", admin_grade_import_batches_path, class: button_classes(:secondary) %>
       </header>
 
       <div class="c-two-column-layout">
@@ -43,6 +38,16 @@
                 <%= file_field_tag "folder_files[]", multiple: true, webkitdirectory: true, directory: true, class: "c-input" %>
                 <small class="c-help">One workbook per course.</small>
               </div>
+            </div>
+
+            <div class="c-field">
+              <%= label_tag :import_notes, "Import notes", class: "c-label" %>
+              <%= text_area_tag :import_notes,
+                    nil,
+                    rows: 3,
+                    class: "c-input",
+                    placeholder: "Example: Canvas export from PHPM 631, downloaded by Dr. Smith after final grades posted." %>
+              <small class="c-help">Visible on the batch record so reviewers know where the file came from.</small>
             </div>
 
             <div class="u-border-top u-pt-lg">

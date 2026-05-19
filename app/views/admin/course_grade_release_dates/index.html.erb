@@ -1,71 +1,80 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <%= link_to "Back to admin", admin_dashboard_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
   <div class="c-page">
     <section class="u-stack u-stack--lg">
-      <header class="c-card c-card--brand">
+      <header class="c-card c-card--brand c-page-header">
         <div>
           <p class="c-eyebrow">Admin controls</p>
           <h1 class="c-page-title c-page-title--brand">Course Grade Release Dates</h1>
           <p class="c-page-subtitle">Set when course-derived competency results become visible to students.</p>
         </div>
+        <%= link_to "Back to admin", admin_dashboard_path, class: button_classes(:secondary) %>
       </header>
 
       <div class="c-card c-card--flush">
-        <div class="c-table-wrapper">
-          <table class="c-table">
-            <thead>
-              <tr>
-                <th>Semester</th>
-                <th>Surveys</th>
-                <th>Release Date</th>
-                <th>Status</th>
-                <th class="u-text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% @semesters.each do |semester| %>
-                <% release_date = @release_dates[semester.id] %>
-                <% is_released = release_date.nil? || Time.current >= release_date.release_date %>
+        <%= form_with url: bulk_update_admin_course_grade_release_dates_path, method: :patch, local: true, data: { turbo: false }, class: "u-stack u-stack--md" do %>
+          <div class="c-panel-header c-panel-header--with-border">
+            <div>
+              <h2 class="c-section-title c-heading-inline">Bulk release editor</h2>
+              <p class="c-help">Set a date to embargo course results until that time. Leave blank to make the semester visible immediately.</p>
+            </div>
+            <%= submit_tag "Save release dates", class: button_classes(:primary) %>
+          </div>
+
+          <div class="c-table-wrapper">
+            <table class="c-table">
+              <thead>
                 <tr>
-                  <td class="c-table__title"><%= semester.name %></td>
-                  <td>
-                    <span class="c-muted"><%= @survey_counts[semester.id] || 0 %> survey<%= (@survey_counts[semester.id] || 0) == 1 ? '' : 's' %></span>
-                  </td>
-                  <td>
-                    <% if release_date %>
-                      <%= l(release_date.release_date, format: :long) %>
-                    <% else %>
-                      <span class="c-muted">No date set</span>
-                    <% end %>
-                  </td>
-                  <td>
-                    <% if is_released %>
-                      <span class="c-status-badge c-status-badge--success">Visible</span>
-                    <% else %>
-                      <span class="c-status-pill c-status-pill--warning">Embargoed</span>
-                    <% end %>
-                  </td>
-                  <td class="u-text-right">
-                    <% if release_date %>
-                      <%= link_to "Edit",
-                                  edit_admin_course_grade_release_date_path(release_date),
-                                  class: button_classes(:secondary) %>
-                    <% else %>
-                      <%= link_to "Set Date",
-                                  new_admin_course_grade_release_date_path(semester_id: semester.id),
-                                  class: button_classes(:secondary) %>
-                    <% end %>
-                  </td>
+                  <th>Semester</th>
+                  <th>Surveys</th>
+                  <th>Release Date</th>
+                  <th>Status</th>
+                  <th class="u-text-right">Actions</th>
                 </tr>
-              <% end %>
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                <% @semesters.each do |semester| %>
+                  <% release_date = @release_dates[semester.id] %>
+                  <% is_released = release_date.blank? || release_date.released? %>
+                  <tr>
+                    <td class="c-table__title"><%= semester.name %></td>
+                    <td>
+                      <span class="c-muted"><%= pluralize(@survey_counts[semester.id] || 0, "survey") %></span>
+                    </td>
+                    <td>
+                      <%= datetime_local_field_tag "release_dates[#{semester.id}]",
+                            release_date&.release_date&.strftime("%Y-%m-%dT%H:%M"),
+                            class: "c-input",
+                            aria: { label: "Release date for #{semester.name}" } %>
+                      <% if release_date&.release_date.present? %>
+                        <span class="c-help">Currently <%= l(release_date.release_date, format: :long) %></span>
+                      <% else %>
+                        <span class="c-help">Visible immediately</span>
+                      <% end %>
+                    </td>
+                    <td>
+                      <% if is_released %>
+                        <span class="c-status-badge c-status-badge--success">Visible</span>
+                      <% else %>
+                        <span class="c-status-pill c-status-pill--warning">Embargoed</span>
+                      <% end %>
+                    </td>
+                    <td class="u-text-right">
+                      <% if release_date %>
+                        <%= link_to "Edit",
+                                    edit_admin_course_grade_release_date_path(release_date),
+                                    class: button_classes(:secondary) %>
+                      <% else %>
+                        <%= link_to "Set Date",
+                                    new_admin_course_grade_release_date_path(semester_id: semester.id),
+                                    class: button_classes(:secondary) %>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
 
         <% if @semesters.empty? %>
           <div class="c-empty-state">
@@ -79,6 +88,42 @@
           <strong>How it works:</strong> One release date controls all surveys in a semester. When set, course-derived competency results remain hidden from students until that date. After the date passes, results are visible. If no date is set, results are visible by default. Admins always see all results.
         </p>
       </div>
+
+      <section class="c-card c-card--flush">
+        <div class="c-panel-header c-panel-header--with-border">
+          <div>
+            <h2 class="c-section-title c-heading-inline">Release-date audit trail</h2>
+            <p class="c-help">Recent changes recorded by admin, semester, and timestamp.</p>
+          </div>
+        </div>
+
+        <% if @release_date_activity.present? %>
+          <div class="c-table-wrapper">
+            <table class="c-table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Admin</th>
+                  <th>Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @release_date_activity.each do |activity| %>
+                  <tr>
+                    <td><%= l(activity.created_at, format: :long) %></td>
+                    <td><%= activity.admin&.display_name || activity.admin&.email %></td>
+                    <td><%= activity.description %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% else %>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No release-date changes have been recorded yet.</p>
+          </div>
+        <% end %>
+      </section>
     </section>
   </div>
 </main>

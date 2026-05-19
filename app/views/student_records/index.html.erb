@@ -1,37 +1,7 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-w-full u-justify-between u-gap-md">
-      <div class="u-shrink-0">
-        <% if defined?(advisor_dashboard_path) && current_user&.respond_to?(:role_advisor?) && current_user.role_advisor? %>
-          <%= link_to "← Back",
-                      advisor_dashboard_path,
-                      class: button_classes(:secondary),
-                      data: { turbo: false } %>
-        <% elsif defined?(admin_dashboard_path) && current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
-          <%= link_to "← Back",
-                      admin_dashboard_path,
-                      class: button_classes(:secondary),
-                      data: { turbo: false } %>
-        <% else %>
-          <%= link_to "← Back",
-                      dashboard_path,
-                      class: button_classes(:secondary),
-                      data: { turbo: false } %>
-        <% end %>
-      </div>
-
-      <div class="u-shrink-0">
-        <%= link_to "Export Excel",
-                    export_student_records_excel_path(request.query_parameters),
-                    class: button_classes(:secondary),
-                    data: { turbo: false } %>
-      </div>
-    </div>
-  </div>
-
   <div class="c-container c-container--wide">
     <div class="c-page">
-    <section class="c-card c-card--spacious u-stack u-stack--xl">
+    <section class="c-card c-card--brand">
     <header class="c-page-header">
       <div>
         <p class="c-eyebrow">Reporting</p>
@@ -45,8 +15,35 @@
         end %>
         <p class="c-page-subtitle"><%= intro_text %></p>
       </div>
+      <div class="u-actions">
+        <% if defined?(advisor_dashboard_path) && current_user&.respond_to?(:role_advisor?) && current_user.role_advisor? %>
+          <%= link_to "Back",
+                      advisor_dashboard_path,
+                      class: button_classes(:secondary),
+                      data: { turbo: false } %>
+        <% elsif defined?(admin_dashboard_path) && current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
+          <%= link_to "Back",
+                      admin_dashboard_path,
+                      class: button_classes(:secondary),
+                      data: { turbo: false } %>
+        <% else %>
+          <%= link_to "Back",
+                      dashboard_path,
+                      class: button_classes(:secondary),
+                      data: { turbo: false } %>
+        <% end %>
+        <%= link_to "Export Excel",
+                    export_student_records_excel_path(request.query_parameters),
+                    class: button_classes(:secondary),
+                    data: {
+                      turbo: false,
+                      turbo_confirm: "FERPA reminder: this export includes student-level records. Continue only for a legitimate educational interest."
+                    } %>
+      </div>
     </header>
+    </section>
 
+    <section class="c-card c-card--spacious u-stack u-stack--xl">
     <div class="c-toolbar">
       <div class="c-toolbar__row u-w-full">
         <div class="c-callout u-w-full">

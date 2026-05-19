@@ -1,21 +1,26 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar c-toolbar--spaced">
-    <div class="c-toolbar__row u-w-full u-justify-between u-gap-md">
-      <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
-      <%= link_to "Export CSV", export_admin_competencies_path(request.query_parameters), class: button_classes(:secondary), data: { turbo: false } %>
-    </div>
-  </div>
-
   <div class="c-container c-container--dashboard c-page">
-    <section class="c-card c-card--spacious u-stack u-stack--xl">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Competency review</p>
-          <h1 class="c-page-title">Competencies</h1>
+          <h1 class="c-page-title c-page-title--brand">Competencies</h1>
           <p class="c-page-subtitle">Compare student self-ratings, advisor ratings, and course-derived ratings across all 17 competencies.</p>
         </div>
+        <div class="u-actions">
+          <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+          <%= link_to "Export CSV",
+                export_admin_competencies_path(request.query_parameters),
+                class: button_classes(:secondary),
+                data: {
+                  turbo: false,
+                  turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest."
+                } %>
+        </div>
       </header>
+    </section>
 
+    <section class="c-card c-card--spacious u-stack u-stack--xl">
     <section class="u-stack u-stack--md">
     <% if current_user&.role_admin? %>
       <div class="c-card c-card--flush">

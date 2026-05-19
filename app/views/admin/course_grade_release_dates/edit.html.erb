@@ -1,13 +1,7 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <%= link_to "Back to release dates", admin_course_grade_release_dates_path, class: button_classes(:secondary) %>
-    </div>
-  </div>
-
   <div class="c-page">
     <section class="u-stack u-stack--lg">
-      <header class="c-card c-card--brand">
+      <header class="c-card c-card--brand c-page-header">
         <div>
           <p class="c-eyebrow">Admin controls</p>
           <h1 class="c-page-title c-page-title--brand">Set Release Date</h1>
@@ -15,6 +9,7 @@
             Configure when <strong><%= @semester.name %></strong> course competency results become visible.
           </p>
         </div>
+        <%= link_to "Back to release dates", admin_course_grade_release_dates_path, class: button_classes(:secondary) %>
       </header>
 
       <div class="c-two-column-layout">

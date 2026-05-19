@@ -158,6 +158,7 @@ class DashboardsController < ApplicationController
     @active_survey_count = Survey.count
     advisee_ids = Array(@advisees).map(&:student_id).compact
     @total_reports = advisee_ids.empty? ? 0 : SurveyAssignment.where(student_id: advisee_ids).count
+    @students_needing_attention = AdvisorAttentionList.new(students: @advisees, semester: ProgramSemester.current&.name).call
   end
 
   # Shows high-level system metrics for administrators.

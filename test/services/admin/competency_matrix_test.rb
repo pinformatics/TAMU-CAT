@@ -1,4 +1,5 @@
 require "test_helper"
+require "securerandom"
 
 class Admin::CompetencyMatrixTest < ActiveSupport::TestCase
   setup do
@@ -72,6 +73,18 @@ class Admin::CompetencyMatrixTest < ActiveSupport::TestCase
     assert_in_delta 5.0, student_row.dig(:ratings, @competency_name, :course_rating), 0.001
   end
 
+  test "advisor legacy ratings do not override course-derived ratings" do
+    create_advisor_feedback(score: 1.0, semester: program_semesters(:fall_2025))
+    create_course_rating(level: 5.0, semester: program_semesters(:fall_2025))
+
+    payload = Admin::CompetencyMatrix.new(params: { semester: "Fall 2025" }, actor_user: @admin).call
+    student_row = payload[:students].find { |row| row[:id] == @student.student_id }
+    ratings = student_row[:ratings][@competency_name]
+
+    assert_in_delta 1.0, ratings[:advisor_rating], 0.001
+    assert_in_delta 5.0, ratings[:course_rating], 0.001
+  end
+
   private
 
   def create_course_rating(level:, semester: nil)
@@ -89,6 +102,33 @@ class Admin::CompetencyMatrixTest < ActiveSupport::TestCase
       aggregated_level: level,
       aggregation_rule: "max",
       evidence_count: 1
+    )
+  end
+
+  def create_advisor_feedback(score:, semester:)
+    survey = Survey.new(
+      title: "Advisor Legacy Matrix Survey #{SecureRandom.hex(4)}",
+      program_semester: semester,
+      is_active: true
+    )
+    survey.save!(validate: false)
+    section = SurveySection.create!(survey: survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = Category.create!(survey: survey, section: section, name: "Health Care Environment and Community")
+    question = category.questions.create!(
+      question_text: @competency_name,
+      question_type: "dropdown",
+      question_order: 1,
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+
+    Feedback.create!(
+      student: @student,
+      advisor: advisors(:advisor),
+      survey: survey,
+      category: category,
+      question: question,
+      average_score: score
     )
   end
 end

@@ -80,6 +80,7 @@ module GradeImports
     ].freeze
 
     DIRECT_COMPETENCY_PREFIXES = %w[emha rmha].freeze
+    COURSE_CODE_PATTERN = /([A-Z]{2,5})[\s_-]*(\d{3})(?:[\s_-]*(\d{3}))?/i.freeze
 
     COMPETENCY_TITLE_SYNONYMS = {
       "legal and ethical bases for health services and health systems" => "Legal & Ethical Bases for Health Services and Health Systems",
@@ -104,11 +105,16 @@ module GradeImports
 
       files.each do |uploaded_file|
         file_checksum = Digest::SHA256.file(uploaded_file.path).hexdigest
+        duplicate_uploads = duplicate_uploads_for(file_checksum)
         grade_file = batch.grade_import_files.create!(
           file_name: uploaded_file.original_filename.to_s,
           file_checksum: file_checksum,
           content_type: uploaded_file.content_type.to_s,
-          status: "pending"
+          status: "pending",
+          parsed_content: {
+            duplicate_file_uploads: duplicate_uploads,
+            duplicate_file_upload_count: duplicate_uploads.size
+          }
         )
 
         begin
@@ -118,7 +124,7 @@ module GradeImports
             status: "failed",
             parse_errors: [ { type: "file", message: e.message } ],
             error_rows: 1,
-            parsed_content: failure_diagnostics(uploaded_file:, error: e)
+            parsed_content: grade_file.parsed_content.merge(failure_diagnostics(uploaded_file:, error: e))
           )
           Rails.logger.error("[GradeImports::BatchProcessor] Failed file=#{grade_file.file_name}: #{e.class}: #{e.message}")
         end
@@ -157,7 +163,8 @@ module GradeImports
           files_failed: failed_files,
           pending_rows: pending_count,
           evidences_created: evidence_count,
-          ratings_created: rating_count
+          ratings_created: rating_count,
+          preview_validation: preview_validation_summary(batch)
         )
       )
 
@@ -284,6 +291,8 @@ module GradeImports
     end
 
     def update_grade_file_with_result!(grade_file:, result:)
+      parsed_content = grade_file.parsed_content.merge(result.fetch(:parsed_content, {}))
+
       grade_file.update!(
         status: result.fetch(:status, "processed"),
         total_rows: result.fetch(:total_rows, 0),
@@ -291,7 +300,7 @@ module GradeImports
         pending_rows: result.fetch(:pending_rows, 0),
         error_rows: result.fetch(:error_rows, 0),
         parse_errors: Array(result[:parse_errors]).first(500),
-        parsed_content: result.fetch(:parsed_content, {})
+        parsed_content: parsed_content
       )
     end
 
@@ -570,10 +579,15 @@ module GradeImports
     end
 
     def normalized_direct_course_code(source_name)
-      token = source_name.to_s.upcase[/[A-Z]{2,5}[_-]\d{3}[_-]\d{3}/]
-      return nil if token.blank?
+      normalize_course_code(source_name)
+    end
 
-      token.tr("_", "-")
+    def normalize_course_code(value)
+      match = value.to_s.upcase.match(COURSE_CODE_PATTERN)
+      return nil unless match
+
+      parts = [ match[1], match[2], match[3] ].compact
+      parts.join("-")
     end
 
     def resolve_grade_and_mapping_sheets!(workbook)
@@ -817,7 +831,7 @@ module GradeImports
           min_grade: min_grade,
           max_grade: max_grade,
           competency_level: level,
-          course_code: row[:course_code].to_s.strip.presence,
+          course_code: normalize_course_code(row[:course_code]) || row[:course_code].to_s.strip.presence,
           notes: row[:notes].to_s.strip.presence
         }
       end
@@ -925,10 +939,12 @@ module GradeImports
     end
 
     def filter_by_course_code(mappings, course_code)
-      normalized = normalize_key(course_code)
+      normalized = normalize_key(normalize_course_code(course_code) || course_code)
       return mappings if normalized.blank?
 
-      exact = mappings.select { |entry| normalize_key(entry[:course_code]) == normalized }
+      exact = mappings.select do |entry|
+        normalize_key(normalize_course_code(entry[:course_code]) || entry[:course_code]) == normalized
+      end
       exact.presence || mappings
     end
 
@@ -946,6 +962,7 @@ module GradeImports
 
       ((grade_header_row + 1)..grade_sheet.last_row).each do |row_number|
         row = row_from_sheet(grade_sheet, grade_headers, row_number)
+        row_course_code = normalize_course_code(row[:course_code]) || row[:course_code].to_s.strip.presence
         debug_rows_scanned += 1
         if row.values.all?(&:blank?)
           debug_rows_skipped_blank += 1
@@ -968,7 +985,7 @@ module GradeImports
 
         applied = applied_mappings(
           assignment_name: assignment_name,
-          course_code: row[:course_code],
+          course_code: row_course_code,
           raw_points: raw_points,
           points_possible: nil,
           mapping_rows: mapping_rows
@@ -1002,7 +1019,7 @@ module GradeImports
               student_email: row[:student_email],
               student_name: nil,
               assignment_name: assignment_name,
-              course_code: row[:course_code].presence || applied_mapping[:mapping][:course_code],
+              course_code: row_course_code.presence || applied_mapping[:mapping][:course_code],
               raw_points: raw_points,
               mapped_level: applied_mapping[:mapping][:competency_level],
               competency_title: applied_mapping[:mapping][:competency_title],
@@ -1030,7 +1047,7 @@ module GradeImports
             next
           end
 
-          duplicate_key = [ student.student_id, row[:course_code].to_s.strip, assignment_name, applied_mapping[:mapping][:competency_title] ]
+          duplicate_key = [ student.student_id, row_course_code.to_s.strip, assignment_name, applied_mapping[:mapping][:competency_title] ]
           seen_rows[duplicate_key] += 1
           if seen_rows[duplicate_key] > 1
             duplicate_warnings << row_error(row_number, "Duplicate evidence row for #{assignment_name} / #{applied_mapping[:mapping][:competency_title]}")
@@ -1041,14 +1058,14 @@ module GradeImports
             student: student,
             source_key: build_source_key(
               identifier: row[:student_uin].to_s.strip.presence || row[:student_email].to_s.strip.downcase,
-              course_code: row[:course_code].presence || applied_mapping[:mapping][:course_code],
+              course_code: row_course_code.presence || applied_mapping[:mapping][:course_code],
               assignment_name: assignment_name,
               competency_title: applied_mapping[:mapping][:competency_title],
               row_number: row_number
             ),
             import_fingerprint: import_fingerprint,
             assignment_name: assignment_name,
-            course_code: row[:course_code].presence || applied_mapping[:mapping][:course_code],
+            course_code: row_course_code.presence || applied_mapping[:mapping][:course_code],
             raw_points: raw_points,
             mapped_level: applied_mapping[:mapping][:competency_level],
             competency_title: applied_mapping[:mapping][:competency_title],
@@ -1144,7 +1161,12 @@ module GradeImports
 
         identifier = normalize_numeric_identifier(row_values[id_index[:student_identifier]])
         canvas_id = id_index[:canvas_id] ? row_values[id_index[:canvas_id]].to_s.strip : nil
-        section = id_index[:section].nil? ? "" : row_values[id_index[:section]].to_s.strip
+        raw_section = id_index[:section].nil? ? "" : row_values[id_index[:section]].to_s.strip
+        sheet_name = grade_sheet.respond_to?(:name) ? grade_sheet.name : nil
+        course_code = normalize_course_code(raw_section) ||
+                      normalize_course_code(sheet_name) ||
+                      normalize_course_code(grade_file.file_name) ||
+                      raw_section.presence
         if identifier.blank?
           debug_rows_skipped_blank_identifier += 1
           next
@@ -1167,13 +1189,13 @@ module GradeImports
 
         applied_contains_mapping_groups(
           assignments: row_assignments,
-          course_code: section,
+          course_code: course_code,
           mapping_rows: mapping_rows
         ).each do |applied_mapping|
           assignment_name = applied_mapping[:assignment_name]
           source_key = build_source_key(
             identifier: identifier,
-            course_code: section.presence || applied_mapping[:mapping][:course_code],
+            course_code: course_code.presence || applied_mapping[:mapping][:course_code],
             assignment_name: assignment_name,
             competency_title: applied_mapping[:mapping][:competency_title],
             row_number: row_number
@@ -1198,7 +1220,7 @@ module GradeImports
               student_email: nil,
               student_name: row_values[id_index[:student_name]].to_s.strip.presence,
               assignment_name: assignment_name,
-              course_code: section.presence || applied_mapping[:mapping][:course_code],
+              course_code: course_code.presence || applied_mapping[:mapping][:course_code],
               raw_points: applied_mapping[:raw_points],
               mapped_level: applied_mapping[:mapping][:competency_level],
               competency_title: applied_mapping[:mapping][:competency_title],
@@ -1213,7 +1235,7 @@ module GradeImports
             next
           end
 
-          duplicate_key = [ student.student_id, section, assignment_name, applied_mapping[:mapping][:competency_title] ]
+          duplicate_key = [ student.student_id, course_code, assignment_name, applied_mapping[:mapping][:competency_title] ]
           seen_rows[duplicate_key] += 1
           if seen_rows[duplicate_key] > 1
             duplicate_warnings << row_error(row_number, "Duplicate evidence row for #{assignment_name} / #{applied_mapping[:mapping][:competency_title]}")
@@ -1225,7 +1247,7 @@ module GradeImports
             source_key: source_key,
             import_fingerprint: import_fingerprint,
             assignment_name: assignment_name,
-            course_code: section.presence || applied_mapping[:mapping][:course_code],
+            course_code: course_code.presence || applied_mapping[:mapping][:course_code],
             raw_points: applied_mapping[:raw_points],
             mapped_level: applied_mapping[:mapping][:competency_level],
             competency_title: applied_mapping[:mapping][:competency_title],
@@ -1255,7 +1277,7 @@ module GradeImports
 
           applied = applied_mappings(
             assignment_name: assignment_name,
-            course_code: section,
+            course_code: course_code,
             raw_points: raw_points,
             points_possible: points_possible,
             mapping_rows: non_contains_mapping_rows
@@ -1265,7 +1287,7 @@ module GradeImports
           applied.each do |applied_mapping|
             source_key = build_source_key(
               identifier: identifier,
-              course_code: section.presence || applied_mapping[:mapping][:course_code],
+              course_code: course_code.presence || applied_mapping[:mapping][:course_code],
               assignment_name: assignment_name,
               competency_title: applied_mapping[:mapping][:competency_title],
               row_number: row_number
@@ -1290,7 +1312,7 @@ module GradeImports
                 student_email: nil,
                 student_name: row_values[id_index[:student_name]].to_s.strip.presence,
                 assignment_name: assignment_name,
-                course_code: section.presence || applied_mapping[:mapping][:course_code],
+                course_code: course_code.presence || applied_mapping[:mapping][:course_code],
                 raw_points: raw_points,
                 mapped_level: applied_mapping[:mapping][:competency_level],
                 competency_title: applied_mapping[:mapping][:competency_title],
@@ -1305,7 +1327,7 @@ module GradeImports
               next
             end
 
-            duplicate_key = [ student.student_id, section, assignment_name, applied_mapping[:mapping][:competency_title] ]
+            duplicate_key = [ student.student_id, course_code, assignment_name, applied_mapping[:mapping][:competency_title] ]
             seen_rows[duplicate_key] += 1
             if seen_rows[duplicate_key] > 1
               duplicate_warnings << row_error(row_number, "Duplicate evidence row for #{assignment_name} / #{applied_mapping[:mapping][:competency_title]}")
@@ -1317,7 +1339,7 @@ module GradeImports
               source_key: source_key,
               import_fingerprint: import_fingerprint,
               assignment_name: assignment_name,
-              course_code: section.presence || applied_mapping[:mapping][:course_code],
+              course_code: course_code.presence || applied_mapping[:mapping][:course_code],
               raw_points: raw_points,
               mapped_level: applied_mapping[:mapping][:competency_level],
               competency_title: applied_mapping[:mapping][:competency_title],
@@ -1756,6 +1778,41 @@ module GradeImports
     def import_already_recorded?(import_fingerprint)
       GradeCompetencyEvidence.exists?(import_fingerprint: import_fingerprint) ||
         GradeImportPendingRow.exists?(import_fingerprint: import_fingerprint)
+    end
+
+    def duplicate_uploads_for(file_checksum)
+      GradeImportFile
+        .where(file_checksum: file_checksum)
+        .includes(:grade_import_batch)
+        .order(created_at: :desc)
+        .limit(10)
+        .map do |file|
+          {
+            batch_id: file.grade_import_batch_id,
+            file_id: file.id,
+            file_name: file.file_name,
+            uploaded_at: file.created_at&.iso8601,
+            batch_status: file.grade_import_batch&.status
+          }
+        end
+    end
+
+    def preview_validation_summary(batch)
+      files = batch.grade_import_files.to_a
+      duplicate_file_count = files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i }
+      duplicate_row_count = files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
+
+      {
+        commit_ready: files.any? && files.none? { |file| file.status == "failed" },
+        total_files: files.size,
+        failed_files: files.count { |file| file.status == "failed" },
+        imported_rows: files.sum(&:imported_rows),
+        pending_rows: files.sum(&:pending_rows),
+        failed_rows: files.sum(&:error_rows),
+        duplicate_file_uploads: duplicate_file_count,
+        duplicate_rows: duplicate_row_count,
+        checked_at: Time.current.iso8601
+      }
     end
 
     def validate_mapping_ranges(rows)

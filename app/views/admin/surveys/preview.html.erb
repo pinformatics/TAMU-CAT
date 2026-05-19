@@ -1,20 +1,30 @@
-<div data-survey-scroll-scope class="c-document-shell">
-  <div class="c-two-column-layout grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-10">
-    <div class="space-y-8 lg:min-w-0">
-      <div class="c-toolbar c-toolbar--spaced">
-        <div class="c-toolbar__row">
-          <%= link_to "← Back", admin_surveys_path, class: "btn btn-secondary" %>
-          <%= link_to "Edit Survey", edit_admin_survey_path(@survey), class: "btn btn-primary" %>
+<main class="c-main c-main--dashboard" data-survey-scroll-scope>
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Survey preview</p>
+          <h1 class="c-page-title c-page-title--brand"><%= @survey.title %></h1>
+          <p class="c-page-subtitle">Read-only preview of the survey layout.</p>
         </div>
+
+        <div class="u-actions">
+          <%= link_to "Back", admin_surveys_path, class: button_classes(:secondary) %>
+          <%= link_to "Edit Survey", edit_admin_survey_path(@survey), class: button_classes(:primary) %>
+        </div>
+      </header>
+    </section>
+
+    <div class="c-two-column-layout">
+      <div class="u-stack u-stack--xl u-min-w-0">
+        <div class="c-callout c-callout--info">
+          Read-only preview of the survey layout.
+        </div>
+
+        <%= render partial: "survey_responses/survey_response", locals: { survey_response: @preview_survey_response, editable: false } %>
       </div>
 
-      <div class="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
-        Read-only preview of the survey layout.
-      </div>
-
-      <%= render partial: "survey_responses/survey_response", locals: { survey_response: @preview_survey_response, editable: false } %>
+      <%= render ::SurveyLegendComponent.new(legend: @survey.legend) %>
     </div>
-
-    <%= render ::SurveyLegendComponent.new(legend: @survey.legend) %>
   </div>
-</div>
+</main>

@@ -2,20 +2,20 @@
 <% form_uid = section.respond_to?(:form_uid) && section.form_uid.present? ? section.form_uid : "section-temp-#{SecureRandom.hex(4)}" %>
 <% section.form_uid = form_uid if section.respond_to?(:form_uid=) %>
 <article id="<%= form_uid %>"
-         class="c-card c-card--student c-builder-node c-builder-collapsible space-y-5 text-left"
+         class="c-card c-card--student c-builder-node c-builder-collapsible u-stack u-stack--md"
          data-builder-kind="section"
          data-builder-label="<%= section.title.to_s.strip.presence || 'Untitled section' %>"
          data-section-entry
          data-section-form-uid="<%= form_uid %>"
          data-section-new-record="<%= section.persisted? ? 'false' : 'true' %>">
-  <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-    <div class="flex-1 space-y-2">
+  <div class="u-responsive-split u-items-start">
+    <div class="u-flex-1 u-stack u-stack--sm">
       <%= section_fields.hidden_field :id %>
       <%= section_fields.hidden_field :_destroy, value: section.marked_for_destruction? ? 1 : 0 %>
       <%= section_fields.hidden_field :form_uid, value: section.form_uid %>
       <%= section_fields.hidden_field :position %>
 
-      <div class="flex items-center justify-between gap-3">
+      <div class="u-actions u-actions--split">
         <span class="js-drag-handle c-builder-sort-handle" aria-label="Drag to reorder">
           ⋮⋮
         </span>
@@ -30,29 +30,28 @@
         </div>
       </div>
 
-      <%= section_fields.label :title, "Section title", class: "block text-sm font-medium text-slate-700" %>
+      <%= section_fields.label :title, "Section title", class: "c-label" %>
       <%= section_fields.text_field :title,
             class: input_classes,
             placeholder: "Student Experience" %>
     </div>
 
     <button type="button"
-            class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %> text-rose-600"
+            class="<%= button_classes(:danger, extra_classes: 'btn-sm') %>"
             data-action="section-fields#remove">
-      <span aria-hidden="true">🗑️</span>
       <span>Remove</span>
     </button>
   </div>
 
-  <div class="c-builder-collapsible__body space-y-5" data-builder-section-body>
-    <div class="space-y-2">
-      <%= section_fields.label :description, "Description (optional)", class: "block text-sm font-medium text-slate-700" %>
+  <div class="c-builder-collapsible__body u-stack u-stack--md" data-builder-section-body>
+    <div class="c-field">
+      <%= section_fields.label :description, "Description (optional)", class: "c-label" %>
       <%= section_fields.text_area :description,
                                    class: textarea_classes,
                                    placeholder: "Brief instructions shown before the grouped categories." %>
     </div>
 
-    <div class="mt-6 space-y-6" data-category-group data-section-uid="<%= form_uid %>" data-category-group-list>
+    <div class="u-stack u-stack--lg u-mt-lg" data-category-group data-section-uid="<%= form_uid %>" data-category-group-list>
       <% if local_assigns[:categories_html].present? %>
         <%= local_assigns[:categories_html] %>
       <% end %>

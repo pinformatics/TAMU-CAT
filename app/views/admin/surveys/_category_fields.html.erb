@@ -8,19 +8,19 @@
 <% end %>
 <% category_uid = category.persisted? ? "category-#{category.id}" : "category-temp-#{category.object_id}" %>
 <article id="<%= category_uid %>"
-         class="c-card c-builder-node c-builder-collapsible space-y-6"
+         class="c-card c-builder-node c-builder-collapsible u-stack u-stack--lg"
          data-builder-kind="category"
          data-builder-label="<%= category.name.to_s.strip.presence || 'Untitled category' %>"
          data-category-fields-target="item">
-  <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-    <div class="flex-1 space-y-2">
+  <div class="u-responsive-split u-items-start">
+    <div class="u-flex-1 u-stack u-stack--sm">
       <%= category_fields.hidden_field :id %>
       <%= category_fields.hidden_field :_destroy, value: 0 %>
       <% if position_supported %>
         <%= category_fields.hidden_field :position %>
       <% end %>
 
-      <div class="flex items-center justify-between gap-3">
+      <div class="u-actions u-actions--split">
         <span class="js-drag-handle c-builder-sort-handle" aria-label="Drag to reorder">
           ⋮⋮
         </span>
@@ -34,42 +34,40 @@
           </button>
         </div>
       </div>
-      <%= category_fields.label :name, "Category name", class: "block text-sm font-medium text-slate-700" %>
+      <%= category_fields.label :name, "Category name", class: "c-label" %>
       <%= category_fields.text_field :name,
                                      required: true,
                                      class: input_classes,
                                      placeholder: "Leadership" %>
 
-      <div class="space-y-2">
-        <%= category_fields.label :section_form_uid, "Section assignment", class: "block text-sm font-medium text-slate-700" %>
+      <div class="c-field">
+        <%= category_fields.label :section_form_uid, "Section assignment", class: "c-label" %>
         <%= category_fields.select :section_form_uid,
                                    options_for_select(section_options, selected_section_key),
                                    { include_blank: false },
                                    class: input_classes,
                                    data: { category_fields_target: "sectionSelect" } %>
-        <p class="text-xs text-slate-500">Choose the section this category belongs to or select "No section".</p>
+        <p class="c-help">Choose the section this category belongs to or select "No section".</p>
       </div>
 
       <%# Display order is controlled via drag-and-drop. %>
     </div>
 
     <button type="button"
-            class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %> text-rose-600"
+            class="<%= button_classes(:danger, extra_classes: 'btn-sm') %>"
             data-action="category-fields#remove">
-      <span aria-hidden="true">🗑️</span>
       <span>Remove</span>
     </button>
   </div>
 
-  <div class="c-builder-collapsible__body space-y-5" data-builder-category-body>
-    <div class="space-y-2">
-      <%= category_fields.label :description, "Description", class: "block text-sm font-medium text-slate-700" %>
+  <div class="c-builder-collapsible__body u-stack u-stack--md" data-builder-category-body>
+    <div class="c-field">
+      <%= category_fields.label :description, "Description", class: "c-label" %>
       <%= category_fields.text_area :description, class: textarea_classes, placeholder: "Optional context shown to advisors and students." %>
     </div>
 
-    <div class="space-y-4" data-controller="question-fields">
-      <h3 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-600">
-        <span aria-hidden="true">❓</span>
+    <div class="u-stack u-stack--md" data-controller="question-fields">
+      <h3 class="c-builder-panel__title">
         <span>Questions</span>
       </h3>
 
@@ -115,7 +113,7 @@
            end
          end %>
 
-      <div class="space-y-4" data-question-fields-target="container">
+      <div class="u-stack u-stack--md" data-question-fields-target="container">
         <%= category_fields.fields_for :questions, ordered_questions_for_render do |question_fields| %>
           <%= render "admin/surveys/question_fields",
                      question_fields: question_fields,

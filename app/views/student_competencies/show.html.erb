@@ -1,12 +1,27 @@
-<% selected_semester = @payload.dig(:filters, :semester).presence || "All semesters" %>
+<% visible_sources = @payload[:visible_sources] || [] %>
+<% show_self = visible_sources.include?("self") %>
+<% show_course = visible_sources.include?("course") %>
+<% show_target = visible_sources.include?("target") %>
 <% show_advisor = @payload[:show_advisor] %>
+<% selected_semester_value = @payload.dig(:filters, :semester).presence || @payload[:all_semesters_value] %>
+<% selected_semester = @payload.dig(:filters, :semester).presence || "All semesters" %>
 <% page_title = @competency_page_title.presence || "My Competencies" %>
-<% page_subtitle = @competency_page_subtitle.presence || (show_advisor ? "Self, advisor, course, and target levels in one semester view." : "Self, course, and target levels in one semester view.") %>
+<% page_subtitle = @competency_page_subtitle.presence || "Self, course, advisor, and target levels across the selected semester view." %>
 <% back_path = @competency_back_path %>
 <% form_path = @competency_form_path.presence || student_competencies_path %>
-<% export_path = @competency_export_path.presence || student_competencies_path(format: :csv, semester: @payload.dig(:filters, :semester)) %>
+<% filter_params = { semester: selected_semester_value, sources: visible_sources } %>
+<% export_path = @competency_export_path.presence || student_competencies_path(filter_params.merge(format: :csv)) %>
+<% pdf_path = @competency_pdf_path.presence || student_competencies_path(filter_params.merge(format: :pdf)) %>
+<% staff_export_confirm = (current_user&.role_admin? || current_user&.role_advisor?) ? "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." : nil %>
+<% semester_options = [["All semesters", @payload[:all_semesters_value]]] + @payload[:semesters].map { |semester| [semester, semester] } %>
+<% status_labels = {
+  "present" => "Updated",
+  "missing" => "Missing data",
+  "embargoed" => "Not yet released",
+  "no_evidence" => "No course evidence"
+} %>
 
-<main class="c-main c-page">
+<main class="c-main c-page c-competency-page">
   <header class="c-card c-page-header">
     <div class="u-stack u-stack--sm">
       <span class="c-eyebrow"><%= selected_semester %></span>
@@ -14,7 +29,7 @@
       <p class="c-page-subtitle"><%= page_subtitle %></p>
     </div>
 
-    <div class="u-actions">
+    <div class="u-actions no-print">
       <% if back_path.present? %>
         <%= link_to "Back",
               back_path,
@@ -22,21 +37,37 @@
               data: { turbo: false } %>
       <% end %>
 
+      <%= link_to "Download PDF",
+            pdf_path,
+            class: button_classes(:secondary),
+            data: { turbo: false, turbo_confirm: staff_export_confirm }.compact %>
+
       <%= link_to "Export CSV",
             export_path,
             class: button_classes(:secondary),
-            data: { turbo: false } %>
+            data: { turbo: false, turbo_confirm: staff_export_confirm }.compact %>
     </div>
   </header>
 
-  <section class="c-card c-card--tight">
-    <%= form_with url: form_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
+  <section class="c-card c-card--tight no-print">
+    <%= form_with url: form_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar c-filter-bar--competencies" do %>
       <div class="c-filter-bar__field">
         <label class="c-label" for="semester">Semester</label>
         <%= select_tag :semester,
-              options_for_select(@payload[:semesters], @payload.dig(:filters, :semester)),
+              options_for_select(semester_options, selected_semester_value),
               class: "c-select" %>
       </div>
+
+      <fieldset class="c-source-filter">
+        <legend>Sources</legend>
+        <% @payload[:source_options].each do |source_key, source_label| %>
+          <label class="c-check-pill">
+            <%= check_box_tag "sources[]", source_key, visible_sources.include?(source_key), id: "source_#{source_key}" %>
+            <span><%= source_label %></span>
+          </label>
+        <% end %>
+      </fieldset>
+
       <%= submit_tag "Apply", class: button_classes(:primary) %>
       <span class="c-status-pill <%= @payload[:course_released] ? 'c-status-pill--success' : 'c-status-pill--warning' %>">
         Course results: <%= @payload[:release_label] %>
@@ -44,7 +75,69 @@
     <% end %>
   </section>
 
-  <section class="c-card c-card--tight">
+  <section class="c-card c-card--tight c-competency-summary">
+    <div class="c-panel-header">
+      <h2 class="c-section-title c-heading-inline">Student Summary</h2>
+      <span class="c-muted"><%= selected_semester %></span>
+    </div>
+
+    <div class="c-summary-grid">
+      <article class="c-summary-item">
+        <h3>Strongest Domains</h3>
+        <% if @payload.dig(:summary, :strongest_domains).present? %>
+          <ul>
+            <% @payload.dig(:summary, :strongest_domains).each do |domain| %>
+              <li><%= domain[:name] %> <span><%= number_with_precision(domain[:score], precision: 2, strip_insignificant_zeros: true) %></span></li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p>No score data yet.</p>
+        <% end %>
+      </article>
+
+      <article class="c-summary-item">
+        <h3>Lowest Domains</h3>
+        <% if @payload.dig(:summary, :lowest_domains).present? %>
+          <ul>
+            <% @payload.dig(:summary, :lowest_domains).each do |domain| %>
+              <li><%= domain[:name] %> <span><%= number_with_precision(domain[:score], precision: 2, strip_insignificant_zeros: true) %></span></li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p>No score data yet.</p>
+        <% end %>
+      </article>
+
+      <article class="c-summary-item">
+        <h3>Biggest Growth Areas</h3>
+        <% if @payload.dig(:summary, :growth_areas).present? %>
+          <ul>
+            <% @payload.dig(:summary, :growth_areas).each do |area| %>
+              <li><%= area[:title] %> <span><%= number_with_precision(area[:current], precision: 2, strip_insignificant_zeros: true) %> / <%= area[:target] %></span></li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p>No below-target gaps found.</p>
+        <% end %>
+      </article>
+
+      <article class="c-summary-item">
+        <h3>Data Status</h3>
+        <ul>
+          <% if show_self %>
+            <li>Missing self ratings <span><%= @payload.dig(:summary, :missing_self_count) %></span></li>
+          <% end %>
+          <% if show_course %>
+            <li>No course evidence <span><%= @payload.dig(:summary, :no_course_evidence_count) %></span></li>
+            <li>Not yet released <span><%= @payload.dig(:summary, :embargoed_course_count) %></span></li>
+          <% end %>
+          <li>Below target <span><%= @payload.dig(:summary, :below_target_count) %></span></li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section class="c-card c-card--tight no-print">
     <div class="c-panel-header">
       <h2 class="c-section-title c-heading-inline">Graphs</h2>
       <div class="c-tabs" role="tablist" aria-label="Competency graph views">
@@ -72,12 +165,28 @@
     </div>
   </section>
 
-  <section class="u-stack u-stack--lg">
+  <section class="u-stack u-stack--lg c-print-section">
     <% @payload[:domains].each do |domain| %>
       <section class="c-card c-card--flush c-section-group">
-        <header class="c-section-group__header">
-          <h2><%= domain[:name] %></h2>
-          <span><%= pluralize(domain[:competencies].size, "competency") %></span>
+        <header class="c-section-group__header c-domain-header">
+          <div>
+            <h2><%= domain[:name] %></h2>
+            <span><%= pluralize(domain[:competencies].size, "competency") %></span>
+          </div>
+          <div class="c-domain-averages" aria-label="<%= domain[:name] %> averages">
+            <% if show_self %>
+              <span>Self avg <strong><%= domain[:averages][:self].presence || "—" %></strong></span>
+            <% end %>
+            <% if show_advisor %>
+              <span>Advisor avg <strong><%= domain[:averages][:advisor].presence || "—" %></strong></span>
+            <% end %>
+            <% if show_course %>
+              <span>Course avg <strong><%= domain[:averages][:course].presence || "—" %></strong></span>
+            <% end %>
+            <% if show_target %>
+              <span>Target avg <strong><%= domain[:averages][:target].presence || "—" %></strong></span>
+            <% end %>
+          </div>
         </header>
 
         <div class="c-table-wrapper">
@@ -85,61 +194,115 @@
             <thead>
               <tr>
                 <th>Competency</th>
-                <th>Self</th>
+                <% if show_self %>
+                  <th>Self</th>
+                <% end %>
                 <% if show_advisor %>
                   <th>Advisor</th>
                 <% end %>
-                <th>Course</th>
-                <th>End of Program Target</th>
+                <% if show_course %>
+                  <th>Course</th>
+                <% end %>
+                <% if show_target %>
+                  <th>End of Program Target</th>
+                <% end %>
               </tr>
             </thead>
             <tbody>
               <% domain[:competencies].each do |competency| %>
-                <tr>
+                <tr class="<%= 'is-below-target' if competency[:self_below_target] || competency[:course_below_target] %>">
                   <td class="c-table__title"><%= competency[:title] %></td>
-                  <td>
-                    <span class="c-score-pill c-score-pill--self <%= 'c-score-pill--empty' if competency[:self_rating].blank? %>">
-                      <%= competency[:self_rating].presence || "—" %>
-                    </span>
-                  </td>
-                  <% if show_advisor %>
+
+                  <% if show_self %>
                     <td>
-                      <span class="c-score-pill c-score-pill--advisor <%= 'c-score-pill--empty' if competency[:advisor_rating].blank? %>">
-                        <%= competency[:advisor_rating].presence || "—" %>
+                      <% self_classes = ["c-score-pill", "c-score-pill--self"] %>
+                      <% self_classes << "c-score-pill--below" if competency[:self_below_target] %>
+                      <% self_classes << "c-score-pill--empty" if competency[:self_rating].blank? %>
+                      <span class="<%= self_classes.join(' ') %>">
+                        <%= competency[:self_rating].presence || "—" %>
                       </span>
+                      <span class="c-data-status c-data-status--<%= competency[:self_status] %>">
+                        <%= status_labels[competency[:self_status]] %>
+                      </span>
+                      <% if competency[:self_updated_at].present? %>
+                        <span class="c-last-updated">Updated <%= l(competency[:self_updated_at], format: :short) %></span>
+                      <% end %>
                     </td>
                   <% end %>
-                  <td>
-                    <% course_value = @payload[:course_released] ? competency[:course_rating].presence : "Embargoed" %>
-                    <% if !@payload[:course_released] %>
-                      <span class="c-score-pill c-score-pill--empty">Embargoed</span>
-                    <% elsif competency[:course_sources].present? %>
-                      <details class="c-cell-details">
-                        <summary class="c-cell-details__summary">
-                          <span class="c-score-pill c-score-pill--course <%= 'c-score-pill--empty' if course_value.blank? %>">
-                            <%= course_value.presence || "—" %>
-                          </span>
-                        </summary>
-                        <div class="c-source-list">
-                          <span class="c-source-count"><%= pluralize(competency[:course_sources].size, "source") %></span>
-                          <% competency[:course_sources].each do |source| %>
-                            <div class="c-source-chip">
-                              <strong><%= source[:course_code] %></strong>
-                              <span>Competency level <%= source[:mapped_level].presence || "—" %></span>
-                              <span>Target level <%= source[:course_target_level].presence || "—" %></span>
-                            </div>
-                          <% end %>
-                        </div>
-                      </details>
-                    <% else %>
-                      <span class="c-score-pill c-score-pill--empty">—</span>
-                    <% end %>
-                  </td>
-                  <td>
-                    <span class="c-score-pill c-score-pill--program <%= 'c-score-pill--empty' if competency[:end_program_target].blank? %>">
-                      <%= competency[:end_program_target].presence || "—" %>
-                    </span>
-                  </td>
+
+                  <% if show_advisor %>
+                    <td>
+                      <% advisor_classes = ["c-score-pill", "c-score-pill--advisor"] %>
+                      <% advisor_classes << "c-score-pill--empty" if competency[:advisor_rating].blank? %>
+                      <span class="<%= advisor_classes.join(' ') %>">
+                        <%= competency[:advisor_rating].presence || "—" %>
+                      </span>
+                      <span class="c-data-status c-data-status--<%= competency[:advisor_status] %>">
+                        <%= status_labels[competency[:advisor_status]] %>
+                      </span>
+                      <% if competency[:advisor_updated_at].present? %>
+                        <span class="c-last-updated">Updated <%= l(competency[:advisor_updated_at], format: :short) %></span>
+                      <% end %>
+                    </td>
+                  <% end %>
+
+                  <% if show_course %>
+                    <td>
+                      <% course_value = competency[:course_status] == "embargoed" ? "Embargoed" : competency[:course_rating].presence %>
+                      <% if competency[:course_sources].present? %>
+                        <details class="c-cell-details">
+                          <summary class="c-cell-details__summary">
+                            <% course_classes = ["c-score-pill", "c-score-pill--course"] %>
+                            <% course_classes << "c-score-pill--below" if competency[:course_below_target] %>
+                            <% course_classes << "c-score-pill--empty" if course_value.blank? %>
+                            <span class="<%= course_classes.join(' ') %>">
+                              <%= course_value.presence || "—" %>
+                            </span>
+                          </summary>
+                          <div class="c-source-list">
+                            <span class="c-source-count"><%= pluralize(competency[:course_sources].size, "source") %></span>
+                            <% competency[:course_sources].each do |source| %>
+                              <div class="c-source-chip">
+                                <strong><%= source[:course_code] %></strong>
+                                <% if source[:semester].present? %>
+                                  <span><%= source[:semester] %></span>
+                                <% end %>
+                                <span>Competency level <%= source[:mapped_level].presence || "—" %></span>
+                                <span>Target level <%= source[:course_target_level].presence || "—" %></span>
+                              </div>
+                            <% end %>
+                          </div>
+                        </details>
+                      <% else %>
+                        <% course_classes = ["c-score-pill"] %>
+                        <% course_classes << (competency[:course_status] == "embargoed" ? "c-score-pill--empty" : "c-score-pill--course") %>
+                        <% course_classes << "c-score-pill--empty" if course_value.blank? %>
+                        <span class="<%= course_classes.join(' ') %>"><%= course_value.presence || "—" %></span>
+                      <% end %>
+                      <span class="c-data-status c-data-status--<%= competency[:course_status] %>">
+                        <%= status_labels[competency[:course_status]] %>
+                      </span>
+                      <% if competency[:course_updated_at].present? %>
+                        <span class="c-last-updated">Updated <%= l(competency[:course_updated_at], format: :short) %></span>
+                      <% end %>
+                    </td>
+                  <% end %>
+
+                  <% if show_target %>
+                    <td>
+                      <% target_classes = ["c-score-pill", "c-score-pill--program"] %>
+                      <% target_classes << "c-score-pill--empty" if competency[:end_program_target].blank? %>
+                      <span class="<%= target_classes.join(' ') %>">
+                        <%= competency[:end_program_target].presence || "—" %>
+                      </span>
+                      <span class="c-data-status c-data-status--<%= competency[:target_status] %>">
+                        <%= competency[:target_status] == "present" ? "Expected target" : "Missing target" %>
+                      </span>
+                      <% if competency[:target_updated_at].present? %>
+                        <span class="c-last-updated">Updated <%= l(competency[:target_updated_at], format: :short) %></span>
+                      <% end %>
+                    </td>
+                  <% end %>
                 </tr>
               <% end %>
             </tbody>
@@ -157,9 +320,13 @@
   const trendPayload = <%= raw @payload[:trend_chart].to_json %>
   const colors = {
     Self: ["rgba(80, 0, 0, 0.18)", "#500000"],
+    "Self average": ["rgba(80, 0, 0, 0.18)", "#500000"],
     Advisor: ["rgba(37, 99, 235, 0.16)", "#2563eb"],
+    "Advisor average": ["rgba(37, 99, 235, 0.16)", "#2563eb"],
     Course: ["rgba(5, 150, 105, 0.16)", "#059669"],
-    "End Program Target": ["rgba(124, 58, 237, 0.1)", "#7c3aed"]
+    "Course average": ["rgba(5, 150, 105, 0.16)", "#059669"],
+    "End Program Target": ["rgba(124, 58, 237, 0.1)", "#7c3aed"],
+    "Target average": ["rgba(124, 58, 237, 0.1)", "#7c3aed"]
   }
 
   const decorate = (dataset) => {
@@ -167,7 +334,9 @@
     return { ...dataset, backgroundColor, borderColor, borderWidth: 2, pointRadius: 2, spanGaps: true }
   }
 
-  const radarChart = new Chart(document.getElementById("competencyRadarChart"), {
+  const radarElement = document.getElementById("competencyRadarChart")
+  const trendElement = document.getElementById("competencyTrendChart")
+  const radarChart = radarElement ? new Chart(radarElement, {
     type: "radar",
     data: { labels: radarPayload.labels, datasets: radarPayload.datasets.map(decorate) },
     options: {
@@ -176,9 +345,9 @@
       scales: { r: { min: 0, max: 5, ticks: { stepSize: 1 } } },
       plugins: { legend: { position: "bottom" } }
     }
-  })
+  }) : null
 
-  const trendChart = new Chart(document.getElementById("competencyTrendChart"), {
+  const trendChart = trendElement ? new Chart(trendElement, {
     type: "line",
     data: { labels: trendPayload.labels, datasets: trendPayload.datasets.map(decorate) },
     options: {
@@ -187,7 +356,7 @@
       scales: { y: { min: 0, max: 5, ticks: { stepSize: 1 } } },
       plugins: { legend: { position: "bottom" } }
     }
-  })
+  }) : null
 
   const charts = { snapshot: radarChart, trend: trendChart }
   const tabs = document.querySelectorAll("[data-competency-chart-tab]")

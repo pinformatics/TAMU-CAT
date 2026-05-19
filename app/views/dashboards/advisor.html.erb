@@ -69,4 +69,63 @@
       </div>
     </div>
   </section>
+
+  <section class="c-card c-card--compact u-stack u-stack--md">
+    <header class="c-page-header c-page-header--compact">
+      <div>
+        <p class="c-eyebrow">Competency follow-up</p>
+        <h2 class="c-section-title">Students Needing Attention</h2>
+        <p class="c-help">Students appear here when they have incomplete surveys or self/course ratings below their configured target.</p>
+      </div>
+      <%= link_to "Open competency matrix", admin_competencies_path, class: button_classes(:secondary), data: { turbo: false } %>
+    </header>
+
+    <% if @students_needing_attention.present? %>
+      <div class="c-table-wrapper">
+        <table class="c-table">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Semester</th>
+              <th>Incomplete Surveys</th>
+              <th>Below Target</th>
+              <th class="u-text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @students_needing_attention.each do |row| %>
+              <tr>
+                <td>
+                  <span class="c-table__title"><%= row[:student_name] %></span>
+                  <% if row[:email].present? %>
+                    <span class="c-table__meta"><%= row[:email] %></span>
+                  <% end %>
+                </td>
+                <td><%= row[:semester] %></td>
+                <td><%= row[:missing_survey_count] %></td>
+                <td>
+                  <% if row[:below_target_competencies].present? %>
+                    <%= pluralize(row[:below_target_competencies].size, "competency") %>
+                    <span class="c-table__meta"><%= row[:below_target_competencies].first(2).map { |item| item[:title] }.join(", ") %></span>
+                  <% else %>
+                    <span class="c-muted">None</span>
+                  <% end %>
+                </td>
+                <td class="u-text-right">
+                  <%= link_to "Detailed competencies",
+                        admin_competency_path(row[:student_id], row[:detail_path_params]),
+                        class: button_classes(:secondary),
+                        data: { turbo: false } %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <div class="c-empty-state">
+        <p class="c-empty-state__body">No assigned students need competency follow-up right now.</p>
+      </div>
+    <% end %>
+  </section>
 </main>

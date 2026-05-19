@@ -129,6 +129,19 @@ module Reports
       assert_in_delta 3.0, item[:course_average], 0.001
     end
 
+    test "course averages are scoped to the selected import semester" do
+      create_course_rating(level: 2.0, competency_title: @competency_name, semester: program_semesters(:fall_2025))
+      create_course_rating(level: 4.0, competency_title: @competency_name, semester: program_semesters(:spring_2025))
+      create_course_rating(level: 5.0, competency_title: @competency_name, semester: nil)
+
+      aggregator = Reports::DataAggregator.new(user: @admin, params: { semester: "Fall 2025" })
+      item = aggregator.competency_detail[:items].find { |entry| entry[:name] == @competency_name }
+
+      assert item, "Expected competency detail to include #{@competency_name}"
+      assert_in_delta 2.0, item[:course_average], 0.001
+      assert_equal "Fall 2025", aggregator.export_payload.dig(:filters, :semester)
+    end
+
     test "domain summary reflects course percent meeting target" do
       create_student_response(score: "4.0")
       create_target_level(level: 4)
@@ -196,9 +209,10 @@ module Reports
       )
     end
 
-    def create_course_rating(level:, competency_title:, batch_status: "completed", batch_summary: { "dry_run" => false })
+    def create_course_rating(level:, competency_title:, batch_status: "completed", batch_summary: { "dry_run" => false }, semester: nil)
       batch = GradeImportBatch.create!(
         uploaded_by: @admin,
+        program_semester: semester,
         status: batch_status,
         summary: batch_summary
       )

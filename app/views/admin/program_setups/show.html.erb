@@ -6,43 +6,35 @@
     ["Semesters", "semesters", "Define survey terms and choose the current active semester."],
     ["Competency Targets", "targets", "Set benchmark proficiency targets by semester, track, and class."]
   ] %>
-  <% active_tab = tabs.find { |(_label, value, _description)| value == @tab } || tabs.first %>
 
-  <div class="c-toolbar">
-    <div class="c-toolbar__row items-center u-w-full gap-3">
-      <%= link_to "Back",
-                admin_dashboard_path,
-                class: button_classes(:secondary),
-                data: { turbo: false } %>
-    </div>
-  </div>
+  <div class="c-page">
+    <section class="c-card c-card--brand">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Academic setup</p>
+          <h1 class="c-page-title c-page-title--brand">Program Configuration</h1>
+          <p class="c-page-subtitle">Manage program structure and competency targets in one place.</p>
+        </div>
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+      </header>
+    </section>
 
-  <div class="c-container c-container--dashboard c-page">
-
-    <section class="c-card c-card--spacious u-stack u-stack--md">
-      <div class="u-stack u-stack--sm">
-        <p class="c-eyebrow">Academic setup</p>
-        <h1 class="c-page-title">Program Configuration</h1>
-        <p class="c-page-subtitle">Manage program structure and competency targets in one place.</p>
+    <section class="c-stats-grid">
+      <div class="c-stat c-stat--muted">
+        <p class="c-stat__label">Tracks</p>
+        <p class="c-stat__value c-stat__value--md"><%= @program_tracks.size %></p>
       </div>
-
-      <div class="u-grid" style="--u-grid-min: 180px;">
-        <div class="c-card c-card--tight c-card--muted">
-          <p class="c-muted-meta">Tracks</p>
-          <p class="c-h1"><%= @program_tracks.size %></p>
-        </div>
-        <div class="c-card c-card--tight c-card--muted">
-          <p class="c-muted-meta">Majors</p>
-          <p class="c-h1"><%= @majors.size %></p>
-        </div>
-        <div class="c-card c-card--tight c-card--muted">
-          <p class="c-muted-meta">Cohorts</p>
-          <p class="c-h1"><%= @program_years.size %></p>
-        </div>
-        <div class="c-card c-card--tight c-card--muted">
-          <p class="c-muted-meta">Semesters</p>
-          <p class="c-h1"><%= @program_semesters.size %></p>
-        </div>
+      <div class="c-stat c-stat--muted">
+        <p class="c-stat__label">Majors</p>
+        <p class="c-stat__value c-stat__value--md"><%= @majors.size %></p>
+      </div>
+      <div class="c-stat c-stat--muted">
+        <p class="c-stat__label">Cohorts</p>
+        <p class="c-stat__value c-stat__value--md"><%= @program_years.size %></p>
+      </div>
+      <div class="c-stat c-stat--muted">
+        <p class="c-stat__label">Semesters</p>
+        <p class="c-stat__value c-stat__value--md"><%= @program_semesters.size %></p>
       </div>
     </section>
 
@@ -70,372 +62,271 @@
       </nav>
     </section>
 
-  <% if @tab == "tracks" %>
-    <section class="c-card c-card--spacious u-stack u-stack--md">
-      <header class="c-toolbar__row c-toolbar__row--airy justify-between">
-        <div>
-          <h2 class="text-xl font-semibold text-slate-900">Tracks</h2>
-          <p class="text-sm text-slate-600">View and manage the track options available across the app.</p>
-        </div>
-      </header>
+    <% if @tab == "tracks" %>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+          <div>
+            <h2 class="c-panel-title">Tracks</h2>
+            <p class="c-panel-subtitle">View and manage the track options available across the app.</p>
+          </div>
+        </header>
 
-      <div class="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div class="u-stack u-stack--md">
-          <% if @program_tracks.blank? %>
-            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-              No tracks yet. Use the form to create your first entry.
-            </div>
-          <% else %>
-            <ul class="space-y-3">
-              <% @program_tracks.each do |track| %>
-                <li class="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                  <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div class="u-stack u-stack--sm">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <p class="text-base font-semibold text-slate-900"><%= track.name %></p>
-                        <% if track.active? %>
-                          <span class="c-status-badge c-status-badge--success">Active</span>
-                        <% else %>
-                          <span class="c-status-badge c-status-badge--muted">Inactive</span>
-                        <% end %>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                        <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                          Key <%= track.key %>
-                        </span>
-                        <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                          Position <%= track.position %>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                      <details class="group">
-                        <summary class="cursor-pointer list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
-                        <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                          <%= form_with model: [:admin, track], local: true, class: "space-y-3" do |form| %>
-                            <div class="grid gap-3 sm:grid-cols-2">
-                              <div class="space-y-1">
-                                <%= form.label :name, "Name", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
-                              </div>
-                              <div class="space-y-1">
-                                <%= form.label :key, "Key", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.text_field :key, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
-                              </div>
-                              <div class="space-y-1">
-                                <%= form.label :position, "Position", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.number_field :position, min: 0, step: 1, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
-                              </div>
-                              <div class="flex items-center gap-2 pt-6 text-sm text-slate-700">
-                                <%= form.check_box :active, class: "h-4 w-4 rounded border-slate-300" %>
-                                <%= form.label :active, "Active", class: "text-sm font-medium text-slate-700" %>
-                              </div>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                              <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
-                              <%= button_to "Delete",
-                                            admin_program_track_path(track),
-                                            method: :delete,
-                                            data: { turbo_confirm: "Delete #{track.name}?" },
-                                            class: button_classes(:danger, extra_classes: "btn-sm") %>
-                            </div>
-                          <% end %>
+        <div class="c-two-column-layout">
+          <div class="u-stack u-stack--md">
+            <% if @program_tracks.blank? %>
+              <div class="c-empty-state"><p class="c-empty-state__body">No tracks yet. Use the form to create your first entry.</p></div>
+            <% else %>
+              <ul class="c-compact-list">
+                <% @program_tracks.each do |track| %>
+                  <li class="c-card c-card--tight">
+                    <div class="u-responsive-split u-items-start">
+                      <div class="u-stack u-stack--sm">
+                        <div class="u-actions u-actions--start u-gap-xs">
+                          <p class="c-table__title"><%= track.name %></p>
+                          <span class="c-status-badge <%= track.active? ? 'c-status-badge--success' : 'c-status-badge--muted' %>"><%= track.active? ? "Active" : "Inactive" %></span>
                         </div>
-                      </details>
-                    </div>
-                  </div>
-                </li>
-              <% end %>
-            </ul>
-          <% end %>
-        </div>
-
-        <div class="c-card c-card--tight c-card--muted">
-          <h3 class="text-base font-semibold text-slate-900">Add track</h3>
-          <p class="mb-4 text-sm text-slate-600">Name tracks consistently (e.g., "Residential").</p>
-          <%= form_with model: [:admin, @new_program_track], url: admin_program_tracks_path, local: true, class: "space-y-4" do |form| %>
-            <div class="space-y-1">
-              <%= form.label :name, "Track name", class: "text-sm font-medium text-slate-700" %>
-              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm", placeholder: "Residential" %>
-            </div>
-            <%= form.submit "Save track", class: button_classes(:primary) %>
-          <% end %>
-        </div>
-      </div>
-    </section>
-  <% end %>
-
-  <% if @tab == "majors" %>
-    <section class="c-card c-card--spacious u-stack u-stack--md">
-      <header class="c-toolbar__row c-toolbar__row--airy justify-between">
-        <div>
-          <h2 class="text-xl font-semibold text-slate-900">Majors</h2>
-          <p class="text-sm text-slate-600">View and manage majors available for student profiles.</p>
-        </div>
-      </header>
-
-      <div class="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div class="u-stack u-stack--md">
-          <% if @majors.blank? %>
-            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-              No majors yet. Use the form to create your first entry.
-            </div>
-          <% else %>
-            <ul class="space-y-3">
-              <% @majors.each do |major| %>
-                <li class="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                  <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div class="u-stack u-stack--sm">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <p class="text-base font-semibold text-slate-900"><%= major.name %></p>
-                        <span class="c-status-badge c-status-badge--muted">Major</span>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                        <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                          Student profile option
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                      <details>
-                        <summary class="cursor-pointer list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
-                        <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                          <%= form_with model: [:admin, major], local: true, class: "space-y-3" do |form| %>
-                            <div class="space-y-1">
-                              <%= form.label :name, "Name", class: "text-sm font-medium text-slate-700" %>
-                              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                              <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
-                              <%= button_to "Delete",
-                                            admin_major_path(major),
-                                            method: :delete,
-                                            data: { turbo_confirm: "Delete #{major.name}?" },
-                                            class: button_classes(:danger, extra_classes: "btn-sm") %>
-                            </div>
-                          <% end %>
+                        <div class="u-actions u-actions--start u-gap-xs">
+                          <span class="c-pill c-pill--muted">Key <%= track.key %></span>
+                          <span class="c-pill c-pill--muted">Position <%= track.position %></span>
                         </div>
-                      </details>
-                    </div>
-                  </div>
-                </li>
-              <% end %>
-            </ul>
-          <% end %>
-        </div>
-
-        <div class="c-card c-card--tight c-card--muted">
-          <h3 class="text-base font-semibold text-slate-900">Add major</h3>
-          <p class="mb-4 text-sm text-slate-600">Example: "Health Administration".</p>
-          <%= form_with model: [:admin, @new_major], url: admin_majors_path, local: true, class: "space-y-4" do |form| %>
-            <div class="space-y-1">
-              <%= form.label :name, "Major / Program name", class: "text-sm font-medium text-slate-700" %>
-              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm" %>
-            </div>
-            <%= form.submit "Save major", class: button_classes(:primary) %>
-          <% end %>
-        </div>
-      </div>
-    </section>
-  <% end %>
-
-  <% if @tab == "years" %>
-    <section class="c-card c-card--spacious u-stack u-stack--md">
-      <header class="c-toolbar__row c-toolbar__row--airy justify-between">
-        <div>
-          <h2 class="text-xl font-semibold text-slate-900">Cohort years</h2>
-          <p class="text-sm text-slate-600">Manage the “Class of YYYY” options used for cohort assignment and reporting.</p>
-        </div>
-      </header>
-
-      <div class="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div class="u-stack u-stack--md">
-          <% if @program_years.blank? %>
-            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-              No program years yet. Use the form to create your first entry.
-            </div>
-          <% else %>
-            <ul class="space-y-3">
-              <% @program_years.each do |year| %>
-                <li class="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                  <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div class="u-stack u-stack--sm">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <p class="text-base font-semibold text-slate-900">Class of <%= year.value %></p>
-                        <% if year.active? %>
-                          <span class="c-status-badge c-status-badge--success">Active</span>
-                        <% else %>
-                          <span class="c-status-badge c-status-badge--muted">Inactive</span>
-                        <% end %>
                       </div>
-                      <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                        <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                          Position <%= year.position %>
-                        </span>
-                        <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                          Cohort year
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                      <details>
-                        <summary class="cursor-pointer list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
-                        <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                          <%= form_with model: [:admin, year], local: true, class: "space-y-3" do |form| %>
-                            <div class="grid gap-3 sm:grid-cols-2">
-                              <div class="space-y-1">
-                                <%= form.label :value, "Class of year", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
-                              </div>
-                              <div class="space-y-1">
-                                <%= form.label :position, "Position", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.number_field :position, min: 0, step: 1, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
-                              </div>
-                              <div class="flex items-center gap-2 pt-6 text-sm text-slate-700">
-                                <%= form.check_box :active, class: "h-4 w-4 rounded border-slate-300" %>
-                                <%= form.label :active, "Active", class: "text-sm font-medium text-slate-700" %>
-                              </div>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                              <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
-                              <%= button_to "Delete",
-                                            admin_program_year_path(year),
-                                            method: :delete,
-                                            data: { turbo_confirm: "Delete Class of #{year.value}?" },
-                                            class: button_classes(:danger, extra_classes: "btn-sm") %>
-                            </div>
-                          <% end %>
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                </li>
-              <% end %>
-            </ul>
-          <% end %>
-        </div>
-
-        <div class="c-card c-card--tight c-card--muted">
-          <h3 class="text-base font-semibold text-slate-900">Add cohort year</h3>
-          <p class="mb-4 text-sm text-slate-600">Example: 2027</p>
-          <%= form_with model: [:admin, @new_program_year], url: admin_program_years_path, local: true, class: "space-y-4" do |form| %>
-            <div class="space-y-1">
-              <%= form.label :value, "Class of year", class: "text-sm font-medium text-slate-700" %>
-              <%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm" %>
-            </div>
-            <%= form.submit "Save cohort", class: button_classes(:primary) %>
-          <% end %>
-        </div>
-      </div>
-    </section>
-  <% end %>
-
-  <% if @tab == "semesters" %>
-    <section class="c-card c-card--spacious u-stack u-stack--md">
-      <header class="c-toolbar__row c-toolbar__row--airy justify-between">
-        <div>
-          <h2 class="text-xl font-semibold text-slate-900">Program semesters</h2>
-          <p class="text-sm text-slate-600">View and manage semesters used for survey assignment windows.</p>
-        </div>
-        <% if @current_program_semester.present? %>
-          <span class="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-1 text-sm font-semibold text-indigo-700">
-            <span class="h-2 w-2 rounded-full bg-indigo-500" aria-hidden="true"></span>
-            Current: <%= @current_program_semester.name %>
-          </span>
-        <% else %>
-          <span class="inline-flex items-center rounded-full bg-amber-100 px-4 py-1 text-sm font-semibold text-amber-800">No current semester set</span>
-        <% end %>
-      </header>
-
-      <div class="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div class="u-stack u-stack--md">
-          <% if @program_semesters.blank? %>
-            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-              No semesters yet. Use the form to create your first entry.
-            </div>
-          <% else %>
-            <ul class="space-y-3">
-              <% @program_semesters.each do |semester| %>
-                <li class="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                  <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div class="u-stack u-stack--sm">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <p class="text-base font-semibold text-slate-900"><%= semester.name %></p>
-                        <% if semester.current? %>
-                          <span class="c-status-badge c-status-badge--success">Current</span>
-                        <% else %>
-                          <span class="c-status-badge c-status-badge--muted">Available</span>
-                        <% end %>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                        <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
-                          Added <%= time_ago_in_words(semester.created_at) %> ago
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                      <% unless semester.current? %>
-                        <%= button_to "Make current",
-                                      make_current_admin_program_semester_path(semester),
-                                      method: :patch,
-                                      class: button_classes(:subtle, extra_classes: "btn-sm") %>
-                      <% end %>
 
                       <details>
-                        <summary class="cursor-pointer list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
-                        <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                          <%= form_with model: [:admin, semester], local: true, class: "space-y-3" do |form| %>
-                            <div class="space-y-1">
-                              <%= form.label :name, "Semester name", class: "text-sm font-medium text-slate-700" %>
-                              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
+                        <summary class="u-cursor-pointer u-list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
+                        <div class="c-card c-card--tight c-card--muted u-mt-sm">
+                          <%= form_with model: [:admin, track], local: true, class: "u-stack u-stack--md" do |form| %>
+                            <div class="u-grid u-grid--2">
+                              <div class="c-field"><%= form.label :name, "Name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
+                              <div class="c-field"><%= form.label :key, "Key", class: "c-label" %><%= form.text_field :key, class: "c-input" %></div>
+                              <div class="c-field"><%= form.label :position, "Position", class: "c-label" %><%= form.number_field :position, min: 0, step: 1, class: "c-input" %></div>
+                              <label class="c-choice-label"><%= form.check_box :active, class: "c-choice" %><span>Active</span></label>
                             </div>
-                            <div class="flex flex-wrap gap-2">
+                            <div class="u-actions u-actions--start">
                               <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
-                              <%= button_to "Delete",
-                                            admin_program_semester_path(semester),
-                                            method: :delete,
-                                            data: { turbo_confirm: "Delete #{semester.name}?" },
-                                            class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
                           <% end %>
+                          <div class="u-actions u-actions--start u-mt-sm">
+                            <%= button_to "Delete", admin_program_track_path(track), method: :delete, data: { turbo_confirm: "Delete #{track.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                          </div>
                         </div>
                       </details>
                     </div>
-                  </div>
-                </li>
-              <% end %>
-            </ul>
-          <% end %>
-        </div>
+                  </li>
+                <% end %>
+              </ul>
+            <% end %>
+          </div>
 
-        <div class="c-card c-card--tight c-card--muted">
-          <h3 class="text-base font-semibold text-slate-900">Add semester</h3>
-          <p class="mb-4 text-sm text-slate-600">Name semesters consistently (e.g., "Fall 2026").</p>
-          <%= form_with model: [:admin, @new_program_semester], url: admin_program_semesters_path, local: true, class: "space-y-4" do |form| %>
-            <div class="space-y-1">
-              <%= form.label :name, "Semester name", class: "text-sm font-medium text-slate-700" %>
-              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm", placeholder: "Fall 2026" %>
-            </div>
-            <div class="flex items-start gap-2 text-sm text-slate-600">
-              <%= form.check_box :current, class: "mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" %>
-              <label for="program_semester_current" class="space-y-1">
-                <span class="font-medium text-slate-700">Set as current semester</span>
-                <p>Existing current semester will be turned off automatically.</p>
+          <div class="c-card c-card--tight c-card--muted">
+            <h3 class="c-panel-title">Add Track</h3>
+            <p class="c-panel-subtitle">Name tracks consistently, for example Residential.</p>
+            <%= form_with model: [:admin, @new_program_track], url: admin_program_tracks_path, local: true, class: "u-stack u-stack--md" do |form| %>
+              <div class="c-field"><%= form.label :name, "Track name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input", placeholder: "Residential" %></div>
+              <%= form.submit "Save track", class: button_classes(:primary) %>
+            <% end %>
+          </div>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @tab == "majors" %>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+          <div>
+            <h2 class="c-panel-title">Majors</h2>
+            <p class="c-panel-subtitle">View and manage majors available for student profiles.</p>
+          </div>
+        </header>
+
+        <div class="c-two-column-layout">
+          <div class="u-stack u-stack--md">
+            <% if @majors.blank? %>
+              <div class="c-empty-state"><p class="c-empty-state__body">No majors yet. Use the form to create your first entry.</p></div>
+            <% else %>
+              <ul class="c-compact-list">
+                <% @majors.each do |major| %>
+                  <li class="c-card c-card--tight">
+                    <div class="u-responsive-split u-items-start">
+                      <div class="u-stack u-stack--sm">
+                        <div class="u-actions u-actions--start u-gap-xs">
+                          <p class="c-table__title"><%= major.name %></p>
+                          <span class="c-status-badge c-status-badge--muted">Major</span>
+                        </div>
+                        <span class="c-pill c-pill--muted">Student profile option</span>
+                      </div>
+
+                      <details>
+                        <summary class="u-cursor-pointer u-list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
+                        <div class="c-card c-card--tight c-card--muted u-mt-sm">
+                          <%= form_with model: [:admin, major], local: true, class: "u-stack u-stack--md" do |form| %>
+                            <div class="c-field"><%= form.label :name, "Name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
+                            <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
+                          <% end %>
+                          <div class="u-actions u-actions--start u-mt-sm">
+                            <%= button_to "Delete", admin_major_path(major), method: :delete, data: { turbo_confirm: "Delete #{major.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  </li>
+                <% end %>
+              </ul>
+            <% end %>
+          </div>
+
+          <div class="c-card c-card--tight c-card--muted">
+            <h3 class="c-panel-title">Add Major</h3>
+            <p class="c-panel-subtitle">Example: Health Administration.</p>
+            <%= form_with model: [:admin, @new_major], url: admin_majors_path, local: true, class: "u-stack u-stack--md" do |form| %>
+              <div class="c-field"><%= form.label :name, "Major / Program name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
+              <%= form.submit "Save major", class: button_classes(:primary) %>
+            <% end %>
+          </div>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @tab == "years" %>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+          <div>
+            <h2 class="c-panel-title">Cohort Years</h2>
+            <p class="c-panel-subtitle">Manage the Class of YYYY options used for cohort assignment and reporting.</p>
+          </div>
+        </header>
+
+        <div class="c-two-column-layout">
+          <div class="u-stack u-stack--md">
+            <% if @program_years.blank? %>
+              <div class="c-empty-state"><p class="c-empty-state__body">No program years yet. Use the form to create your first entry.</p></div>
+            <% else %>
+              <ul class="c-compact-list">
+                <% @program_years.each do |year| %>
+                  <li class="c-card c-card--tight">
+                    <div class="u-responsive-split u-items-start">
+                      <div class="u-stack u-stack--sm">
+                        <div class="u-actions u-actions--start u-gap-xs">
+                          <p class="c-table__title">Class of <%= year.value %></p>
+                          <span class="c-status-badge <%= year.active? ? 'c-status-badge--success' : 'c-status-badge--muted' %>"><%= year.active? ? "Active" : "Inactive" %></span>
+                        </div>
+                        <div class="u-actions u-actions--start u-gap-xs">
+                          <span class="c-pill c-pill--muted">Position <%= year.position %></span>
+                          <span class="c-pill c-pill--muted">Cohort year</span>
+                        </div>
+                      </div>
+
+                      <details>
+                        <summary class="u-cursor-pointer u-list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
+                        <div class="c-card c-card--tight c-card--muted u-mt-sm">
+                          <%= form_with model: [:admin, year], local: true, class: "u-stack u-stack--md" do |form| %>
+                            <div class="u-grid u-grid--2">
+                              <div class="c-field"><%= form.label :value, "Class of year", class: "c-label" %><%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "c-input" %></div>
+                              <div class="c-field"><%= form.label :position, "Position", class: "c-label" %><%= form.number_field :position, min: 0, step: 1, class: "c-input" %></div>
+                              <label class="c-choice-label"><%= form.check_box :active, class: "c-choice" %><span>Active</span></label>
+                            </div>
+                            <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
+                          <% end %>
+                          <div class="u-actions u-actions--start u-mt-sm">
+                            <%= button_to "Delete", admin_program_year_path(year), method: :delete, data: { turbo_confirm: "Delete Class of #{year.value}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  </li>
+                <% end %>
+              </ul>
+            <% end %>
+          </div>
+
+          <div class="c-card c-card--tight c-card--muted">
+            <h3 class="c-panel-title">Add Cohort Year</h3>
+            <p class="c-panel-subtitle">Example: 2027.</p>
+            <%= form_with model: [:admin, @new_program_year], url: admin_program_years_path, local: true, class: "u-stack u-stack--md" do |form| %>
+              <div class="c-field"><%= form.label :value, "Class of year", class: "c-label" %><%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "c-input" %></div>
+              <%= form.submit "Save cohort", class: button_classes(:primary) %>
+            <% end %>
+          </div>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @tab == "semesters" %>
+      <section class="c-card c-card--spacious u-stack u-stack--md">
+        <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+          <div>
+            <h2 class="c-panel-title">Program Semesters</h2>
+            <p class="c-panel-subtitle">View and manage semesters used for survey assignment windows.</p>
+          </div>
+          <% if @current_program_semester.present? %>
+            <span class="c-status-badge c-status-badge--success">Current: <%= @current_program_semester.name %></span>
+          <% else %>
+            <span class="c-status-pill c-status-pill--warning">No current semester set</span>
+          <% end %>
+        </header>
+
+        <div class="c-two-column-layout">
+          <div class="u-stack u-stack--md">
+            <% if @program_semesters.blank? %>
+              <div class="c-empty-state"><p class="c-empty-state__body">No semesters yet. Use the form to create your first entry.</p></div>
+            <% else %>
+              <ul class="c-compact-list">
+                <% @program_semesters.each do |semester| %>
+                  <li class="c-card c-card--tight">
+                    <div class="u-responsive-split u-items-start">
+                      <div class="u-stack u-stack--sm">
+                        <div class="u-actions u-actions--start u-gap-xs">
+                          <p class="c-table__title"><%= semester.name %></p>
+                          <span class="c-status-badge <%= semester.current? ? 'c-status-badge--success' : 'c-status-badge--muted' %>"><%= semester.current? ? "Current" : "Available" %></span>
+                        </div>
+                        <span class="c-pill c-pill--muted">Added <%= time_ago_in_words(semester.created_at) %> ago</span>
+                      </div>
+
+                      <div class="u-actions">
+                        <% unless semester.current? %>
+                          <%= button_to "Make current", make_current_admin_program_semester_path(semester), method: :patch, class: button_classes(:subtle, extra_classes: "btn-sm") %>
+                        <% end %>
+
+                        <details>
+                          <summary class="u-cursor-pointer u-list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
+                          <div class="c-card c-card--tight c-card--muted u-mt-sm">
+                            <%= form_with model: [:admin, semester], local: true, class: "u-stack u-stack--md" do |form| %>
+                              <div class="c-field"><%= form.label :name, "Semester name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
+                              <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
+                            <% end %>
+                            <div class="u-actions u-actions--start u-mt-sm">
+                              <%= button_to "Delete", admin_program_semester_path(semester), method: :delete, data: { turbo_confirm: "Delete #{semester.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                            </div>
+                          </div>
+                        </details>
+                      </div>
+                    </div>
+                  </li>
+                <% end %>
+              </ul>
+            <% end %>
+          </div>
+
+          <div class="c-card c-card--tight c-card--muted">
+            <h3 class="c-panel-title">Add Semester</h3>
+            <p class="c-panel-subtitle">Name semesters consistently, for example Fall 2026.</p>
+            <%= form_with model: [:admin, @new_program_semester], url: admin_program_semesters_path, local: true, class: "u-stack u-stack--md" do |form| %>
+              <div class="c-field"><%= form.label :name, "Semester name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input", placeholder: "Fall 2026" %></div>
+              <label class="c-choice-label c-choice-label--top">
+                <%= form.check_box :current, class: "c-choice" %>
+                <span>
+                  <span class="c-table__title">Set as current semester</span>
+                  <span class="c-help">Existing current semester will be turned off automatically.</span>
+                </span>
               </label>
-            </div>
-            <%= form.submit "Save semester", class: button_classes(:primary) %>
-          <% end %>
+              <%= form.submit "Save semester", class: button_classes(:primary) %>
+            <% end %>
+          </div>
         </div>
-      </div>
-    </section>
-  <% end %>
+      </section>
+    <% end %>
 
-  <% if @tab == "targets" %>
-    <%= render "target_levels_tab" %>
-  <% end %>
+    <% if @tab == "targets" %>
+      <%= render "target_levels_tab" %>
+    <% end %>
   </div>
 </main>

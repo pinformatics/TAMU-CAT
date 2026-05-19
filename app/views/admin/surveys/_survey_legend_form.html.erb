@@ -5,20 +5,18 @@
 
 <% empty_preview = capture do %>
   <div class="c-rich-text">
-    <p class="text-slate-400">Legend preview will appear here.</p>
+    <p class="c-muted-meta">Legend preview will appear here.</p>
   </div>
 <% end %>
 
-<section class="c-card space-y-6"
+<section class="c-card u-stack u-stack--lg"
          data-controller="markdown-editor">
-  <header class="space-y-1">
-    <h2 class="text-lg font-semibold text-slate-900">Rating scale legend</h2>
-    <p class="text-sm text-slate-600">Edit the long-form legend content and preview how it will appear in the survey.</p>
+  <header class="u-stack u-stack--sm">
+    <h2 class="c-panel-title">Rating Scale Legend</h2>
+    <p class="c-panel-subtitle">Edit the long-form legend content and preview how it will appear in the survey.</p>
   </header>
 
-  <div class="u-w-full">
-    <div class="u-w-full">
-      <div class="c-card c-card--tight space-y-5 border border-slate-200">
+  <div class="c-card c-card--tight u-stack u-stack--md">
       <%= form.fields_for :legend, (survey.legend || survey.build_legend(title: "", body: "")) do |legend_fields| %>
         <div class="c-field">
           <%= legend_fields.label :title, "Legend title", class: "c-label" %>
@@ -34,7 +32,7 @@
               <span class="c-markdown-preview__badge">Markdown supported</span>
             </div>
             <%= legend_fields.text_area :body,
-                                         class: "#{input_classes} min-h-[500px] font-mono leading-6",
+                                         class: "#{input_classes} c-input--tall c-input--monospace",
                                          id: textarea_dom_id,
                                          rows: 18,
                                          placeholder: "Add the full rating scale text shown to students." %>
@@ -51,8 +49,6 @@
           </div>
         </div>
       <% end %>
-      </div>
-    </div>
   </div>
 </section>
 

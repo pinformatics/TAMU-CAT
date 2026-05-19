@@ -1,20 +1,14 @@
 <main class="c-main c-main--dashboard">
-  <div class="c-toolbar">
-    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
-      <div class="u-shrink-0">
+  <div class="c-page">
+    <section class="u-stack u-stack--lg">
+      <header class="c-card c-card--brand c-page-header">
+        <div>
+          <p class="c-eyebrow">Program setup</p>
+          <h1 class="c-page-title c-page-title--brand">Target Levels</h1>
+          <p class="c-page-subtitle">Set program target levels per competency, semester, track, and class.</p>
+        </div>
         <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
-      </div>
-    </div>
-  </div>
-
-  <section class="c-card u-stack u-stack--xl">
-    <header class="c-page-header">
-      <div>
-        <p class="c-eyebrow">Program setup</p>
-        <h1 class="c-page-title c-page-title--brand">Target Levels</h1>
-        <p class="c-page-subtitle">Set program target levels per competency, semester, track, and class.</p>
-      </div>
-    </header>
+      </header>
 
     <% if @post_save_warning.present? %>
       <div class="c-callout c-callout--warning" role="alert">
@@ -173,5 +167,6 @@
         <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
       </div>
     <% end %>
-  </section>
+    </section>
+  </div>
 </main>

@@ -87,6 +87,8 @@ const FALLBACK_EXPORT_URLS = {
   excel: "/reports/export_excel"
 }
 
+const FERPA_EXPORT_CONFIRMATION = "FERPA reminder: this export may include student-level education records. Download only when you have a legitimate educational interest and store/share it securely. Continue?"
+
 const EMPTY_OPTIONS = Object.freeze({
   tracks: [],
   semesters: [],
@@ -1258,6 +1260,8 @@ const ReportsApp = ({ exportUrls = {} }) => {
   }, [ loadData ])
 
   const handleExport = useCallback((format, sectionKey) => {
+    if (!window.confirm(FERPA_EXPORT_CONFIRMATION)) return
+
     if (format === "pdf") {
       const base = resolvedExportUrls.pdf
       if (!base) return
