@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document is the quick-start handoff for the next engineer or admin owner of the MHA Survey Portal.
+This document is the quick-start handoff for the next engineer or admin owner of TAMU Competency Assessment Tool.
 
 The app is in a stable place for day-to-day use. The most important areas to understand first are:
 

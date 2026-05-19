@@ -2,7 +2,7 @@
 <html lang="en" data-text-scale="<%= (user_signed_in? ? (current_user.text_scale_percent || 100) : 100) %>" style="font-size: <%= ((user_signed_in? ? (current_user.text_scale_percent || 100) : 100).to_f * 16.0 / 100.0).round(2) %>px;">
   <head>
     
-    <title><%= content_for(:title) || "MHA Survey Portal" %></title>
+    <title><%= content_for(:title) || "TAMU Competency Assessment Tool" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -73,7 +73,7 @@
         </header>
       <% end %>
 
-      <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <main class="flex-1 px-2 py-4 sm:px-3 lg:px-4">
         <div class="c-layout-shell">
           <% if flash.any? %>
             <div class="space-y-3">

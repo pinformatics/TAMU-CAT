@@ -2,7 +2,7 @@
 <html lang="en" data-text-scale="<%= (user_signed_in? ? (current_user.text_scale_percent || 100) : 100) %>" style="font-size: <%= ((user_signed_in? ? (current_user.text_scale_percent || 100) : 100).to_f * 16.0 / 100.0).round(2) %>px;">
   <head>
   <!-- allow Google Translate to work on this page -->
-    <title><%= content_for(:title) || "MHA Program Portal" %></title>
+    <title><%= content_for(:title) || "TAMU Competency Assessment Tool" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -57,7 +57,7 @@
           <%= yield :header %>
         </header>
       <% else %>
-        <div class="u-w-full px-4 pt-4">
+        <div class="u-w-full px-2 pt-4 sm:px-3 lg:px-4">
           <div class="c-layout-shell">
             <div class="flex items-center justify-end">
               <%= render "shared/translate_toggle" %>
@@ -67,7 +67,7 @@
       <% end %>
 
       <% if flash.any? %>
-        <div class="u-w-full px-4 pt-6">
+        <div class="u-w-full px-2 pt-6 sm:px-3 lg:px-4">
           <div class="mx-auto u-w-full space-y-3">
             <% flash.each do |key, value| %>
               <% messages = Array(value).map(&:to_s) %>
@@ -84,7 +84,7 @@
         </div>
       <% end %>
 
-      <main class="flex flex-1 flex-col items-center justify-center gap-12 px-4 py-16 md:gap-16">
+      <main class="flex flex-1 flex-col items-center justify-center gap-12 px-2 py-14 sm:px-3 lg:px-4 md:gap-16">
         <%= yield %>
       </main>
     </div>

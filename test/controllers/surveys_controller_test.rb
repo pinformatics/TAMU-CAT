@@ -336,6 +336,63 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     refute_match(/#{Regexp.escape(competency_title)}.*End of Program Target Level: 1\/5/m, response.body)
   end
 
+  test "show displays course competency context only when survey setting is enabled" do
+    sign_in @student_user
+
+    @survey.update!(show_course_competencies_with_survey: false)
+    @survey.program_semester.course_grade_release_date&.destroy
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    category = @survey.categories.first || @survey.categories.create!(name: "Test Category", description: "")
+    question = category.questions.create!(
+      question_text: competency_title,
+      question_order: 1001,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5].to_json
+    )
+
+    batch = GradeImportBatch.create!(
+      uploaded_by: users(:admin),
+      program_semester: @survey.program_semester,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "survey-course-context.csv",
+      file_checksum: "survey-course-context-checksum",
+      status: "processed"
+    )
+    batch.grade_competency_ratings.create!(
+      student: @student,
+      competency_title: question.question_text,
+      aggregated_level: 4,
+      aggregation_rule: "max",
+      evidence_count: 1
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Survey Course Context",
+      course_code: "PHPM-701-001",
+      competency_title: question.question_text,
+      raw_grade: 94,
+      mapped_level: 4,
+      course_target_level: 5,
+      row_number: 2,
+      source_key: "survey-course-context-source",
+      import_fingerprint: "survey-course-context-fingerprint"
+    )
+
+    get survey_path(@survey)
+    assert_response :success
+    refute_includes response.body, "Course level 4"
+
+    @survey.update!(show_course_competencies_with_survey: true)
+    get survey_path(@survey)
+    assert_response :success
+    assert_includes response.body, "Course level 4"
+    assert_includes response.body, "Course target 5"
+  end
+
   # Authentication Tests
   test "index requires authentication" do
     get surveys_path

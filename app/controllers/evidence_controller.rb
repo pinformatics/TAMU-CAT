@@ -39,7 +39,7 @@ class EvidenceController < ApplicationController
     http.read_timeout = 5
 
     head = Net::HTTP::Head.new(uri.request_uri)
-    head["User-Agent"] = "HealthAppLinkChecker/1.0"
+    head["User-Agent"] = "TamuCatLinkChecker/1.0"
     res = http.request(head)
 
     # Follow redirects
@@ -50,7 +50,7 @@ class EvidenceController < ApplicationController
     # Some endpoints disallow HEAD; fall back to a minimal GET
     if res.code.to_i == 405 || res.is_a?(Net::HTTPMethodNotAllowed)
       get = Net::HTTP::Get.new(uri.request_uri)
-      get["User-Agent"] = "HealthAppLinkChecker/1.0"
+      get["User-Agent"] = "TamuCatLinkChecker/1.0"
       get["Range"] = "bytes=0-0"
       res = http.request(get)
     end

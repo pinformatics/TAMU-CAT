@@ -1,6 +1,6 @@
 # Image Assets Directory
 
-This directory contains all the images used in the MHA Survey Application.
+This directory contains all the images used in TAMU Competency Assessment Tool.
 
 ## Required Images for Student Dashboard:
 

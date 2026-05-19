@@ -3,7 +3,7 @@ require "csv"
 class Admin::GradeImportBatchesController < Admin::BaseController
   IMPORT_EXTENSIONS = GradeImports::FileUploadRouter::SUPPORTED_EXTENSIONS
 
-  before_action :set_batch, only: %i[show commit rollback recommit semester destroy export_ratings error_report correction_file]
+  before_action :set_batch, only: %i[show approve commit rollback recommit semester destroy export_ratings error_report correction_file]
 
   def index
     @batches = GradeImportBatch.includes(:uploaded_by, :grade_import_files).order(created_at: :desc).limit(100)
@@ -64,7 +64,28 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @validation_summary = validation_summary_for(@files)
   end
 
+  def approve
+    unless @batch.needs_admin_approval?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Only previews with failed or pending rows need admin approval." and return
+    end
+
+    approved_summary = @batch.summary.merge(
+      "admin_approved_at" => Time.current.iso8601,
+      "admin_approved_by" => current_user.email
+    )
+
+    @batch.update!(summary: approved_summary)
+
+    redirect_to admin_grade_import_batch_path(@batch),
+                notice: "Preview approved. It can now be committed."
+  end
+
   def commit
+    if @batch.needs_admin_approval? && !@batch.admin_approved?
+      redirect_to admin_grade_import_batch_path(@batch),
+                  alert: "Review and approve this preview before committing because it has failed or pending rows." and return
+    end
+
     unless @batch.committable_dry_run?
       redirect_to admin_grade_import_batch_path(@batch), alert: "Only completed previews can be committed." and return
     end

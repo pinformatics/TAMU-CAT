@@ -203,7 +203,7 @@
                     </span>
 
                     <% effective_target_level = effective_competency_target_level(question: question, survey: survey, student: sr&.student) %>
-                    <% course_context = course_competency_context_for(question: question, survey: survey, student: sr&.student, viewer: current_user) %>
+                    <% course_context = survey&.show_course_competencies_with_survey? ? course_competency_context_for(question: question, survey: survey, student: sr&.student, viewer: current_user) : nil %>
                     <% if question.question_type_dropdown? && effective_target_level.present? %>
                       <span class="c-question-card__meta">
                         <span class="c-level-badge">End of Program Target Level: <%= effective_target_level %>/5</span>
@@ -211,7 +211,7 @@
                     <% end %>
                   </label>
 
-                  <%= render_course_competency_context(course_context) %>
+                  <%= render_course_competency_context(course_context) if survey&.show_course_competencies_with_survey? %>
 
                   <% case question.question_type %>
                   <% when "integer" %>
@@ -421,34 +421,37 @@
                     <% existing_q = (feedback_question_id && passed_existing_feedbacks) ? passed_existing_feedbacks[feedback_question_id] : nil %>
                     <% question_prefix = section&.mha_competency? ? "#" : "Q" %>
                     <% if supports_feedback %>
-                    <% missing_score = missing_feedback_question_ids.include?(feedback_question_id.to_i) %>
+                    <% advisor_numeric_enabled = survey&.advisor_numeric_feedback_enabled? %>
+                    <% missing_score = advisor_numeric_enabled && missing_feedback_question_ids.include?(feedback_question_id.to_i) %>
                     <article class="c-question-card c-card--advisor u-stack u-stack--md">
                     <div class="u-actions u-actions--split">
                       <h5 class="c-h3">Advisor feedback — <%= question_prefix %><%= question_number %></h5>
-                      <p class="c-help">Score 0-5, feedback optional</p>
+                      <p class="c-help"><%= advisor_numeric_enabled ? "Score 0-5, feedback optional" : "Written feedback optional; numeric ratings are retired for this survey" %></p>
                     </div>
 
                       <div class="u-grid u-grid--stats">
-                      <div class="c-field">
-                        <label class="c-label" for="ratings_<%= feedback_question_id %>_average_score">Score (0-5)</label>
-                        <%= render "shared/proficiency_select",
-                                   id: "ratings_#{feedback_question_id}_average_score",
-                                   name: "ratings[#{feedback_question_id}][average_score]",
-                                   question: feedback_question,
-                                   selected: normalize_proficiency_value(existing_q&.average_score),
-                                   data: {
-                                     advisor_feedback_score: true,
-                                     required_advisor_rating: true,
-                                     feedback_question_id: feedback_question_id,
-                                     program_target_level: effective_competency_target_level(question: feedback_question, survey: survey, student: sr&.student)
-                                   },
-                                   class_name: "c-select u-w-full u-max-w-sm #{missing_score ? 'c-question-card--error' : ''}" %>
-                        <% if missing_score %>
-                          <p class="c-help u-danger">Advisor Rating is required before submission.</p>
-                        <% end %>
-                      </div>
+                      <% if advisor_numeric_enabled %>
+                        <div class="c-field">
+                          <label class="c-label" for="ratings_<%= feedback_question_id %>_average_score">Score (0-5)</label>
+                          <%= render "shared/proficiency_select",
+                                     id: "ratings_#{feedback_question_id}_average_score",
+                                     name: "ratings[#{feedback_question_id}][average_score]",
+                                     question: feedback_question,
+                                     selected: normalize_proficiency_value(existing_q&.average_score),
+                                     data: {
+                                       advisor_feedback_score: true,
+                                       required_advisor_rating: true,
+                                       feedback_question_id: feedback_question_id,
+                                       program_target_level: effective_competency_target_level(question: feedback_question, survey: survey, student: sr&.student)
+                                     },
+                                     class_name: "c-select u-w-full u-max-w-sm #{missing_score ? 'c-question-card--error' : ''}" %>
+                          <% if missing_score %>
+                            <p class="c-help u-danger">Advisor Rating is required before submission.</p>
+                          <% end %>
+                        </div>
+                      <% end %>
 
-                      <div class="c-field" data-controller="character-counter">
+                      <div class="c-field <%= advisor_numeric_enabled ? '' : 'u-col-span-all' %>" data-controller="character-counter">
                         <label class="c-label" for="ratings_<%= feedback_question_id %>_comments">Feedback (optional)</label>
                         <textarea id="ratings_<%= feedback_question_id %>_comments"
                                   name="ratings[<%= feedback_question_id %>][comments]"

@@ -20,7 +20,7 @@
 
   <header class="c-document-hero">
     <div class="u-stack u-stack--md">
-      <p class="c-eyebrow">MHA survey</p>
+      <p class="c-eyebrow">TAMU Competency Assessment Tool survey</p>
       <h1 class="c-h1"><%= @survey.title %></h1>
       <div class="u-actions u-actions--start">
         <span class="c-pill c-pill--muted">Semester: <%= @survey.semester.presence || "TBD" %></span>
@@ -160,7 +160,7 @@
               </span>
 
               <% effective_target_level = effective_competency_target_level(question: question, survey: @survey, student: current_student) %>
-              <% course_context = course_competency_context_for(question: question, survey: @survey, student: current_student, viewer: current_user) %>
+              <% course_context = @survey.show_course_competencies_with_survey? ? course_competency_context_for(question: question, survey: @survey, student: current_student, viewer: current_user) : nil %>
               <% if question.question_type_dropdown? && effective_target_level.present? %>
                 <span class="c-question-card__meta">
                   <span class="c-level-badge">End of Program Target Level: <%= effective_target_level %>/5</span>
@@ -168,7 +168,7 @@
               <% end %>
             </label>
 
-            <%= render_course_competency_context(course_context) %>
+            <%= render_course_competency_context(course_context) if @survey.show_course_competencies_with_survey? %>
 
             <% case question.question_type %>
             <% when "short_answer" %>

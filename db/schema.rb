@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_04_28_101251) do
+ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -460,6 +460,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_04_28_101251) do
     t.bigint "program_semester_id", null: false
     t.datetime "available_from"
     t.datetime "available_until"
+    t.boolean "show_course_competencies_with_survey", default: false, null: false
+    t.boolean "advisor_numeric_feedback_enabled", default: false, null: false
     t.index "lower((title)::text), program_semester_id", name: "index_surveys_on_lower_title_and_program_semester", unique: true
     t.index ["available_from"], name: "index_surveys_on_available_from"
     t.index ["available_until"], name: "index_surveys_on_available_until"

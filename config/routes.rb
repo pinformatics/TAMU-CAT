@@ -77,6 +77,7 @@ Rails.application.routes.draw do
     end
     resources :grade_import_batches, only: %i[index new create show destroy] do
       member do
+        post :approve
         post :commit
         post :rollback
         post :recommit

@@ -23,13 +23,15 @@
     <%= form.collection_select :category_id, Category.order(:name), :id, :name, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
-  <div>
-    <%= form.label :average_score, "Proficiency", style: "display: block" %>
-    <%= render "shared/proficiency_select",
-               id: "#{form.object_name}_average_score",
-               name: "#{form.object_name}[average_score]",
-               selected: normalize_proficiency_value(feedback.average_score) %>
-  </div>
+  <% if feedback.survey&.advisor_numeric_feedback_enabled? %>
+    <div>
+      <%= form.label :average_score, "Proficiency", style: "display: block" %>
+      <%= render "shared/proficiency_select",
+                 id: "#{form.object_name}_average_score",
+                 name: "#{form.object_name}[average_score]",
+                 selected: normalize_proficiency_value(feedback.average_score) %>
+    </div>
+  <% end %>
 
   <div data-controller="character-counter">
     <%= form.label :comments, "Feedback (optional)", style: "display: block" %>

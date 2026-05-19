@@ -58,7 +58,7 @@ class FeedbacksController < ApplicationController
         memo[cat_id] = allowed
       end
 
-      if submit_intent?
+      if submit_intent? && advisor_numeric_feedback_enabled?
         @missing_rating_question_ids = missing_required_rating_question_ids(ratings)
         if @missing_rating_question_ids.any?
           @feedback = Feedback.new
@@ -481,6 +481,8 @@ class FeedbacksController < ApplicationController
   end
 
   def required_feedback_question_ids
+    return [] unless advisor_numeric_feedback_enabled?
+
     survey_questions = @survey.questions.includes(category: :section)
     survey_questions
       .select do |question|
@@ -492,6 +494,8 @@ class FeedbacksController < ApplicationController
   end
 
   def missing_required_rating_question_ids(ratings_hash)
+    return [] unless advisor_numeric_feedback_enabled?
+
     provided_rating_ids = ratings_hash.each_with_object([]) do |(question_id, attributes), memo|
       score = attributes.to_h["average_score"].to_s
       memo << question_id.to_i if score.present?
@@ -597,6 +601,10 @@ class FeedbacksController < ApplicationController
           question.category&.section&.mha_competency? &&
           (!question.respond_to?(:has_feedback?) || question.has_feedback?)
       end
+  end
+
+  def advisor_numeric_feedback_enabled?
+    @survey&.advisor_numeric_feedback_enabled?
   end
 
   def normalize_feedback_prefill_score(value)

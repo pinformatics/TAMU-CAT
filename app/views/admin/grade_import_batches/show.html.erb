@@ -1,6 +1,7 @@
 <% button_help = {
   back_to_batches: "Return to the grade import batch history without changing this batch.",
   commit_preview: "Publish this preview so its imported course competency ratings appear in student, admin, and report views.",
+  approve_preview: "Confirm an admin reviewed the failed or pending rows and allow this preview to be committed.",
   recommit_batch: "Restore this rolled-back batch so its preserved competency data becomes visible again.",
   export_csv: "Download the derived competency ratings created from this batch.",
   correction_file: "Download failed and pending rows in a correction-friendly CSV.",
@@ -41,6 +42,15 @@
                   title: button_help[:commit_preview],
                   aria: { label: button_help[:commit_preview] },
                   form: { data: { turbo_confirm: "Publish this preview so its course competency ratings appear in the app?" } } %>
+          <% end %>
+          <% if @batch.needs_admin_approval? && !@batch.admin_approved? %>
+            <%= button_to "Approve preview",
+                  approve_admin_grade_import_batch_path(@batch),
+                  method: :post,
+                  class: button_classes(:primary),
+                  title: button_help[:approve_preview],
+                  aria: { label: button_help[:approve_preview] },
+                  form: { data: { turbo_confirm: "Confirm that you reviewed the failed and pending rows for this preview?" } } %>
           <% end %>
           <% if @batch.recommittable_rollback? %>
             <%= button_to "Recommit batch",
@@ -121,6 +131,21 @@
           and <%= pluralize(@validation_summary[:duplicate_file_uploads], "duplicate file upload warning") %>.
           Review the mapping preview and correction file before committing.
         </div>
+      <% end %>
+
+      <% if @batch.needs_admin_approval? %>
+        <% if @batch.admin_approved? %>
+          <div class="c-callout c-callout--info">
+            <strong>Admin approved:</strong>
+            <%= @batch.summary["admin_approved_by"].presence || "Admin" %>
+            approved this preview at <%= @batch.summary["admin_approved_at"] %>. It can now be committed.
+          </div>
+        <% else %>
+          <div class="c-callout c-callout--warning">
+            <strong>Admin approval required:</strong>
+            This preview has failed or pending rows. Review the diagnostics and correction file, then approve it before committing.
+          </div>
+        <% end %>
       <% end %>
 
       <% if @duplicate_upload_warnings.positive? %>

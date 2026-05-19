@@ -1,11 +1,13 @@
+name: tamu-cat
+
 services:
   db:
     image: postgres:17
-    container_name: db
+    container_name: tamu-cat-db
     environment:
       POSTGRES_USER: dev_user
       POSTGRES_PASSWORD: dev_pass
-      POSTGRES_DB: health_development
+      POSTGRES_DB: tamu_cat_development
     ports:
       - "5433:5432" 
     volumes:
@@ -18,7 +20,7 @@ services:
       args:
         RUBY_VERSION: 3.4.6
       target: dev
-    container_name: web
+    container_name: tamu-cat-web
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -42,7 +44,7 @@ services:
       args:
         RUBY_VERSION: 3.4.6
       target: dev
-    container_name: css
+    container_name: tamu-cat-css
     environment:
       PGHOST: db
       PGPORT: 5432

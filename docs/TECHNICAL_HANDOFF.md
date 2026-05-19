@@ -2,7 +2,7 @@
 
 Generated: 2026-05-07
 
-This document summarizes the current operating state of the MHA Survey Portal for the next technical lead, maintainer, or production administrator. It is based on the repository code, local documentation, and deployment/configuration files currently present in the project.
+This document summarizes the current operating state of TAMU Competency Assessment Tool for the next technical lead, maintainer, or production administrator. It is based on the repository code, local documentation, and deployment/configuration files currently present in the project.
 
 ## Current App Status
 
@@ -144,7 +144,7 @@ The production `Dockerfile` builds a Rails image with Ruby 3.4.6, PostgreSQL cli
 1. Build the image:
 
    ```bash
-   docker build -t health_app .
+   docker build -t tamu_cat .
    ```
 
 2. Run with required environment variables:
@@ -155,7 +155,7 @@ The production `Dockerfile` builds a Rails image with Ruby 3.4.6, PostgreSQL cli
      -e DATABASE_URL=<postgres-url> \
      -e GOOGLE_OAUTH_CLIENT_ID=<google-client-id> \
      -e GOOGLE_OAUTH_CLIENT_SECRET=<google-client-secret> \
-     --name health_app health_app
+     --name tamu_cat tamu_cat
    ```
 
 3. Confirm the container boots and `/up` responds.

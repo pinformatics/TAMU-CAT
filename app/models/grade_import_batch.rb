@@ -38,8 +38,22 @@ class GradeImportBatch < ApplicationRecord
     !dry_run? && !rolled_back? && (completed? || completed_with_errors?)
   end
 
+  def admin_approved?
+    summary["admin_approved_at"].present?
+  end
+
+  def needs_admin_approval?
+    return false unless dry_run? && !rolled_back? && (completed? || completed_with_errors?)
+    return true if completed_with_errors?
+
+    grade_import_pending_rows.exists? ||
+      grade_import_files.where("error_rows > 0 OR pending_rows > 0").exists? ||
+      grade_import_files.any? { |file| Array(file.parse_errors).any? }
+  end
+
   def committable_dry_run?
-    dry_run? && !rolled_back? && (completed? || completed_with_errors?)
+    dry_run? && !rolled_back? && (completed? || completed_with_errors?) &&
+      (!needs_admin_approval? || admin_approved?)
   end
 
   def recommittable_rollback?

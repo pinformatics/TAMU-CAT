@@ -29,6 +29,9 @@ class Survey < ApplicationRecord
   before_validation :assign_program_semester_from_semester_name
   after_update_commit :sync_inherited_assignment_deadlines!, if: :saved_change_to_available_until?
 
+  attribute :show_course_competencies_with_survey, :boolean, default: false
+  attribute :advisor_numeric_feedback_enabled, :boolean, default: false
+
   validates :title,
             presence: true,
             uniqueness: {

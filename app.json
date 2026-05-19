@@ -1,6 +1,6 @@
 {
-  "name": "Health Review App",
-  "description": "Temporary Heroku app for PR previews of the Health project.",
+  "name": "TAMU Competency Assessment Tool",
+  "description": "Temporary Heroku app for PR previews of TAMU Competency Assessment Tool.",
   "scripts": {
     "postdeploy": "bundle exec rails db:prepare db:seed"
   },

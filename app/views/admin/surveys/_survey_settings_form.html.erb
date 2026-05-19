@@ -71,6 +71,32 @@
       <%= form.label :description, "Summary", class: "c-label" %>
       <%= form.text_area :description, class: textarea_classes, placeholder: "Explain where this survey fits in the advising process." %>
     </div>
+
+    <div class="c-field u-col-span-all">
+      <div class="u-grid u-grid--2">
+        <div class="c-card c-card--tight c-card--muted u-shadow-none">
+          <label class="c-toggle u-cursor-pointer">
+            <%= form.check_box :show_course_competencies_with_survey, class: "c-toggle__input" %>
+            <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+            <span class="u-stack u-stack--xs">
+              <span class="c-toggle__label">Show course competencies in survey</span>
+              <span class="c-help">Displays released course-derived competency results and course targets beside matching competency survey questions.</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="c-card c-card--tight c-card--muted u-shadow-none">
+          <label class="c-toggle u-cursor-pointer">
+            <%= form.check_box :advisor_numeric_feedback_enabled, class: "c-toggle__input" %>
+            <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
+            <span class="u-stack u-stack--xs">
+              <span class="c-toggle__label">Enable advisor numeric ratings</span>
+              <span class="c-help">Legacy option. When off, advisors can still save written feedback and notes without score dropdowns.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 

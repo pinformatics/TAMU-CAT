@@ -496,6 +496,8 @@ class Admin::SurveysController < Admin::BaseController
       :available_from,
       :available_until,
       :is_active,
+      :show_course_competencies_with_survey,
+      :advisor_numeric_feedback_enabled,
       track_list: [],
       offerings_attributes: [
         :id,

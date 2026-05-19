@@ -1076,6 +1076,20 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_includes log.description, "Is active changed from"
   end
 
+  test "update persists competency display settings" do
+    patch admin_survey_path(@survey), params: {
+      survey: {
+        show_course_competencies_with_survey: "1",
+        advisor_numeric_feedback_enabled: "1"
+      }
+    }
+
+    assert_redirected_to admin_surveys_path
+    @survey.reload
+    assert @survey.show_course_competencies_with_survey?
+    assert @survey.advisor_numeric_feedback_enabled?
+  end
+
   test "update can add new category" do
     original_count = @survey.categories.count
 

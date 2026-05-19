@@ -34,6 +34,41 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal @admin.email, batch.summary["committed_by"]
   end
 
+  test "preview with failed or pending rows must be approved before commit" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed_with_errors",
+      summary: { "dry_run" => true }
+    )
+    batch.grade_import_files.create!(
+      file_name: "needs-approval.csv",
+      file_checksum: "checksum-needs-approval",
+      status: "processed",
+      imported_rows: 1,
+      pending_rows: 1,
+      error_rows: 1,
+      parse_errors: [ { "row" => 2, "message" => "Missing student" } ]
+    )
+
+    post commit_admin_grade_import_batch_path(batch)
+
+    assert_redirected_to admin_grade_import_batch_path(batch)
+    assert batch.reload.dry_run?
+    assert_match "approve", flash[:alert].to_s.downcase
+
+    post approve_admin_grade_import_batch_path(batch)
+
+    assert_redirected_to admin_grade_import_batch_path(batch)
+    assert batch.reload.admin_approved?
+    assert_equal @admin.email, batch.summary["admin_approved_by"]
+
+    post commit_admin_grade_import_batch_path(batch)
+
+    assert_redirected_to admin_grade_import_batch_path(batch)
+    assert batch.reload.reportable?
+    assert_equal @admin.email, batch.summary["committed_by"]
+  end
+
   test "rollback hides a committed batch and recommit restores it" do
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,

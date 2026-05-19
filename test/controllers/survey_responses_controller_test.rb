@@ -1067,6 +1067,7 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
 
     student = students(:student)
     survey = surveys(:fall_2025)
+    survey.update!(show_course_competencies_with_survey: true)
     competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
     category = survey.categories.first || survey.categories.create!(name: "Test Category", description: "")
     question = category.questions.create!(

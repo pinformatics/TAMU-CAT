@@ -1,4 +1,4 @@
-# MHA Survey Portal
+# TAMU Competency Assessment Tool
 
 Need deeper walkthroughs for environment variables, setup screenshots, or deployment runbooks? Jump into the [project wiki](https://github.com/rockey1006/MHA-Survey-Portal/wiki) for extended guides.
 
@@ -20,7 +20,7 @@ Need deeper walkthroughs for environment variables, setup screenshots, or deploy
 
 ## Project Title & Description
 
-**MHA Survey Portal** is a Ruby on Rails application that streamlines the Texas A&M Master of Health Administration (MHA) survey lifecycle. Students complete required assessments, advisors monitor cohorts, and administrators orchestrate the program—each via secure, role-aware dashboards with feedback loops and analytics.
+**TAMU Competency Assessment Tool** is a Ruby on Rails application that streamlines the Texas A&M Master of Health Administration (MHA) survey lifecycle. Students complete required assessments, advisors monitor cohorts, and administrators orchestrate the program—each via secure, role-aware dashboards with feedback loops and analytics.
 
 ## Requirements (Internal & External Components)
 
@@ -86,7 +86,7 @@ Use Docker if:
 bin/setup
 ```
 
-Runs bundle install, prepares the `health_development` database, executes migrations, and seeds demo data.
+Runs bundle install, prepares the `tamu_cat_development` database, executes migrations, and seeds demo data.
 
 Important:
 
@@ -174,7 +174,7 @@ export HEROKU_API_KEY="paste-key-here"
 Important:
 
 - production DB data is not modified
-- the local `health_development` database is dropped and recreated
+- the local `tamu_cat_development` database is dropped and recreated
 - use `-UseLatestBackup` / `--use-latest-backup` to skip capturing a fresh Heroku backup and download the latest existing backup
 - use `-SkipConfirm` / `--skip-confirm` only for trusted local automation
 

@@ -77,8 +77,8 @@
   --spacing-4xl: 40px;
   --spacing-5xl: 48px;
   --spacing-6xl: 60px;
-  --container-gutter: clamp(16px, 3vw, 32px);
-  --container-gutter-sm: clamp(12px, 2vw, 20px);
+  --container-gutter: clamp(10px, 1.4vw, 20px);
+  --container-gutter-sm: clamp(8px, 1vw, 14px);
   --container-padding-y: clamp(20px, 3vw, 32px);
   --container-padding-y-sm: clamp(14px, 2vw, 22px);
 
@@ -95,8 +95,8 @@
   --transition-normal: 0.2s ease;
   --transition-slow: 0.3s ease;
 
-  --container-max-width: 1400px;
-  --dashboard-container-max-width: 1900px;
+  --container-max-width: 1680px;
+  --dashboard-container-max-width: 2040px;
   --header-height: 60px;
   --sidebar-width: 250px;
 }

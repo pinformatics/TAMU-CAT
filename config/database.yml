@@ -10,40 +10,40 @@ default: &default
 development:
   primary:
     <<: *default
-    database: <%= ENV['DATABASE'] || "health_development" %>
+    database: <%= ENV['DATABASE'] || "tamu_cat_development" %>
   cache:
     <<: *default
-    database: <%= ENV['CACHE_DATABASE'] || "health_cache" %>
+    database: <%= ENV['CACHE_DATABASE'] || "tamu_cat_cache" %>
     migrations_paths: db/cache_migrate
     schema_dump: cache_schema.rb
   queue:
     <<: *default
-    database: <%= ENV['QUEUE_DATABASE'] || "health_queue" %>
+    database: <%= ENV['QUEUE_DATABASE'] || "tamu_cat_queue" %>
     migrations_paths: db/queue_migrate
     schema_dump: queue_schema.rb
   cable:
     <<: *default
-    database: <%= ENV['CABLE_DATABASE'] || "health_cable" %>
+    database: <%= ENV['CABLE_DATABASE'] || "tamu_cat_cable" %>
     migrations_paths: db/cable_migrate
     schema_dump: cable_schema.rb
 
 test:
   primary:
     <<: *default
-    database: <%= ENV['TEST_DATABASE'] || "health_test" %>
+    database: <%= ENV['TEST_DATABASE'] || "tamu_cat_test" %>
   cache:
     <<: *default
-    database: <%= ENV['CACHE_DATABASE'] || "health_cache" %>
+    database: <%= ENV['CACHE_DATABASE'] || "tamu_cat_cache" %>
     migrations_paths: db/cache_migrate
     schema_dump: cache_schema.rb
   queue:
     <<: *default
-    database: <%= ENV['QUEUE_DATABASE'] || "health_queue" %>
+    database: <%= ENV['QUEUE_DATABASE'] || "tamu_cat_queue" %>
     migrations_paths: db/queue_migrate
     schema_dump: queue_schema.rb
   cable:
     <<: *default
-    database: <%= ENV['CABLE_DATABASE'] || "health_cable" %>
+    database: <%= ENV['CABLE_DATABASE'] || "tamu_cat_cable" %>
     migrations_paths: db/cable_migrate
     schema_dump: cable_schema.rb
 
@@ -54,14 +54,14 @@ production:
     pool: <%= ENV.fetch("RAILS_MAX_THREADS", 5) %>
     <% else %>
     <<: *default
-    database: <%= ENV['DATABASE'] || "health_production" %>
+    database: <%= ENV['DATABASE'] || "tamu_cat_production" %>
     <% end %>
   cache:
     <% if ENV['DATABASE_URL'] && !ENV['DATABASE_URL'].empty? %>
     url: <%= ENV['DATABASE_URL'] %>
     <% else %>
     <<: *default
-    database: <%= ENV['CACHE_DATABASE'] || "health_cache" %>
+    database: <%= ENV['CACHE_DATABASE'] || "tamu_cat_cache" %>
     <% end %>
     migrations_paths: db/cache_migrate
     schema_dump: cache_schema.rb
@@ -70,7 +70,7 @@ production:
     url: <%= ENV['DATABASE_URL'] %>
     <% else %>
     <<: *default
-    database: <%= ENV['QUEUE_DATABASE'] || "health_queue" %>
+    database: <%= ENV['QUEUE_DATABASE'] || "tamu_cat_queue" %>
     <% end %>
     migrations_paths: db/queue_migrate
     schema_dump: queue_schema.rb
@@ -79,7 +79,7 @@ production:
     url: <%= ENV['DATABASE_URL'] %>
     <% else %>
     <<: *default
-    database: <%= ENV['CABLE_DATABASE'] || "health_cable" %>
+    database: <%= ENV['CABLE_DATABASE'] || "tamu_cat_cable" %>
     <% end %>
     migrations_paths: db/cable_migrate
     schema_dump: cable_schema.rb

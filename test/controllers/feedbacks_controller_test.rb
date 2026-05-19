@@ -31,6 +31,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     end
     @cat1, @cat2 = @survey.categories.order(:id).limit(2)
     @feedback = feedbacks(:advisor_feedback)
+    @survey.update!(advisor_numeric_feedback_enabled: true)
 
     sign_in @adv_user
   end
@@ -54,6 +55,41 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
   test "new renders form with survey and student context" do
     get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
     assert_response :success
+  end
+
+  test "advisor numeric ratings can be retired while written feedback remains" do
+    @survey.update!(advisor_numeric_feedback_enabled: false)
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Retired Numeric Competencies", section: section)
+    question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 1,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
+
+    assert_response :success
+    assert_select "select[name='ratings[#{question.id}][average_score]']", count: 0
+    assert_includes response.body, "numeric ratings are retired"
+
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path, params: {
+        survey_id: @survey.id,
+        student_id: @student.student_id,
+        submission_intent: "submit",
+        ratings: {
+          question.id.to_s => { comments: "Written review only" }
+        }
+      }
+    end
+
+    assert_response :see_other
+    feedback = Feedback.order(:created_at).last
+    assert_nil feedback.average_score
+    assert_equal "Written review only", feedback.comments
   end
 
   test "new loads survey response context" do

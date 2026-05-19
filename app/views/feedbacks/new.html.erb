@@ -28,28 +28,30 @@
                      missing_feedback_question_ids: @missing_rating_question_ids
                    } %>
 
-        <section class="c-card c-card--advisor u-stack u-stack--lg" data-advisor-feedback-summary>
-          <div class="c-panel-header">
-            <h3 class="c-panel-title">Summary Statistics</h3>
-            <p class="c-muted-meta">Updates as you edit scores</p>
-          </div>
-
-          <div class="u-grid u-grid--2">
-            <div class="c-stat c-stat--success">
-              <div class="c-stat__label">At or Above Target</div>
-              <div class="c-stat__value" data-at-or-above-count>0</div>
-              <div class="c-stat__subtext" data-at-or-above-percent>(0.0%)</div>
+        <% if @survey.advisor_numeric_feedback_enabled? %>
+          <section class="c-card c-card--advisor u-stack u-stack--lg" data-advisor-feedback-summary>
+            <div class="c-panel-header">
+              <h3 class="c-panel-title">Summary Statistics</h3>
+              <p class="c-muted-meta">Updates as you edit scores</p>
             </div>
 
-            <div class="c-stat c-stat--warning">
-              <div class="c-stat__label">Below End of Program Target</div>
-              <div class="c-stat__value text-red-700" data-below-count>0</div>
-              <div class="c-stat__subtext" data-below-percent>(0.0%)</div>
-            </div>
-          </div>
+            <div class="u-grid u-grid--2">
+              <div class="c-stat c-stat--success">
+                <div class="c-stat__label">At or Above Target</div>
+                <div class="c-stat__value" data-at-or-above-count>0</div>
+                <div class="c-stat__subtext" data-at-or-above-percent>(0.0%)</div>
+              </div>
 
-          <p class="c-help">Based on advisor scores (0–5) compared to each question’s program target level.</p>
-        </section>
+              <div class="c-stat c-stat--warning">
+                <div class="c-stat__label">Below End of Program Target</div>
+                <div class="c-stat__value text-red-700" data-below-count>0</div>
+                <div class="c-stat__subtext" data-below-percent>(0.0%)</div>
+              </div>
+            </div>
+
+            <p class="c-help">Based on advisor scores (0-5) compared to each question's program target level.</p>
+          </section>
+        <% end %>
 
         <% if defined?(@confidential_notes_enabled) && @confidential_notes_enabled %>
           <% default_idx = Array(@confidential_note_tabs).find_index { |t| t[:editable] } || 0 %>
