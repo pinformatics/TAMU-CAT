@@ -116,9 +116,10 @@ class Admin::CourseGradeReleaseDatesController < Admin::BaseController
 
   def bulk_release_date_params
     raw = params[:release_dates]
-    return {} unless raw.respond_to?(:permit!)
+    return {} unless raw.respond_to?(:permit)
 
-    raw.permit!.to_h
+    permitted_semester_ids = ProgramSemester.pluck(:id).map(&:to_s)
+    raw.permit(*permitted_semester_ids).to_h
   end
 
   def parse_release_date(value)
