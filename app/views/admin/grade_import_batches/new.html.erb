@@ -1,21 +1,22 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <%= link_to "Back to batches", admin_grade_import_batches_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
+      <%= link_to "Back to batches", admin_grade_import_batches_path, class: button_classes(:secondary) %>
     </div>
   </div>
 
-  <div class="c-container c-container--wide c-page">
+  <div class="c-page">
     <section class="u-stack u-stack--lg">
-      <header class="c-card p-6 md:p-8 bg-slate-50 border border-slate-200">
+      <header class="c-card c-card--brand">
         <div>
-          <h1 class="text-2xl font-semibold text-slate-900">New Grade Import Batch</h1>
-          <p class="mt-2 text-sm text-slate-600">Upload workbooks and preview matches before committing.</p>
+          <p class="c-eyebrow">Faculty imports</p>
+          <h1 class="c-page-title c-page-title--brand">New Grade Import Batch</h1>
+          <p class="c-page-subtitle">Upload workbooks and preview matches before committing.</p>
         </div>
       </header>
 
-      <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <section class="c-card p-6 md:p-8 u-stack u-stack--md">
+      <div class="c-two-column-layout">
+        <section class="c-card u-stack u-stack--md">
           <div>
             <h2 class="c-section-title c-heading-inline">Upload & Preview</h2>
           </div>
@@ -44,51 +45,51 @@
               </div>
             </div>
 
-            <div class="border-t pt-4">
-              <label class="c-toggle cursor-pointer">
+            <div class="u-border-top u-pt-lg">
+              <label class="c-toggle u-cursor-pointer">
                 <%= check_box_tag :dry_run, "1", true, class: "c-toggle__input" %>
                 <span class="c-toggle__track" aria-hidden="true"><span class="c-toggle__thumb"></span></span>
-                <span class="space-y-0.5">
-                  <span class="c-toggle__label block">Preview first</span>
-                  <span class="block text-xs text-slate-600">Review matches and derived ratings before committing.</span>
+                <span class="u-stack u-stack--xs">
+                  <span class="c-toggle__label u-block">Preview first</span>
+                  <span class="c-help">Review matches and derived ratings before committing.</span>
                 </span>
               </label>
             </div>
 
             <div class="c-form-actions u-actions u-actions--start">
-              <%= submit_tag "Run Import", class: tailwind_button_classes(:primary) %>
+              <%= submit_tag "Run Import", class: button_classes(:primary) %>
             </div>
           <% end %>
         </section>
 
         <aside class="u-stack u-stack--sm">
-          <div class="c-card c-card--tight border border-slate-200 bg-slate-50/70 u-stack u-stack--xs">
-            <p class="text-sm font-semibold text-slate-900">Upload options</p>
-            <ul class="text-xs text-slate-700 space-y-1">
+          <div class="c-card c-card--tight c-card--muted u-stack u-stack--xs">
+            <p class="c-table__title">Upload options</p>
+            <ul class="c-help u-stack u-stack--xs">
               <li><strong>Canvas grades:</strong> Direct export with mapping sheet</li>
               <li><strong>Canvas competencies:</strong> Direct competency export</li>
             </ul>
           </div>
 
           <div class="c-card c-card--tight u-stack u-stack--xs">
-            <p class="text-sm font-semibold text-slate-900">Examples</p>
-            <div class="u-actions u-actions--start space-y-2 flex flex-col">
+            <p class="c-table__title">Examples</p>
+            <div class="u-stack u-stack--sm">
               <%= link_to "Grade Export",
                           "/grade-import-examples/Example%20Canvas%20Grade%20Export.xlsx",
-                          class: tailwind_button_classes(:secondary),
+                          class: button_classes(:secondary),
                           data: { turbo: false },
                           download: true %>
               <%= link_to "Competency Export",
                           "/grade-import-examples/Example%20Canvas%20Competency%20Export.csv",
-                          class: tailwind_button_classes(:secondary),
+                          class: button_classes(:secondary),
                           data: { turbo: false },
                           download: true %>
             </div>
           </div>
 
           <details class="c-card c-card--tight c-card--muted u-stack u-stack--xs">
-            <summary class="cursor-pointer text-xs font-semibold text-slate-900">View guide</summary>
-            <div class="rounded-lg bg-white p-3 text-xs text-slate-700 mt-2" data-controller="markdown-render">
+            <summary class="u-cursor-pointer c-table__title">View guide</summary>
+            <div class="c-card c-card--tight u-mt-sm" data-controller="markdown-render">
               <textarea class="hidden" data-markdown-render-target="source"># Grade Import Guide
 
 ## Option 1: Canvas direct grade export
@@ -129,7 +130,7 @@
 1. Run as Preview to review matches and ratings
 2. Make corrections if needed
 3. Re-upload to commit</textarea>
-              <div class="guidance-text" data-markdown-render-target="output"></div>
+              <div class="c-rich-text" data-markdown-render-target="output"></div>
             </div>
           </details>
         </aside>

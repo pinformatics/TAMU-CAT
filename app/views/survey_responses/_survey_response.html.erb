@@ -9,33 +9,21 @@
      defined?(current_user) && current_user.present? && current_user.role == 'student' && sr&.student.present? && (current_user.id == sr.student.user&.id)
    end %>
 
-<div class="space-y-8">
-  <style>
-    .survey-container [id^="survey-section-"],
-    .survey-container [id^="survey-category-"],
-    .survey-container .question-block {
-      scroll-margin-top: 120px;
-    }
-    .survey-container .indented-description {
-      border-left: 2px solid #e2e8f0;
-      margin-left: 0.25rem;
-      padding-left: 1rem;
-    }
-  </style>
+<div class="u-stack u-stack--xl" data-survey-scroll-scope>
 
   <% survey_name = survey&.title.presence || "Survey ##{survey&.id}" %>
   <% student_name = sr&.student&.full_name.to_s.strip.presence || sr&.student&.user&.display_name.to_s.strip.presence || sr&.student&.user&.name.to_s.strip.presence || sr&.student&.user&.email.to_s.strip.presence %>
 
-  <header class="c-card survey-header mb-6">
-    <div class="space-y-2">
-      <h1 class="text-2xl font-semibold tracking-tight text-slate-900"><%= survey_name %></h1>
+  <header class="c-card c-card--brand">
+    <div class="u-stack u-stack--sm">
+      <h1 class="c-h1"><%= survey_name %></h1>
       <% if student_name.present? && !viewer_is_student_owner %>
-        <p class="text-sm text-slate-700">Student: <span class="font-semibold"><%= student_name %></span></p>
+        <p class="c-help">Student: <span class="font-semibold"><%= student_name %></span></p>
       <% end %>
-      <p class="text-sm text-slate-600">
+      <p class="c-help">
         Semester: <%= survey&.semester.presence || "TBD" %> · Tracks: <%= survey&.track_list.presence&.join(", ") || "Unassigned" %>
       </p>
-      <p class="text-xs text-slate-500">
+      <p class="c-help">
         Questions marked with an asterisk (*) are required.
       </p>
     </div>
@@ -94,38 +82,38 @@
   <% end %>
 
   <% if categories.any? %>
-    <div class="space-y-8">
+    <div class="u-stack u-stack--xl" data-survey-scroll-scope>
       <% rendered_section_ids = [] %>
       <% section_question_numbers = Hash.new(0) %>
       <% categories.each do |category| %>
         <% section = category.section %>
         <% if section.present? && !rendered_section_ids.include?(section.id) %>
           <% section_anchor_id = "survey-section-#{section.id}" %>
-          <div class="c-card survey-section-card space-y-2 text-left">
-            <p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Section</p>
-            <h2 class="survey-section-title c-heading-inline text-xl font-bold"><%= section.title %></h2>
+          <div class="c-card c-card--student u-stack u-stack--sm text-left">
+            <p class="c-eyebrow">Section</p>
+            <h2 class="c-h2"><%= section.title %></h2>
             <% if section.description.present? && !section.mha_competency? %>
-              <div class="text-sm text-slate-700"><%= render_markdown(section.description) %></div>
+              <div class="c-rich-text text-sm"><%= render_markdown(section.description) %></div>
             <% end %>
 
             <% if section.mha_competency? %>
-              <div class="mt-3 text-sm text-slate-700"><%= render_markdown(section.description) %></div>
+              <div class="c-rich-text text-sm"><%= render_markdown(section.description) %></div>
             <% end %>
           </div>
           <% rendered_section_ids << section.id %>
         <% end %>
-        <div class="survey-block">
-        <section id="survey-category-<%= category.id %>" class="c-card survey-category-card space-y-6">
-          <header class="space-y-2">
-            <h2 class="text-xl font-semibold tracking-tight text-slate-900"><%= category.name %></h2>
+        <div class="u-stack u-stack--md">
+        <section id="survey-category-<%= category.id %>" class="c-card u-stack u-stack--lg">
+          <header class="u-stack u-stack--sm">
+            <h2 class="c-h2"><%= category.name %></h2>
             <% category_desc = category.description.to_s.strip.presence %>
             <% if category_desc.present? %>
-              <div class="indented-description text-sm text-slate-600"><%= render_markdown(category_desc) %></div>
+              <div class="c-indent-note c-rich-text text-sm"><%= render_markdown(category_desc) %></div>
             <% end %>
           </header>
 
           <% if category.questions.any? %>
-            <div class="space-y-5">
+            <div class="u-stack u-stack--lg">
               <% number_key = section&.id || category.id %>
                 <% ordered_questions = category.questions.ordered.to_a %>
                 <% questions_by_id = ordered_questions.index_by(&:id) %>
@@ -179,7 +167,7 @@
                 <% branch_target_value = is_branch_parent ? "Yes" : nil %>
                 <% branch_child_of = is_sub_question ? question.parent_question_id : nil %>
 
-                <article class="question-block rounded-lg border border-slate-100 bg-slate-50/40 p-4 space-y-4 <%= question.sub_question? ? 'ml-6' : '' %> <%= hide_branch_child ? 'hidden' : '' %>"
+                <article class="c-question-card <%= question.sub_question? ? 'c-question-card--nested' : '' %> <%= hide_branch_child ? 'hidden' : '' %>"
                          <% if is_branch_parent %>
                            data-branch-parent="true"
                            data-branch-parent-id="<%= question.id %>"
@@ -190,37 +178,40 @@
                          <% end %>>
                   <% question_prefix = section&.mha_competency? ? "#" : "Q" %>
 
-                  <label class="flex w-full items-start justify-between gap-3 text-sm font-medium text-slate-900" for="question-<%= question.id %>">
-                    <span class="flex min-w-0 items-start gap-2">
+                  <label class="c-question-card__header" for="question-<%= question.id %>">
+                    <span class="c-question-card__main">
                       <% if is_sub_question %>
-                        <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600" aria-label="Sub-question">↳</span>
+                        <span class="c-question-number c-question-number--sub" aria-label="Sub-question">↳</span>
                       <% else %>
-                        <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200/70 text-xs font-semibold text-slate-700"><%= question_prefix %><%= question_number %></span>
+                        <span class="c-question-number"><%= question_prefix %><%= question_number %></span>
                       <% end %>
 
-                      <span class="min-w-0 flex flex-col gap-1">
-                        <span class="flex min-w-0 flex-wrap items-center gap-2">
-                          <span class="leading-snug">
+                      <span class="c-question-card__content">
+                        <span class="c-question-card__prompt-row">
+                          <span class="c-question-card__prompt">
                             <%= render_question_prompt(question) %>
                           </span>
                           <% if required %>
-                            <span class="text-red-600" aria-hidden="true">*</span>
+                            <span class="u-danger" aria-hidden="true">*</span>
                           <% end %>
                         </span>
 
                         <% if formatted_desc.present? %>
-                          <div class="indented-description text-xs leading-relaxed text-slate-600"><%= formatted_desc %></div>
+                          <div class="c-indent-note c-help"><%= formatted_desc %></div>
                         <% end %>
                       </span>
                     </span>
 
                     <% effective_target_level = effective_competency_target_level(question: question, survey: survey, student: sr&.student) %>
+                    <% course_context = course_competency_context_for(question: question, survey: survey, student: sr&.student, viewer: current_user) %>
                     <% if question.question_type_dropdown? && effective_target_level.present? %>
-                      <span class="shrink-0 ml-auto text-right">
-                        <span class="target-level-badge">End of Program Target Level: <%= effective_target_level %>/5</span>
+                      <span class="c-question-card__meta">
+                        <span class="c-level-badge">End of Program Target Level: <%= effective_target_level %>/5</span>
                       </span>
                     <% end %>
                   </label>
+
+                  <%= render_course_competency_context(course_context) %>
 
                   <% case question.question_type %>
                   <% when "integer" %>
@@ -233,7 +224,7 @@
                                          inputmode: "numeric",
                                          pattern: "\\d+",
                                          placeholder: "Enter a whole number",
-                                         class: "w-full max-w-xs rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500",
+                                         class: "c-input u-w-full u-max-w-sm",
                                          disabled: input_disabled %>
                   <% when "short_answer" %>
                     <div data-controller="character-counter">
@@ -243,21 +234,21 @@
                                         id: "question-#{question.id}",
                                         maxlength: StudentQuestion::TEXT_MAX_LENGTH,
                                         data: { "character-counter-target": "input", action: "input->character-counter#input" },
-                                        class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500",
+                                        class: "c-input u-w-full",
                                           disabled: input_disabled %>
-                      <div class="mt-1 text-xs text-slate-500" data-character-counter-target="counter"><%= (answer_text || "").to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
+                      <div class="c-help" data-character-counter-target="counter"><%= (answer_text || "").to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
                     </div>
                   <% when "multiple_choice" %>
                     <% option_pairs = question.answer_option_pairs.presence || [] %>
                     <% selected = answer_value.to_s %>
-                    <div class="flex flex-col gap-2" role="radiogroup">
+                    <div class="u-stack u-stack--sm" role="radiogroup">
                       <% option_pairs.each do |label, value| %>
-                        <label class="flex items-center gap-2 text-sm text-slate-800">
+                        <label class="c-choice-label">
                             <%= radio_button_tag "#{answer_param_key}[#{question.id}]",
                                                value,
                                                (selected == value.to_s || selected.casecmp?(label.to_s)),
                                                id: "question-#{question.id}-#{label.parameterize}",
-                                               class: "h-4 w-4 text-blue-600",
+                                               class: "c-choice",
                                                  disabled: input_disabled %>
                           <span><%= label %></span>
                         </label>
@@ -274,16 +265,16 @@
                                             end
                                           end %>
                           <% show_other = (selected == value.to_s) || selected.casecmp?(label.to_s) || selected.casecmp?("Other") || other_text.present? %>
-                          <div class="ml-6 <%= show_other ? "" : "hidden" %>" data-other-input-wrapper data-other-for-question-id="<%= question.id %>" data-other-choice-value="<%= value %>" aria-hidden="<%= show_other ? "false" : "true" %>" data-controller="character-counter">
+                          <div class="u-ml-xl <%= show_other ? "" : "hidden" %>" data-other-input-wrapper data-other-for-question-id="<%= question.id %>" data-other-choice-value="<%= value %>" aria-hidden="<%= show_other ? "false" : "true" %>" data-controller="character-counter">
                             <%= text_field_tag "#{other_param_key}[#{question.id}]",
                                                other_text,
                                                id: "question-#{question.id}-other",
                                                placeholder: "Please describe...",
                                                maxlength: StudentQuestion::TEXT_MAX_LENGTH,
                                                data: { "character-counter-target": "input", action: "input->character-counter#input" },
-                                               class: "w-full max-w-xl rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500",
+                                               class: "c-input u-w-full u-max-w-xl",
                                                disabled: (input_disabled || !show_other) %>
-                            <div class="mt-1 text-xs text-slate-500" data-character-counter-target="counter"><%= other_text.to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
+                            <div class="c-help" data-character-counter-target="counter"><%= other_text.to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
                           </div>
                         <% end %>
                       <% end %>
@@ -296,7 +287,7 @@
                                    include_blank: true,
                                    disabled: input_disabled,
                                    id: "question-#{question.id}",
-                                   class: "c-select w-full max-w-sm" %>
+                                   class: "c-select u-w-full u-max-w-sm" %>
 
                     <% option_pairs.each do |label, value| %>
                       <% next unless question.answer_option_requires_text?(value) %>
@@ -310,16 +301,16 @@
                                         end
                                       end %>
                       <% show_other = (selected_value.to_s == value.to_s) || selected_value.casecmp?(label.to_s) || selected_value.casecmp?("Other") || other_text.present? %>
-                      <div class="mt-2 max-w-xl <%= show_other ? "" : "hidden" %>" data-other-input-wrapper data-other-for-question-id="<%= question.id %>" data-other-choice-value="<%= value %>" aria-hidden="<%= show_other ? "false" : "true" %>" data-controller="character-counter">
+                      <div class="mt-sm u-max-w-xl <%= show_other ? "" : "hidden" %>" data-other-input-wrapper data-other-for-question-id="<%= question.id %>" data-other-choice-value="<%= value %>" aria-hidden="<%= show_other ? "false" : "true" %>" data-controller="character-counter">
                         <%= text_field_tag "#{other_param_key}[#{question.id}]",
                                            other_text,
                                            id: "question-#{question.id}-other-#{value.to_s.parameterize}",
                                            placeholder: "Please describe...",
                                            maxlength: StudentQuestion::TEXT_MAX_LENGTH,
                                            data: { "character-counter-target": "input", action: "input->character-counter#input" },
-                                           class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500",
+                                           class: "c-input u-w-full",
                                            disabled: (input_disabled || !show_other) %>
-                        <div class="mt-1 text-xs text-slate-500" data-character-counter-target="counter"><%= other_text.to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
+                        <div class="c-help" data-character-counter-target="counter"><%= other_text.to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
                       </div>
                     <% end %>
                   <% when "evidence" %>
@@ -332,14 +323,14 @@
                                            placeholder: "https://sites.google.com/tamu.edu/...",
                                            maxlength: StudentQuestion::TEXT_MAX_LENGTH,
                                            data: { "character-counter-target": "input", action: "input->character-counter#input" },
-                                           class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500",
+                                           class: "c-input u-w-full",
                                            disabled: input_disabled %>
-                        <div class="mt-1 text-xs text-slate-500" data-character-counter-target="counter"><%= link_value.to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
+                        <div class="c-help" data-character-counter-target="counter"><%= link_value.to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
                       </div>
                     <% elsif link_value.present? %>
                       <%= link_to link_value,
                                   link_value,
-                                  class: "block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 break-all",
+                                  class: "c-input u-block u-w-full u-break-anywhere",
                                   target: "_blank",
                                   rel: "noopener noreferrer" %>
                     <% else %>
@@ -350,9 +341,9 @@
                                            placeholder: "https://sites.google.com/tamu.edu/...",
                                            maxlength: StudentQuestion::TEXT_MAX_LENGTH,
                                            data: { "character-counter-target": "input", action: "input->character-counter#input" },
-                                           class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500",
+                                           class: "c-input u-w-full",
                                            disabled: input_disabled %>
-                        <div class="mt-1 text-xs text-slate-500" data-character-counter-target="counter">0/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
+                        <div class="c-help" data-character-counter-target="counter">0/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
                       </div>
                     <% end %>
                   <% else %>
@@ -362,9 +353,9 @@
                                          id: "question-#{question.id}",
                                          maxlength: StudentQuestion::TEXT_MAX_LENGTH,
                                          data: { "character-counter-target": "input", action: "input->character-counter#input" },
-                                         class: "w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500",
+                                         class: "c-input u-w-full",
                                          disabled: input_disabled %>
-                      <div class="mt-1 text-xs text-slate-500" data-character-counter-target="counter"><%= (answer_text || "").to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
+                      <div class="c-help" data-character-counter-target="counter"><%= (answer_text || "").to_s.length %>/<%= StudentQuestion::TEXT_MAX_LENGTH %> characters</div>
                     </div>
                   <% end %>
 
@@ -391,23 +382,23 @@
                         <% feedback_submission = fb.advisor_id.present? ? feedback_submissions_by_advisor[fb.advisor_id] : nil %>
                         <% feedback_submitted = feedback_submission&.submitted_at.present? %>
                         <% feedback_is_draft = !feedback_submitted %>
-                        <article class="question-block advisor-feedback-card mt-3 rounded-lg border p-4 shadow-sm space-y-2">
-                          <div class="flex flex-wrap items-center justify-between gap-3">
-                            <h5 class="min-w-0 text-sm font-semibold tracking-tight text-slate-900">Advisor feedback — #<%= question_number %></h5>
-                            <div class="flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2">
+                        <article class="c-question-card c-card--advisor u-stack u-stack--sm">
+                          <div class="u-actions u-actions--split">
+                            <h5 class="c-h3 u-min-w-0">Advisor feedback — #<%= question_number %></h5>
+                            <div class="u-actions u-actions--start u-min-w-0">
                               <% if !viewer_is_student_owner && feedback_is_draft %>
                                 <span class="<%= feedback_status_badge_classes('Draft') %>">Draft</span>
                               <% end %>
-                              <p class="text-xs text-slate-600 break-words">Score: <%= fb.average_score != nil ? proficiency_label_for(fb.average_score, feedback_question) : '—' %></p>
+                              <p class="c-help u-break-anywhere">Score: <%= fb.average_score != nil ? proficiency_label_for(fb.average_score, feedback_question) : '—' %></p>
                             </div>
                           </div>
                           <% if fb.comments.present? %>
-                            <div class="text-sm text-slate-700 whitespace-pre-wrap break-words"><%= fb.comments %></div>
+                            <div class="c-rich-text text-sm u-break-anywhere"><%= fb.comments %></div>
                           <% end %>
                           <% if !viewer_is_student_owner && feedback_is_draft %>
-                            <p class="text-xs text-amber-700">Draft feedback is only visible to advisors/admins until submitted.</p>
+                            <p class="c-help">Draft feedback is only visible to advisors/admins until submitted.</p>
                           <% end %>
-                          <div class="text-xs text-slate-500">By: <%= fb&.advisor&.user&.name || '—' %></div>
+                          <div class="c-help">By: <%= fb&.advisor&.user&.name || '—' %></div>
                         </article>
                       <% end %>
                     <% end %>
@@ -431,15 +422,15 @@
                     <% question_prefix = section&.mha_competency? ? "#" : "Q" %>
                     <% if supports_feedback %>
                     <% missing_score = missing_feedback_question_ids.include?(feedback_question_id.to_i) %>
-                    <article class="question-block advisor-feedback-card mt-3 rounded-lg border p-4 shadow-sm space-y-3">
-                    <div class="flex items-center justify-between gap-3">
-                      <h5 class="text-sm font-semibold tracking-tight text-slate-900">Advisor feedback — <%= question_prefix %><%= question_number %></h5>
-                      <p class="text-xs text-slate-500">Score 0–5, feedback optional</p>
+                    <article class="c-question-card c-card--advisor u-stack u-stack--md">
+                    <div class="u-actions u-actions--split">
+                      <h5 class="c-h3">Advisor feedback — <%= question_prefix %><%= question_number %></h5>
+                      <p class="c-help">Score 0-5, feedback optional</p>
                     </div>
 
-                      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-600" for="ratings_<%= feedback_question_id %>_average_score">Score (0–5)</label>
+                      <div class="u-grid u-grid--stats">
+                      <div class="c-field">
+                        <label class="c-label" for="ratings_<%= feedback_question_id %>_average_score">Score (0-5)</label>
                         <%= render "shared/proficiency_select",
                                    id: "ratings_#{feedback_question_id}_average_score",
                                    name: "ratings[#{feedback_question_id}][average_score]",
@@ -451,22 +442,22 @@
                                      feedback_question_id: feedback_question_id,
                                      program_target_level: effective_competency_target_level(question: feedback_question, survey: survey, student: sr&.student)
                                    },
-                                   class_name: "w-full max-w-xs rounded-md border #{missing_score ? 'border-rose-500 ring-1 ring-rose-200' : 'border-slate-300'} bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" %>
+                                   class_name: "c-select u-w-full u-max-w-sm #{missing_score ? 'c-question-card--error' : ''}" %>
                         <% if missing_score %>
-                          <p class="mt-1 text-xs text-rose-600">Advisor Rating is required before submission.</p>
+                          <p class="c-help u-danger">Advisor Rating is required before submission.</p>
                         <% end %>
                       </div>
 
-                      <div class="md:col-span-2" data-controller="character-counter">
-                        <label class="mb-1 block text-xs font-medium text-slate-600" for="ratings_<%= feedback_question_id %>_comments">Feedback (optional)</label>
+                      <div class="c-field" data-controller="character-counter">
+                        <label class="c-label" for="ratings_<%= feedback_question_id %>_comments">Feedback (optional)</label>
                         <textarea id="ratings_<%= feedback_question_id %>_comments"
                                   name="ratings[<%= feedback_question_id %>][comments]"
                                   rows="3"
                                   maxlength="<%= Feedback::COMMENTS_MAX_LENGTH %>"
                                   data-character-counter-target="input"
                                   data-action="input->character-counter#input"
-                                  class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"><%= existing_q&.comments.to_s %></textarea>
-                        <div class="mt-1 text-xs text-slate-500" data-character-counter-target="counter"><%= existing_q&.comments.to_s.length %>/<%= Feedback::COMMENTS_MAX_LENGTH %> characters</div>
+                                  class="c-input u-w-full"><%= existing_q&.comments.to_s %></textarea>
+                        <div class="c-help" data-character-counter-target="counter"><%= existing_q&.comments.to_s.length %>/<%= Feedback::COMMENTS_MAX_LENGTH %> characters</div>
                       </div>
                     </div>
 
@@ -479,28 +470,28 @@
                   <% end %>
                 <% end %>
                   <% if branch_child_of.present? && conditional_yes_no_child %>
-                    <div class="h-6 <%= hide_branch_child ? 'hidden' : '' %>" aria-hidden="true" data-branch-child-of="<%= branch_child_of %>"></div>
+                    <div class="u-h-spacer <%= hide_branch_child ? 'hidden' : '' %>" aria-hidden="true" data-branch-child-of="<%= branch_child_of %>"></div>
                   <% else %>
-                    <div class="h-6" aria-hidden="true"></div>
+                    <div class="u-h-spacer" aria-hidden="true"></div>
                   <% end %>
               <% end %>
             </div>
           <% else %>
-            <p class="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">No questions for this competency.</p>
+            <p class="c-card c-card--tight c-card--dashed c-muted text-sm">No questions for this competency.</p>
           <% end %>
         </section>
         </div>
         <%# per-question feedback inputs are rendered inline with each question above %>
-        <div class="h-14" aria-hidden="true"></div>
+        <div class="u-h-spacer-lg" aria-hidden="true"></div>
       <% end %>
     </div>
   <% else %>
-    <div class="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <label class="text-sm font-semibold text-slate-700">Response</label>
+    <div class="c-card c-card--tight c-field">
+      <label class="c-label">Response</label>
       <%= text_area_tag nil,
                         (sr&.question_responses&.first&.answer || ""),
                         maxlength: StudentQuestion::TEXT_MAX_LENGTH,
-                        class: "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none", disabled: true %>
+                        class: "c-input u-w-full", disabled: true %>
     </div>
   <% end %>
 
@@ -508,22 +499,22 @@
   <% if survey.present? %>
     <% SurveySection.where(survey_id: survey.id).ordered.each do |section| %>
       <% next if rendered_section_ids.include?(section.id) %>
-      <div class="survey-block">
-        <div id="survey-section-<%= section.id %>" class="c-card survey-section-card space-y-2 text-left">
-          <p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Section</p>
-          <h2 class="survey-section-title c-heading-inline text-xl font-bold"><%= section.title %></h2>
+      <div class="u-stack u-stack--md">
+        <div id="survey-section-<%= section.id %>" class="c-card c-card--student u-stack u-stack--sm text-left">
+          <p class="c-eyebrow">Section</p>
+          <h2 class="c-h2"><%= section.title %></h2>
           <% if section.description.present? && !section.mha_competency? %>
-            <div class="text-sm text-slate-700"><%= render_markdown(section.description) %></div>
+            <div class="c-rich-text text-sm"><%= render_markdown(section.description) %></div>
           <% end %>
 
           <% if section.mha_competency? %>
-            <div class="mt-3 rounded-lg border border-rose-200 bg-rose-50/60 p-3 text-sm text-rose-800 space-y-2">
+            <div class="c-card c-card--warning c-card--tight c-rich-text text-sm">
               <%= render_markdown(section.description) %>
             </div>
           <% end %>
         </div>
 
-        <div class="c-card survey-category-card mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
+        <div class="c-card c-card--tight c-card--dashed c-muted text-sm">
           No competencies are configured in this section yet.
         </div>
       </div>
@@ -533,9 +524,9 @@
   <%# Legacy fallback: if there are only category-level legacy feedback entries, keep a minimal
       section at the bottom so older data doesn't disappear entirely. %>
   <% if !include_feedback_form && per_category_legacy.any? %>
-    <section class="mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-6 ring-1 ring-amber-200/40">
-      <h3 class="text-lg font-semibold">Advisor feedback (legacy)</h3>
-      <p class="mt-2 text-sm text-slate-700">This survey response contains older feedback entries that are not attached to individual questions.</p>
+    <section class="c-card c-card--warning u-stack u-stack--sm">
+      <h3 class="c-h3">Advisor feedback (legacy)</h3>
+      <p class="c-help">This survey response contains older feedback entries that are not attached to individual questions.</p>
     </section>
   <% end %>
   

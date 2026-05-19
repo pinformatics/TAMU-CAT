@@ -108,7 +108,7 @@ If you use custom Postgres credentials, set `DATABASE_USER`, `DATABASE_PASSWORD`
 
 ### Deep-dive checklist
 
-1. **Verify toolchain** – `ruby -v` ⇒ `3.4.6`; `psql --version` ⇒ `14.x`. Install via rbenv/asdf/Homebrew/Windows installers as needed.
+1. **Verify toolchain** – `ruby -v` ⇒ `3.4.6`; `psql --version` ⇒ `17.x`. Install via rbenv/asdf/Homebrew/Windows installers as needed.
 2. **Create dev DB role** *(one-time)*
 
    ```sql
@@ -139,6 +139,44 @@ If you use custom Postgres credentials, set `DATABASE_USER`, `DATABASE_PASSWORD`
 docker compose run --rm web bin/rails db:prepare
 docker compose up --build
 ```
+
+### Optional: sync local DB from Heroku production
+
+Use this when you need production-like student/import data locally instead of seeded demo data. The script downloads a Heroku Postgres backup from app `mha501`, drops only the local Docker development database, and restores the backup into local Postgres.
+
+Windows PowerShell:
+
+```powershell
+.\script\sync_prod_db.ps1
+docker compose up web css
+```
+
+Linux/macOS Bash:
+
+```bash
+chmod +x script/sync_prod_db.sh
+script/sync_prod_db.sh
+docker compose up web css
+```
+
+The scripts prompt for `HEROKU_API_KEY` if it is not already exported. To save the key to your Windows user environment, run:
+
+```powershell
+.\script\sync_prod_db.ps1 -PersistApiKey
+```
+
+On Linux/macOS, export the key in your shell profile instead:
+
+```bash
+export HEROKU_API_KEY="paste-key-here"
+```
+
+Important:
+
+- production DB data is not modified
+- the local `health_development` database is dropped and recreated
+- use `-UseLatestBackup` / `--use-latest-backup` to skip capturing a fresh Heroku backup and download the latest existing backup
+- use `-SkipConfirm` / `--skip-confirm` only for trusted local automation
 
 - Repository mounts into the app container for live reloads.
 - Run tests with `docker compose run --rm web ruby run_tests.rb`.

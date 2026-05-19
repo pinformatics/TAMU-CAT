@@ -1,5 +1,5 @@
-<div class="survey-container survey-show mx-auto w-full space-y-8 px-4 sm:px-6 lg:px-4" style="max-width: 90rem;">
-  <div class="survey-grid grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-10">
+<div data-survey-scroll-scope class="c-document-shell">
+  <div class="c-two-column-layout grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-10">
     <div class="space-y-8 lg:min-w-0">
       <%= form_with url: feedbacks_path(survey_id: @survey.id, student_id: @student.id),
                     local: true,
@@ -28,43 +28,27 @@
                      missing_feedback_question_ids: @missing_rating_question_ids
                    } %>
 
-        <section class="c-card" data-advisor-feedback-summary>
-          <div class="advisor-summary__header">
-            <h3 class="advisor-summary__title">Summary Statistics</h3>
-            <p class="advisor-summary__hint">Updates as you edit scores</p>
+        <section class="c-card c-card--advisor u-stack u-stack--lg" data-advisor-feedback-summary>
+          <div class="c-panel-header">
+            <h3 class="c-panel-title">Summary Statistics</h3>
+            <p class="c-muted-meta">Updates as you edit scores</p>
           </div>
 
-          <div class="advisor-summary__grid">
-            <div class="advisor-summary__card advisor-summary__card--above">
-              <div class="advisor-summary__cardRow">
-                <div class="advisor-summary__meta">
-                  <div class="advisor-summary__label">At or Above Target</div>
-                  <div class="advisor-summary__percent" data-at-or-above-percent>(0.0%)</div>
-                </div>
-                <div class="advisor-summary__value">
-                  <div class="advisor-summary__count advisor-summary__count--above" data-at-or-above-count>0</div>
-                </div>
-              </div>
+          <div class="u-grid u-grid--2">
+            <div class="c-stat c-stat--success">
+              <div class="c-stat__label">At or Above Target</div>
+              <div class="c-stat__value" data-at-or-above-count>0</div>
+              <div class="c-stat__subtext" data-at-or-above-percent>(0.0%)</div>
             </div>
 
-            <div class="advisor-summary__card advisor-summary__card--below">
-              <div class="advisor-summary__cardRow">
-                <div class="advisor-summary__meta">
-                  <div class="advisor-summary__label">Below End of Program Target</div>
-                  <div class="advisor-summary__percent" data-below-percent>(0.0%)</div>
-                </div>
-                <div class="advisor-summary__value">
-                  <div class="advisor-summary__count advisor-summary__count--below" data-below-count>0</div>
-                </div>
-              </div>
+            <div class="c-stat c-stat--warning">
+              <div class="c-stat__label">Below End of Program Target</div>
+              <div class="c-stat__value text-red-700" data-below-count>0</div>
+              <div class="c-stat__subtext" data-below-percent>(0.0%)</div>
             </div>
           </div>
 
-          <div class="advisor-summary__footer">
-            <p class="advisor-summary__note">
-              Based on advisor scores (0–5) compared to each question’s program target level.
-            </p>
-          </div>
+          <p class="c-help">Based on advisor scores (0–5) compared to each question’s program target level.</p>
         </section>
 
         <% if defined?(@confidential_notes_enabled) && @confidential_notes_enabled %>
@@ -75,7 +59,7 @@
               <p class="text-xs text-slate-600">Visible only to the assigned advisor.</p>
             </div>
 
-            <div class="reports-tabs__list" role="tablist" aria-label="Confidential notes by survey">
+            <div class="c-tabs" role="tablist" aria-label="Confidential notes by survey">
               <% Array(@confidential_note_tabs).each_with_index do |tab, idx| %>
                 <% survey = tab[:survey] %>
                 <% semester_label = survey&.semester.presence || survey&.program_semester&.name.presence %>
@@ -84,7 +68,7 @@
                 <% label = [semester_label, track_label].compact.join(" · ").presence || [semester_label, survey&.title].compact.join(" · ").presence || "Survey ##{survey&.id}" %>
                 <button type="button"
                         id="confidential-note-tab-<%= idx %>"
-                        class="reports-tabs__button"
+                        class="c-tab"
                         role="tab"
                         aria-controls="confidential-note-panel-<%= idx %>"
                         data-tabs-target="button"
@@ -107,14 +91,14 @@
                    aria-labelledby="confidential-note-tab-<%= idx %>"
                    data-tabs-target="panel"
                    data-tab-id="note-tab-<%= idx %>"
-                    class="reports-tab__body space-y-3 <%= idx == default_idx ? "" : "hidden" %>">
+                    class="c-tab-panel space-y-3 <%= idx == default_idx ? "" : "hidden" %>">
                 <% if editable %>
                   <div>
                     <label class="mb-1 block text-xs font-medium text-slate-600" for="confidential_advisor_note_body">Note</label>
                     <textarea id="confidential_advisor_note_body"
                               name="confidential_advisor_note[body]"
                               rows="4"
-                              class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"><%= note&.body.to_s %></textarea>
+                              class="u-w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"><%= note&.body.to_s %></textarea>
                     <% if note&.persisted? %>
                       <input type="hidden" name="confidential_advisor_note[lock_version]" value="<%= note.lock_version %>" />
                     <% end %>
@@ -124,7 +108,7 @@
                     <label class="mb-1 block text-xs font-medium text-slate-600">Note (read-only)</label>
                     <textarea rows="4"
                               readonly
-                              class="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm shadow-sm"><%= note&.body.to_s %></textarea>
+                              class="u-w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm shadow-sm"><%= note&.body.to_s %></textarea>
                   </div>
                 <% end %>
               </div>
@@ -134,20 +118,20 @@
         <% end %>
 
         <div class="c-toolbar mt-8">
-          <div class="c-toolbar__row justify-between w-full">
+          <div class="c-toolbar__row justify-between u-w-full">
             <%= link_to "Cancel",
                         cancel_path,
-                        class: tailwind_button_classes(:secondary),
+                        class: button_classes(:secondary),
                         data: { feedback_cancel: true } %>
 
             <div class="flex flex-wrap items-center gap-3">
               <%= button_tag "Save",
                              type: :submit,
-                             class: tailwind_button_classes(:secondary),
+                             class: button_classes(:secondary),
                              data: { feedback_save_button: true, submission_intent: "save" } %>
               <%= button_tag "Submit",
                              type: :submit,
-                             class: tailwind_button_classes(:primary),
+                             class: button_classes(:primary),
                              data: { feedback_submit_button: true, submission_intent: "submit" } %>
             </div>
           </div>

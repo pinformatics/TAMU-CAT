@@ -49,7 +49,6 @@ class StudentRecordsController < ApplicationController
     @program_year_options = available_program_years
 
     @students = load_students
-    @grade_derived_by_student = GradeImports::DerivedScorebook.for_students(@students.map(&:student_id))
     @student_records = build_student_records(@students)
   end
 
@@ -113,8 +112,6 @@ class StudentRecordsController < ApplicationController
     admin_update_lookup = load_admin_update_lookup(student_ids, survey_ids)
     feedback_submission_lookup = load_feedback_submission_lookup(student_ids, survey_ids)
     employment_lookup = load_employment_export_lookup(student_ids, survey_ids)
-    grade_derived_lookup = @grade_derived_by_student || {}
-
     responses_matrix = Hash.new do |hash, student_id|
       hash[student_id] = Hash.new { |inner, survey_id| inner[survey_id] = [] }
     end
@@ -149,19 +146,10 @@ class StudentRecordsController < ApplicationController
 
                 feedbacks_for_pair = Array(feedback_lookup.dig(student.student_id, survey.id))
                 feedback_last_updated = feedbacks_for_pair.filter_map(&:updated_at).max
-                feedback_required_total = required_feedback_question_ids_for_survey(survey).size
-                feedback_rated_count = feedbacks_for_pair
-                                          .select { |feedback| feedback.average_score.present? }
-                                          .map(&:question_id)
-                                          .compact
-                                          .uniq
-                                          .size
                 feedback_submission = feedback_submission_lookup[[ student.student_id, survey.id ]]
                 feedback_status_label, feedback_status_timestamp = feedback_status_for_row(
                   feedbacks_for_pair: feedbacks_for_pair,
                   feedback_last_updated: feedback_last_updated,
-                  feedback_required_total: feedback_required_total,
-                  feedback_rated_count: feedback_rated_count,
                   feedback_submission: feedback_submission
                 )
 
@@ -192,7 +180,6 @@ class StudentRecordsController < ApplicationController
                   feedback_last_updated_at: feedback_last_updated,
                   feedback_status_label: feedback_status_label,
                   feedback_status_timestamp: feedback_status_timestamp,
-                  grade_derived: grade_derived_lookup.fetch(student.student_id, {}),
                   employment_data: employment_lookup.fetch(
                     [ student.student_id, survey.id ],
                     default_employment_export_data
@@ -543,22 +530,7 @@ class StudentRecordsController < ApplicationController
       end
   end
 
-  def required_feedback_question_ids_for_survey(survey)
-    @required_feedback_question_ids_by_survey ||= {}
-    @required_feedback_question_ids_by_survey[survey.id] ||= begin
-      survey.questions
-            .includes(category: :section)
-            .select do |question|
-              !question.sub_question? &&
-                (!question.respond_to?(:has_feedback?) || question.has_feedback?) &&
-                question.category&.section&.mha_competency?
-            end
-            .map(&:id)
-            .uniq
-    end
-  end
-
-  def feedback_status_for_row(feedbacks_for_pair:, feedback_last_updated:, feedback_required_total:, feedback_rated_count:, feedback_submission:)
+  def feedback_status_for_row(feedbacks_for_pair:, feedback_last_updated:, feedback_submission:)
     if feedback_submission&.submitted_at.present?
       return [ "Submitted", feedback_submission.submitted_at ]
     end
@@ -570,8 +542,7 @@ class StudentRecordsController < ApplicationController
     has_any_draft = has_any_feedback_data || feedback_submission.present?
     return [ "No Feedback", nil ] unless has_any_draft
 
-    total = [ feedback_required_total, feedback_rated_count, 1 ].max
-    [ "Draft (#{feedback_rated_count}/#{total} completed)", feedback_last_updated || feedback_submission&.last_saved_at ]
+    [ "Draft", feedback_last_updated || feedback_submission&.last_saved_at ]
   end
 
   def build_student_records_workbook(student_records)

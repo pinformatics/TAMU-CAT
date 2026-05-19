@@ -4,7 +4,7 @@
 
 <div>
   <%= link_to "Edit this category", edit_category_path(@category) %> |
-  <%= link_to "Back to categories", categories_path, class: tailwind_button_classes(:secondary) %>
+  <%= link_to "Back to categories", categories_path, class: button_classes(:secondary) %>
 
   <%= button_to "Destroy this category", @category, method: :delete, data: { turbo: false } %>
 </div>

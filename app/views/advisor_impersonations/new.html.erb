@@ -1,5 +1,5 @@
-<main class="main-content">
-  <div class="mx-auto w-full max-w-3xl">
+<main class="c-main">
+  <div class="mx-auto u-w-full max-w-3xl">
     <section class="c-card p-8 md:p-10">
       <div class="mb-6 flex flex-col items-center justify-center gap-2 text-center">
         <h1 class="c-section-title c-heading-inline">View as advisor</h1>
@@ -7,7 +7,7 @@
       </div>
 
       <% if @advisors.present? %>
-        <div class="mx-auto w-full max-w-xl">
+        <div class="mx-auto u-w-full u-max-w-xl">
           <%= form_with scope: :advisor_impersonation, url: advisor_impersonation_path, method: :post, class: "space-y-4" do %>
             <%= render SearchableSelectComponent.new(
               id: "advisor-impersonation-user-id",
@@ -18,7 +18,7 @@
             ) %>
 
             <div class="pt-2">
-              <%= submit_tag "View as", class: tailwind_button_classes(:primary) %>
+              <%= submit_tag "View as", class: button_classes(:primary) %>
             </div>
           <% end %>
         </div>

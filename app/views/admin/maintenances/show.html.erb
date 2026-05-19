@@ -1,14 +1,14 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <div class="shrink-0">
-        <%= link_to "Back", admin_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
+      <div class="u-shrink-0">
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
       </div>
     </div>
   </div>
 
-  <div class="c-container c-container--dashboard c-page">
-    <section class="c-card p-8 md:p-10 u-stack u-stack--xl">
+  <div class="c-page">
+    <section class="c-card u-stack u-stack--xl">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Admin tools</p>
@@ -16,8 +16,8 @@
           <p class="c-page-subtitle">Redirect the site to the public maintenance page for non-admin users.</p>
         </div>
 
-        <div class="survey-card__status">
-          <span class="status-badge <%= @maintenance_enabled ? 'status-badge--success' : 'status-badge--muted' %>">
+        <div class="c-resource-card__status">
+          <span class="c-status-badge <%= @maintenance_enabled ? 'c-status-badge--success' : 'c-status-badge--muted' %>">
             <%= @maintenance_enabled ? "Enabled" : "Disabled" %>
           </span>
           <span class="c-muted-meta">
@@ -26,10 +26,10 @@
         </div>
       </header>
 
-      <div class="u-grid" style="--u-grid-min: 340px">
-      <section class="c-card c-card--spacious u-stack u-stack--md">
-        <div class="u-actions u-actions--split">
-          <div class="u-stack u-stack--sm" style="max-width: 46rem;">
+      <div class="u-grid u-grid--form">
+      <section class="c-card u-stack u-stack--md">
+        <div class="u-responsive-split">
+          <div class="u-stack u-stack--sm u-max-w-lg">
             <h2 class="c-section-title c-heading-inline">Site-wide redirect</h2>
             <p class="c-lede">
               When enabled, non-admin users are redirected to the public maintenance page.
@@ -60,7 +60,7 @@
         </div>
       </section>
 
-      <section class="c-card c-card--spacious u-stack u-stack--md">
+      <section class="c-card u-stack u-stack--md">
         <h2 class="c-section-title c-heading-inline">What stays available</h2>
 
         <div class="c-timeline" role="list">

@@ -6,7 +6,7 @@
   Generated: <%= generated_at.strftime("%Y-%m-%d %H:%M") %>
 <% end %>
 
-<h1 class="survey-title"><%= survey.title %></h1>
+<h1 class="c-item-title"><%= survey.title %></h1>
 
 <% latest_student = Array(question_responses).filter_map { |entry| entry.updated_at || entry.created_at }.max %>
 <% latest_advisor = feedback_summary[:latest_feedback_at] %>
@@ -15,16 +15,16 @@
   <div class="col">
     <div class="label">Student</div>
     <div class="value"><%= student.full_name %></div>
-    <div class="muted"><%= student.email %></div>
-    <div class="muted">Latest student update: <%= latest_student ? latest_student.strftime("%Y-%m-%d") : "—" %></div>
+    <div class="c-muted"><%= student.email %></div>
+    <div class="c-muted">Latest student update: <%= latest_student ? latest_student.strftime("%Y-%m-%d") : "—" %></div>
   </div>
   <div class="col">
     <div class="label">Advisor</div>
     <div class="value"><%= advisor&.display_name || "Unassigned" %></div>
     <% if advisor&.email.present? %>
-      <div class="muted"><%= advisor.email %></div>
+      <div class="c-muted"><%= advisor.email %></div>
     <% end %>
-    <div class="muted">Latest advisor update: <%= latest_advisor ? latest_advisor.strftime("%Y-%m-%d") : "—" %></div>
+    <div class="c-muted">Latest advisor update: <%= latest_advisor ? latest_advisor.strftime("%Y-%m-%d") : "—" %></div>
   </div>
 </div>
 
@@ -105,9 +105,9 @@
             <td class="numeric">
               <% if row[:grade_derived_rating].present? %>
                 <%= row[:grade_derived_rating] %>
-                <div class="muted"><%= row[:grade_derived_evidence_count] %> contributing grades</div>
+                <div class="c-muted"><%= row[:grade_derived_evidence_count] %> contributing grades</div>
                 <% if row[:grade_derived_latest_at].present? %>
-                  <div class="muted"><%= row[:grade_derived_latest_at].strftime("%Y-%m-%d") %></div>
+                  <div class="c-muted"><%= row[:grade_derived_latest_at].strftime("%Y-%m-%d") %></div>
                 <% end %>
               <% else %>
                 —
@@ -197,18 +197,18 @@
           <% end %>
 
           <% question_number = (section_question_numbers[number_key] += 1) unless question.sub_question? %>
-          <div class="question-block">
-            <div class="question-header">
+          <div class="c-question-card">
+            <div class="c-question-header">
               <% if question.sub_question? %>
                 <span class="question-number">↳</span>
               <% else %>
                 <span class="question-number">Q<%= question_number %></span>
               <% end %>
               <div class="question-heading">
-                <div class="question-body"><%= render_question_prompt(question) %></div>
+                <div class="c-question-body"><%= render_question_prompt(question) %></div>
                 <% if question.question_type == "dropdown" && effective_target_level.present? %>
                   <div class="target-level-wrap">
-                    <span class="target-level-badge">End of Program Target Level: <%= effective_target_level %>/5</span>
+                    <span class="c-level-badge">End of Program Target Level: <%= effective_target_level %>/5</span>
                   </div>
                 <% end %>
               </div>
@@ -292,7 +292,7 @@
                       <li>
                         <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %> — <%= history_text %>
                         <% if history_truncated %>
-                          <span class="muted">(truncated)</span>
+                          <span class="c-muted">(truncated)</span>
                         <% end %>
                       </li>
                     <% end %>
@@ -312,8 +312,8 @@
               <% end %>
             </div>
 
-            <div class="question-meta">
-              <span class="muted">Last updated: <%= response_record&.updated_at ? response_record.updated_at.strftime("%Y-%m-%d") : "—" %></span>
+            <div class="c-muted-meta">
+              <span class="c-muted">Last updated: <%= response_record&.updated_at ? response_record.updated_at.strftime("%Y-%m-%d") : "—" %></span>
               <% unless response_record&.answer.present? %>
                 <span class="badge badge-warning">Missing</span>
               <% end %>
@@ -334,7 +334,7 @@
               <div class="feedback-header">
                 <div>
                   <strong>Advisor feedback</strong>
-                  <span class="muted">(<%= feedback_for_parent.advisor&.display_name || "—" %>)</span>
+                  <span class="c-muted">(<%= feedback_for_parent.advisor&.display_name || "—" %>)</span>
                   <span class="badge <%= feedback_status == 'Submitted' ? 'badge-success' : 'badge-warning' %>"><%= feedback_status %></span>
                 </div>
                 <div class="feedback-score">
@@ -362,12 +362,12 @@
                   <div class="feedback-empty">No feedback provided</div>
                 <% end %>
               </div>
-              <div class="feedback-meta muted">Updated: <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %></div>
+              <div class="feedback-meta c-muted">Updated: <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %></div>
             </div>
           <% end %>
         <% end %>
       <% else %>
-        <div class="empty-state">No questions recorded for this category.</div>
+        <div class="c-empty-state">No questions recorded for this category.</div>
       <% end %>
     </div>
   <% end %>
@@ -411,7 +411,7 @@
                 <div class="feedback-empty">No feedback provided</div>
               <% end %>
             </div>
-            <div class="feedback-meta muted">Updated: <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %></div>
+            <div class="feedback-meta c-muted">Updated: <%= timestamp ? timestamp.strftime("%Y-%m-%d") : "—" %></div>
           </div>
         <% end %>
       </div>
@@ -448,42 +448,26 @@
 %>
 
 <% if scored_feedback_count >= 1 %>
-  <section class="c-card summary-card" data-advisor-feedback-summary>
-    <div class="advisor-summary__header">
-      <h3 class="advisor-summary__title">Summary Statistics</h3>
-      <p class="advisor-summary__hint">Based on saved advisor scores</p>
+  <section class="c-card c-card--muted u-stack u-stack--lg" data-advisor-feedback-summary>
+    <div class="c-panel-header">
+      <h3 class="c-panel-title">Summary Statistics</h3>
+      <p class="c-muted-meta">Based on saved advisor scores</p>
     </div>
 
-    <div class="advisor-summary__grid">
-      <div class="advisor-summary__card advisor-summary__card--above">
-        <div class="advisor-summary__cardRow">
-          <div class="advisor-summary__meta">
-            <div class="advisor-summary__label">At or Above Target</div>
-            <div class="advisor-summary__percent">(<%= summary_at_pct %>%)</div>
-          </div>
-          <div class="advisor-summary__value">
-            <div class="advisor-summary__count advisor-summary__count--above"><%= summary_at_or_above %></div>
-          </div>
-        </div>
+    <div class="u-grid u-grid--2">
+      <div class="c-stat c-stat--success">
+        <div class="c-stat__label">At or Above Target</div>
+        <div class="c-stat__value"><%= summary_at_or_above %></div>
+        <div class="c-stat__subtext">(<%= summary_at_pct %>%)</div>
       </div>
 
-      <div class="advisor-summary__card advisor-summary__card--below">
-        <div class="advisor-summary__cardRow">
-          <div class="advisor-summary__meta">
-            <div class="advisor-summary__label">Below End of Program Target</div>
-            <div class="advisor-summary__percent">(<%= summary_below_pct %>%)</div>
-          </div>
-          <div class="advisor-summary__value">
-            <div class="advisor-summary__count advisor-summary__count--below"><%= summary_below %></div>
-          </div>
-        </div>
+      <div class="c-stat c-stat--warning">
+        <div class="c-stat__label">Below End of Program Target</div>
+        <div class="c-stat__value text-red-700"><%= summary_below %></div>
+        <div class="c-stat__subtext">(<%= summary_below_pct %>%)</div>
       </div>
     </div>
 
-    <div class="advisor-summary__footer">
-      <p class="advisor-summary__note">
-        Based on advisor scores (0–5) compared to each question’s program target level.
-      </p>
-    </div>
+    <p class="c-help">Based on advisor scores (0–5) compared to each question’s program target level.</p>
   </section>
 <% end %>

@@ -1,35 +1,37 @@
 # Known Issues
 
+No active release-blocking issues are known in the repository as of the latest V6 hardening pass.
+
+The notes below are resolved risks and operational guardrails retained for handoff context.
+
 ## Grade imports
 
-### Direct competency files require real student identifiers
+### Resolved: direct competency files without real student identifiers
 
 The direct competency format expects:
 
 - `Student SIS ID`
 - or `Student ID`
 
-If those values are blank, the importer cannot match or stage students correctly.
+If those values are blank, the importer now stages rows as pending student matches when `Student name` is present.
 
-Impact:
+Current behavior:
 
-- rows fail with missing identifier errors
+- rows with `Student SIS ID` or `Student ID` continue to match normally
+- rows with only `Student name` are staged with `student_identifier_type = student_name`
+- pending rows reconcile by exact student name when the student record exists
 
-### Course ratings are not semester-scoped at the storage layer
+### Resolved: legacy course ratings without an import semester
 
-`Admin > Competencies` supports a semester filter for self and advisor data.
+`Admin > Competencies`, reports, and student competency views now use `grade_import_batches.program_semester_id` when a semester filter is applied.
 
-Course ratings currently use the latest reportable imported values and are not truly filtered by semester because the grade import ratings do not store semester separately.
+Current behavior:
 
-Impact:
+- committed imports without a selected semester remain visible only in unfiltered/all-semester contexts
+- admins can assign or repair the batch semester from the batch detail page
+- semester-filtered competency views only include reportable imports for the selected semester
 
-- users may assume course values are semester-filtered when they are not
-
-Current mitigation:
-
-- the page explicitly explains this in the summary copy
-
-### Grade import processor is large
+### Partially resolved: grade import processor size
 
 [app/services/grade_imports/batch_processor.rb](../app/services/grade_imports/batch_processor.rb) handles:
 
@@ -41,14 +43,15 @@ Current mitigation:
 - mapping parsing
 - duplicate protection
 
-Impact:
+Current mitigation:
 
-- harder to maintain
-- higher regression risk when changing import behavior
+- file routing and failure diagnostics have been extracted into focused internal services
+- parser behavior is covered by direct competency, Canvas, duplicate suppression, commit, rollback, and display tests
+- additional parser extraction can continue incrementally without changing the public processor contract
 
 ## UI / admin surface area
 
-### Admin still has the densest workflow surface
+### Operational note: admin still has the densest workflow surface
 
 The admin experience is much better organized than before, but it still has the most complex operational surface in the system.
 
@@ -59,42 +62,33 @@ High-complexity areas:
 - reports
 - competencies view
 
-Impact:
+Guardrail:
 
-- onboarding takes time
-- small UX regressions matter more here
+- keep admin workflow changes covered by controller/service tests and manual smoke testing
 
 ## Testing coverage
 
-There is existing test documentation, but the highest-risk areas would still benefit from more dedicated smoke tests:
+The highest-risk areas now have dedicated automated coverage:
 
 - grade imports
 - pending reconciliation
 - competencies filtering
 - dry run commit / rollback
 
-Impact:
-
-- future refactors may break operational workflows without obvious early signals
-
 ## Data and environment
 
-### Seeded local data may not reflect production behavior
+### Operational note: seeded local data may not reflect production behavior
 
 Many admin/import workflows behave best against a realistic production clone because:
 
 - seeded students are limited
 - import matching depends heavily on real UINs / IDs / accounts
 
-Impact:
+Guardrail:
 
-- a feature can look broken locally when the issue is actually data mismatch
+- use the generated/sample import files for parser validation
+- use a production-like clone before final release signoff when validating real Canvas exports
 
 ## Documentation dependency
 
-The README points to the GitHub wiki for broader documentation.
-
-Impact:
-
-- some knowledge may still live outside the repo
-- future owners should keep repo docs and wiki docs in sync
+The README points to the GitHub wiki for broader documentation. Repo docs have been updated for the V6 import and competency behavior; keep wiki pages synchronized when deployment/admin workflows change.

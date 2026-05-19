@@ -1,9 +1,9 @@
 <!-- app/views/dashboards/student.html.erb -->
-<main class="main-content">
+<main class="c-main">
   <%= render "shared/role_switcher" %>
   
-  <div class="dashboard-grid dashboard-grid-2">
-    <div class="dashboard-column">
+  <div class="c-dashboard-grid c-dashboard-grid--2">
+    <div class="c-dashboard-column">
       <!-- To-Do Section -->
       <section class="c-card c-card--hover">
         <h2 class="c-section-title c-heading-inline">
@@ -17,17 +17,17 @@
               <% survey = entry[:survey] %>
               <% offering = @offerings_by_survey_id[survey.id] %>
               <div class="c-list-item">
-                <div class="survey-title" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <div class="c-item-title u-actions u-actions--start">
                   <span><%= survey.title %></span>
                   <span class="<%= survey_status_badge_classes(survey.is_active? ? 'Active' : 'Archived') %>"><%= survey.is_active? ? "Active" : "Archived" %></span>
                 </div>
                 <% if survey.semester.present? %>
-                  <div class="survey-meta" style="font-size: 0.85rem; color: #4b5563;">
+                  <div class="c-meta-list">
                     <%= survey.semester %>
                   </div>
                 <% end %>
                 <% if (review_note = review_meetings_note(offering)).present? %>
-                  <div class="survey-meta" style="font-size: 0.85rem; color: #4b5563;">
+                  <div class="c-meta-list">
                     Review meetings: <%= review_note %>
                   </div>
                 <% end %>
@@ -39,21 +39,21 @@
                   else
                     "Not Started"
                   end %>
-                <div class="survey-meta">
+                <div class="c-meta-list">
                   <% if entry[:available_from].present? %>
                     Available from: <%= l(entry[:available_from].in_time_zone, format: :long) %>
                   <% else %>
                     Available from: Not set
                   <% end %>
                 </div>
-                <div class="survey-meta">
+                <div class="c-meta-list">
                   <% if entry[:available_until].present? %>
                     Due: <%= l(entry[:available_until].in_time_zone, format: :long) %>
                   <% else %>
                     Due: Not set
                   <% end %>
                 </div>
-                <div class="survey-meta">
+                <div class="c-meta-list">
                   <% total_required = progress[:total_required].to_i %>
                   <% answered_required = progress[:answered_required].to_i %>
                   <% if total_required.positive? %>
@@ -62,12 +62,12 @@
                     </span>
                   <% end %>
                 </div>
-                <div class="survey-meta" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                <div class="c-meta-list u-actions u-actions--start">
                   <span class="<%= survey_status_badge_classes(completion_status) %>"><%= completion_status %></span>
                 </div>
-                <div class="survey-actions">
-                  <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
-                    <%= link_to 'Open', survey_path(survey), class: tailwind_button_classes(:primary) %>
+                <div class="c-action-stack">
+                  <div class="u-actions">
+                    <%= link_to 'Open', survey_path(survey), class: button_classes(:primary) %>
                   </div>
                 </div>
               </div>
@@ -97,17 +97,17 @@
               <% can_edit = survey.is_active? && (available_until.blank? || available_until >= Time.current) %>
               <% edit_disabled_hint = survey.is_active? ? "Edit disabled: deadline has passed." : "Edit disabled: this survey is archived." %>
               <div class="completed-item">
-                <div class="survey-title" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <div class="c-item-title u-actions u-actions--start">
                   <span><%= survey.title %></span>
                   <span class="<%= survey_status_badge_classes(survey.is_active? ? 'Active' : 'Archived') %>"><%= survey.is_active? ? "Active" : "Archived" %></span>
                 </div>
                 <% if survey.semester.present? %>
-                  <div class="survey-meta" style="font-size: 0.85rem; color: #4b5563;">
+                  <div class="c-meta-list">
                     <%= survey.semester %>
                   </div>
                 <% end %>
                 <% if (review_note = review_meetings_note(offering)).present? %>
-                  <div class="survey-meta" style="font-size: 0.85rem; color: #4b5563;">
+                  <div class="c-meta-list">
                     Review meetings: <%= review_note %>
                   </div>
                 <% end %>
@@ -119,14 +119,14 @@
                   else
                     "Not Started"
                   end %>
-                <div class="survey-meta">
+                <div class="c-meta-list">
                   <% if available_from.present? %>
                     Available from: <%= l(available_from.in_time_zone, format: :long) %>
                   <% else %>
                     Available from: Not set
                   <% end %>
                 </div>
-                <div class="survey-meta">
+                <div class="c-meta-list">
                   <% if available_until.present? %>
                     Due: <%= l(available_until.in_time_zone, format: :long) %>
                   <% else %>
@@ -134,7 +134,7 @@
                   <% end %>
                 </div>
 
-                <div class="survey-meta">
+                <div class="c-meta-list">
                   <% total_required = progress[:total_required].to_i %>
                   <% answered_required = progress[:answered_required].to_i %>
                   <% if total_required.positive? %>
@@ -144,17 +144,17 @@
                   <% end %>
                 </div>
 
-                <div class="survey-meta" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                <div class="c-meta-list u-actions u-actions--start">
                   <span class="<%= survey_status_badge_classes(completion_status) %>"><%= completion_status %></span>
                 </div>
-                <div class="survey-actions">
-                  <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
-                    <%= link_to 'Review', survey_response_path(survey_response), class: tailwind_button_classes(:secondary) %>
+                <div class="c-action-stack">
+                  <div class="u-actions">
+                    <%= link_to 'Review', survey_response_path(survey_response), class: button_classes(:secondary) %>
                     <% if can_edit %>
-                      <%= link_to 'Edit', survey_path(survey), class: tailwind_button_classes(:secondary) %>
+                      <%= link_to 'Edit', survey_path(survey), class: button_classes(:secondary) %>
                     <% else %>
                         <span
-                          class="<%= tailwind_button_classes(:secondary) %> opacity-50 cursor-not-allowed"
+                          class="<%= button_classes(:secondary) %> u-disabled"
                           role="button"
                           aria-disabled="true"
                           tabindex="0"
@@ -163,7 +163,7 @@
                         </span>
                         <span id="edit-disabled-hint-completed<%= survey.id %>" class="sr-only"><%= edit_disabled_hint %></span>
                     <% end %>
-                    <%= link_to 'Download PDF', download_survey_response_path(survey_response, token: download_token), class: tailwind_button_classes(:primary), target: "_blank", rel: "noopener noreferrer" %>
+                    <%= link_to 'Download PDF', download_survey_response_path(survey_response, token: download_token), class: button_classes(:primary), target: "_blank", rel: "noopener noreferrer" %>
                   </div>
                 </div>
               </div>
@@ -178,7 +178,7 @@
     <!-- Notifications Section -->
     <section class="c-card c-card--hover">
       <h2 class="c-section-title c-heading-inline">
-        <div class="section-icon"></div>
+        <div class="c-section-icon"></div>
         Notifications
       </h2>
       
@@ -186,16 +186,16 @@
         <% if @dashboard_notifications.present? %>
           <% @dashboard_notifications.each do |notification| %>
             <div class="c-list-item c-media<%= notification.read? ? '' : ' is-unread' %>">
-              <div class="flex h-10 w-10 items-center justify-center rounded-full c-icon-circle" aria-hidden="true">
+              <div class="u-flex u-items-center u-justify-center u-size-lg u-rounded-full c-icon-circle" aria-hidden="true">
                 <span class="c-icon-button__icon">
                   <span class="sr-only">Notification</span>
-                  <%= image_tag "notification-icon.png", alt: "", class: "notification-icon-img", aria: { hidden: true } %>
+                  <%= image_tag "notification-icon.png", alt: "", class: "c-notification-icon", aria: { hidden: true } %>
                 </span>
               </div>
               <div class="c-media__content">
                 <%= link_to notification.title, notification_path(notification), class: "c-media__title-link" %>
 
-                <p class="c-help" style="margin-top: var(--spacing-xs);">
+                <p class="c-help">
                   <%= truncate(notification.message, length: 120) %>
                 </p>
 
@@ -204,22 +204,22 @@
                 </time>
 
                 <% if (target = notification.target_path_for(current_user)).present? %>
-                  <div style="margin-top: var(--spacing-md);">
-                    <%= link_to "Open related record", target, class: tailwind_button_classes(:subtle) %>
+                  <div class="mt-lg">
+                    <%= link_to "Open related record", target, class: button_classes(:subtle) %>
                   </div>
                 <% end %>
               </div>
             </div>
           <% end %>
-          <div style="display: flex; justify-content: flex-end;">
-            <%= link_to "View all notifications", notifications_path, class: tailwind_button_classes(:secondary) %>
+          <div class="u-actions">
+            <%= link_to "View all notifications", notifications_path, class: button_classes(:secondary) %>
           </div>
         <% else %>
           <div class="c-list-item c-media">
-            <div class="flex h-10 w-10 items-center justify-center rounded-full c-icon-circle" aria-hidden="true">
+            <div class="u-flex u-items-center u-justify-center u-size-lg u-rounded-full c-icon-circle" aria-hidden="true">
               <span class="c-icon-button__icon">
                 <span class="sr-only">Notification</span>
-                <%= image_tag "notification-icon.png", alt: "", class: "notification-icon-img", aria: { hidden: true } %>
+                <%= image_tag "notification-icon.png", alt: "", class: "c-notification-icon", aria: { hidden: true } %>
               </span>
             </div>
             <div class="c-media__content">

@@ -15,6 +15,7 @@ class Survey < ApplicationRecord
   has_many :offerings, class_name: "SurveyOffering", inverse_of: :survey, dependent: :destroy
   has_many :survey_response_versions, dependent: :delete_all
   has_many :survey_assignments, inverse_of: :survey, dependent: :destroy
+  has_many :advisor_feedback_submissions, dependent: :destroy
   has_many :survey_change_logs, dependent: :nullify
   has_many :feedbacks, foreign_key: :survey_id, class_name: "Feedback", dependent: :destroy
   has_many :student_questions, through: :questions

@@ -1,29 +1,32 @@
-<main class="main-content">
+<main class="c-main">
   <div class="c-toolbar c-toolbar--spaced">
     <div class="c-toolbar__row">
       <% if current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
-        <%= link_to "← Back", admin_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+        <%= link_to "← Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
       <% else %>
-        <%= link_to "← Back", advisor_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+        <%= link_to "← Back", advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
       <% end %>
     </div>
   </div>
 
-  <section class="c-card p-8 md:p-10 u-stack u-stack--xl">
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <h1 class="c-section-title c-heading-inline">Program Reports</h1>
-      <p class="mt-1 text-sm leading-relaxed text-slate-600">Monitor cohort progress, advisor alignment, and competency trends in real time.</p>
-    </div>
+  <section class="c-card c-card--spacious u-stack u-stack--xl">
+    <header class="c-page-header">
+      <div>
+        <p class="c-eyebrow">Reports</p>
+        <h1 class="c-page-title c-page-title--brand">Program Reports</h1>
+        <p class="c-page-subtitle">Monitor cohort progress, advisor alignment, and competency trends in real time.</p>
+      </div>
+    </header>
 
     <div
-      class="reports-app-root c-card c-card--flush"
+      class="c-analytics-root c-card c-card--flush"
       data-controller="reports"
       data-reports-pdf-url-value="<%= export_reports_pdf_path("dashboard") %>"
       data-reports-excel-url-value="<%= export_reports_excel_path %>"
     ></div>
 
     <noscript>
-      <p class="reports-noscript rounded-md bg-amber-100 px-4 py-3 text-sm font-medium text-amber-900">Analytics require JavaScript. Please enable it to view the interactive dashboard.</p>
+      <p class="c-callout c-callout--warning">Analytics require JavaScript. Please enable it to view the interactive dashboard.</p>
     </noscript>
   </section>
 </main>

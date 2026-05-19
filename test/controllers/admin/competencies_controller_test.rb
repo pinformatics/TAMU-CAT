@@ -43,6 +43,190 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Competencies"
     assert_includes response.body, "Course competency rule"
     assert_includes response.body, "Global setting applied to course-derived competency values for all users."
+    assert_includes response.body, "Detailed competencies"
+    assert_includes response.body, admin_competency_path(students(:student))
+    assert_includes response.body, "Health Care Environment and Community"
+  end
+
+  test "competency overview compares ratings against program targets" do
+    sign_in @admin
+    student = students(:student)
+    met_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    below_title = Reports::DataAggregator::COMPETENCY_TITLES.second
+
+    [ met_title, below_title ].each do |title|
+      CompetencyTargetLevel.create!(
+        program_semester: program_semesters(:fall_2025),
+        track: student.track,
+        class_of: student.program_year,
+        competency_title: title,
+        target_level: 3
+      )
+    end
+
+    create_course_rating(student: student, competency_title: met_title, level: 4.0)
+    create_course_rating(student: student, competency_title: below_title, level: 2.0)
+
+    get admin_competencies_path
+
+    assert_response :success
+    assert_includes response.body, "Detailed competencies"
+    assert_includes response.body, "c-score-pill--met"
+    assert_includes response.body, "c-score-pill--below"
+    assert_includes response.body, "c-table--sm"
+    assert_includes response.body, "c-score-pill--self"
+    assert_includes response.body, "c-score-pill--advisor"
+    assert_includes response.body, "Course score from imported course competency data. Program target for #{met_title}: 3"
+  end
+
+  test "competency overview uses submitted survey response versions when student question rows are absent" do
+    sign_in @admin
+    student = students(:student)
+    survey = Survey.new(
+      title: "Versioned Competency Survey",
+      program_semester: program_semesters(:fall_2025),
+      is_active: true
+    )
+    survey.save!(validate: false)
+    section = SurveySection.create!(survey: survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = Category.create!(survey: survey, section: section, name: "Health Care Environment and Community")
+    first_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    second_title = Reports::DataAggregator::COMPETENCY_TITLES.second
+    first_question = category.questions.create!(
+      question_text: first_title,
+      question_type: "dropdown",
+      question_order: 1,
+      answer_options: %w[1 2 3 4 5]
+    )
+    second_question = category.questions.create!(
+      question_text: second_title,
+      question_type: "dropdown",
+      question_order: 2,
+      answer_options: %w[1 2 3 4 5]
+    )
+
+    StudentQuestion.where(student_id: student.student_id, question_id: [ first_question.id, second_question.id ]).delete_all
+    SurveyResponseVersion.create!(
+      student_id: student.student_id,
+      survey_id: survey.id,
+      event: "submitted",
+      answers: {
+        (first_question.id + 100).to_s => "4",
+        (second_question.id + 100).to_s => "2"
+      }
+    )
+
+    get admin_competencies_path(q: @student.email, semester: program_semesters(:fall_2025).name)
+
+    assert_response :success
+    assert_includes response.body, first_title
+    assert_match(/>\s*4\s*</, response.body)
+    assert_match(/>\s*2\s*</, response.body)
+  end
+
+  test "competency overview reads advisor feedback scores from survey feedback rows" do
+    sign_in @admin
+    student = students(:student)
+    survey = surveys(:fall_2025)
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    section = SurveySection.find_or_create_by!(survey: survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = survey.categories.create!(name: "Advisor Feedback Competencies", section: section)
+    question = category.questions.create!(
+      question_text: competency_title,
+      question_type: "dropdown",
+      question_order: 1,
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    Feedback.create!(
+      student: student,
+      advisor: advisors(:advisor),
+      survey: survey,
+      category: category,
+      question: question,
+      average_score: 4
+    )
+
+    payload = Admin::CompetencyMatrix.new(
+      params: { q: @student.email, semester: survey.program_semester.name },
+      actor_user: @admin
+    ).call
+    row = payload[:students].find { |student_row| student_row[:id] == student.student_id }
+
+    assert_equal 4.0, row.dig(:ratings, competency_title, :advisor_rating)
+  end
+
+  test "competency overview uses submitted advisor review survey values when feedback rows are absent" do
+    sign_in @admin
+    student = students(:student)
+    survey = Survey.new(
+      title: "Submitted Advisor Review Competency Survey",
+      program_semester: program_semesters(:fall_2025),
+      is_active: true
+    )
+    survey.save!(validate: false)
+    section = SurveySection.create!(survey: survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = Category.create!(survey: survey, section: section, name: "Health Care Environment and Community")
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    question = category.questions.create!(
+      question_text: competency_title,
+      question_type: "dropdown",
+      question_order: 1,
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    SurveyResponseVersion.create!(
+      student_id: student.student_id,
+      survey_id: survey.id,
+      event: "submitted",
+      answers: { question.id.to_s => "3" }
+    )
+    AdvisorFeedbackSubmission.create!(
+      student_id: student.student_id,
+      survey_id: survey.id,
+      advisor_id: @advisor.id,
+      last_saved_at: Time.current,
+      submitted_at: Time.current
+    )
+
+    payload = Admin::CompetencyMatrix.new(
+      params: { q: @student.email, semester: survey.program_semester.name },
+      actor_user: @admin
+    ).call
+    row = payload[:students].find { |student_row| student_row[:id] == student.student_id }
+
+    assert_equal 3.0, row.dig(:ratings, competency_title, :advisor_rating)
+  end
+
+  test "admin can view detailed student competency dashboard" do
+    sign_in @admin
+
+    get admin_competency_path(students(:student))
+
+    assert_response :success
+    assert_includes response.body, "#{@student.display_name} Competencies"
+    assert_includes response.body, "Competency Snapshot"
+    assert_includes response.body, "Semester Trend"
+    assert_includes response.body, "Export CSV"
+    assert_includes response.body, admin_competencies_path
+  end
+
+  test "advisor can view detailed dashboard for assigned student" do
+    sign_in @advisor
+
+    get admin_competency_path(students(:student))
+
+    assert_response :success
+    assert_includes response.body, "#{@student.display_name} Competencies"
+    assert_includes response.body, "Competency Snapshot"
+  end
+
+  test "advisor cannot view detailed dashboard for unassigned student" do
+    sign_in @advisor
+
+    get admin_competency_path(students(:other_student))
+
+    assert_response :not_found
   end
 
   test "advisor filter options stay scoped to assigned students" do

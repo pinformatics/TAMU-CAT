@@ -1,281 +1,278 @@
-<main class="main-content main-content--dashboard">
-  <div class="c-toolbar c-toolbar--spaced">
-    <div class="c-toolbar__row">
-      <%= link_to "← Back to Surveys", assignments_surveys_path, class: tailwind_button_classes(:secondary) %>
-    </div>
-  </div>
-
-  <section
-    class="c-card p-8 md:p-10"
-    data-controller="assignment-students"
-    data-assignment-students-survey-number-value="<%= @survey_number %>"
-    data-assignment-students-survey-title-value="<%= @survey.title %>"
-  >
-    <% total_students = @students&.size.to_i %>
-    <% assigned_students = 0 %>
-    <% completed_students = 0 %>
-    <% overdue_students = 0 %>
-    <% @students.to_a.each do |student| %>
-      <% assignment = @assignments_by_student_id&.[](student.student_id) %>
-      <% next unless assignment.present? %>
-      <% assigned_students += 1 %>
-      <% if assignment.completed_at? %>
-        <% completed_students += 1 %>
-      <% elsif assignment.overdue? %>
-        <% overdue_students += 1 %>
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section
+      class="u-stack u-stack--lg"
+      data-controller="assignment-students"
+      data-assignment-students-survey-number-value="<%= @survey_number %>"
+      data-assignment-students-survey-title-value="<%= @survey.title %>"
+    >
+      <% total_students = @students&.size.to_i %>
+      <% assigned_students = 0 %>
+      <% completed_students = 0 %>
+      <% overdue_students = 0 %>
+      <% @students.to_a.each do |student| %>
+        <% assignment = @assignments_by_student_id&.[](student.student_id) %>
+        <% next unless assignment.present? %>
+        <% assigned_students += 1 %>
+        <% if assignment.completed_at? %>
+          <% completed_students += 1 %>
+        <% elsif assignment.overdue? %>
+          <% overdue_students += 1 %>
+        <% end %>
       <% end %>
-    <% end %>
-    <% unassigned_students = [total_students - assigned_students, 0].max %>
+      <% unassigned_students = [total_students - assigned_students, 0].max %>
+      <% back_path = current_user&.role_admin? ? admin_surveys_path(anchor: "active-surveys") : assignments_surveys_path %>
 
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <div class="c-header-row">
-        <h1 class="c-section-title c-heading-inline">📝 Survey Assignment</h1>
-        <div class="c-muted-meta"><%= pluralize(total_students, "student") %></div>
-      </div>
-      <p class="mt-1 text-sm leading-relaxed text-slate-600">Survey #<%= @survey_number %>: <%= @survey.title %></p>
-      <p class="mt-1 text-sm leading-relaxed text-slate-600">
-        Default deadline:
-        <strong><%= @survey.available_until.present? ? format_calendar_date(@survey.available_until) : "No deadline" %></strong>
-      </p>
-    </div>
-
-    <div class="c-stats-grid">
-      <div class="c-stat c-stat--info">
-        <div class="c-stat__label">Assigned</div>
-        <div class="c-stat__value c-stat__value--md"><%= assigned_students %></div>
-      </div>
-
-      <div class="c-stat c-stat--success">
-        <div class="c-stat__label">Completed</div>
-        <div class="c-stat__value c-stat__value--md"><%= completed_students %></div>
-      </div>
-
-      <div class="c-stat c-stat--warning">
-        <div class="c-stat__label">Overdue</div>
-        <div class="c-stat__value c-stat__value--md"><%= overdue_students %></div>
-      </div>
-
-      <div class="c-stat c-stat--muted">
-        <div class="c-stat__label">Unassigned</div>
-        <div class="c-stat__value c-stat__value--md"><%= unassigned_students %></div>
-      </div>
-    </div>
-
-    <% unless @survey.is_active? %>
-      <div class="c-callout c-callout--warning">
-        This survey is archived. New assignments and deadline extensions are disabled.
-      </div>
-    <% end %>
-
-    <section class="c-card c-card--flush c-toolbar--spaced">
-      <div class="c-panel-header">
-        <h2 class="c-panel-title">Bulk assignment and deadlines</h2>
-        <p class="c-panel-subtitle">Choose track/year to auto-select matching students, then run bulk actions from the controls row.</p>
-      </div>
-
-      <div class="c-panel-body">
-        <% recent_year_options = Array(@year_options).last(2) %>
-
-        <div class="c-filter-grid">
-          <div class="c-field">
-            <label for="student_search" class="c-label">Search students</label>
-            <input
-              id="student_search"
-              type="text"
-              placeholder="Search by name or email"
-              class="c-input c-search-input w-full pr-16"
-              data-assignment-students-target="search"
-              data-action="input->assignment-students#filterRows"
-            >
+      <section class="c-card c-card--brand">
+        <header class="c-page-header">
+          <div>
+            <p class="c-eyebrow">Survey assignment</p>
+            <h1 class="c-page-title c-page-title--brand"><%= @survey.title %></h1>
+            <p class="c-page-subtitle">
+              Survey #<%= @survey_number %> ·
+              Default deadline:
+              <strong><%= @survey.available_until.present? ? format_calendar_date(@survey.available_until) : "No deadline" %></strong>
+            </p>
           </div>
 
-          <div class="c-field">
-            <label for="bulk_track_filter" class="c-label">Choose track</label>
-            <%= select_tag :bulk_track_filter,
-                           options_for_select([ ["Select all tracks", ""], ["Residential", "Residential"], ["Executive", "Executive"] ], @default_track_label),
-                           id: "bulk_track_filter",
-                           class: "c-select w-full",
-                           data: { assignment_students_target: "trackFilter", action: "change->assignment-students#applyFiltersToSelection" } %>
+          <div class="u-actions">
+            <%= link_to "Back to Survey Builder", back_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <% if current_user&.role_admin? %>
+              <%= link_to "Edit Survey", edit_admin_survey_path(@survey), class: button_classes(:primary) %>
+            <% end %>
           </div>
+        </header>
+      </section>
 
-          <div class="c-field">
-            <label for="bulk_year_filter" class="c-label">Choose year</label>
-            <%= select_tag :bulk_year_filter,
-                           options_for_select([ ["All years", ""] ] + recent_year_options.map { |year| [year, year] }),
-                           id: "bulk_year_filter",
-                           class: "c-select w-full",
-                           data: { assignment_students_target: "yearFilter", action: "change->assignment-students#applyFiltersToSelection" } %>
-          </div>
-
-          <div class="c-field">
-            <label for="bulk_due_date" class="c-label">Due date</label>
-            <%= datetime_field_tag :bulk_due_date,
-                                   nil,
-                                   id: "bulk_due_date",
-                                   disabled: !@survey.is_active?,
-                                   class: "c-input",
-                                   data: { assignment_students_target: "dueDateInput" } %>
-          </div>
-
-          <div class="c-field">
-            <label class="c-label c-label--placeholder" aria-hidden="true">Clear</label>
-            <button
-              type="button"
-              class="<%= tailwind_button_classes(:secondary) %> w-full"
-              data-action="assignment-students#clearFiltersAndSelection"
-            >
-              Clear
-            </button>
-          </div>
+      <section class="c-stats-grid">
+        <div class="c-stat c-stat--info">
+          <div class="c-stat__label">Assigned</div>
+          <div class="c-stat__value c-stat__value--md"><%= assigned_students %></div>
         </div>
 
-      </div>
-    </section>
+        <div class="c-stat c-stat--success">
+          <div class="c-stat__label">Completed</div>
+          <div class="c-stat__value c-stat__value--md"><%= completed_students %></div>
+        </div>
 
-    <% if @students.present? %>
-      <div class="c-card c-card--flush">
+        <div class="c-stat c-stat--warning">
+          <div class="c-stat__label">Overdue</div>
+          <div class="c-stat__value c-stat__value--md"><%= overdue_students %></div>
+        </div>
+
+        <div class="c-stat c-stat--muted">
+          <div class="c-stat__label">Unassigned</div>
+          <div class="c-stat__value c-stat__value--md"><%= unassigned_students %></div>
+        </div>
+      </section>
+
+      <% unless @survey.is_active? %>
+        <div class="c-callout c-callout--warning">
+          This survey is archived. New assignments and deadline extensions are disabled.
+        </div>
+      <% end %>
+
+      <section class="c-card c-card--flush u-overflow-hidden">
         <div class="c-panel-header c-panel-header--with-border">
-          <div class="c-header-row">
-            <h2 class="c-panel-title">Student assignment status</h2>
-            <div class="c-muted-meta"><%= pluralize(total_students, "student") %></div>
+          <div class="u-responsive-split u-w-full">
+            <div class="u-stack u-stack--sm">
+              <h2 class="c-panel-title">Bulk Assignment And Deadlines</h2>
+              <p class="c-panel-subtitle">Filter students, choose a due date, then apply assignment changes from the action bar.</p>
+            </div>
+            <span class="c-status-badge c-status-badge--muted"><%= pluralize(total_students, "student") %></span>
           </div>
-          <p class="c-panel-subtitle">Use filters above to narrow the list, then select students to apply bulk actions.</p>
         </div>
 
-        <div class="c-selection-row">
-          <div class="c-selection-row__left">
-            <input
-              id="select_all_students"
-              type="checkbox"
-              class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              data-assignment-students-target="selectAll"
-              data-action="change->assignment-students#toggleAll"
-            >
-            <label for="select_all_students" class="font-medium">Select all filtered students</label>
-          </div>
-          <p class="c-help" data-assignment-students-target="counter">No students selected.</p>
-        </div>
+        <div class="c-panel-body">
+          <% recent_year_options = Array(@year_options).last(2) %>
 
-        <div class="c-table-wrapper">
+          <div class="c-filter-grid">
+            <div class="c-field">
+              <label for="student_search" class="c-label">Search Students</label>
+              <input
+                id="student_search"
+                type="text"
+                placeholder="Search by name or email"
+                class="c-input c-search-input u-w-full"
+                data-assignment-students-target="search"
+                data-action="input->assignment-students#filterRows"
+              >
+            </div>
+
+            <div class="c-field">
+              <label for="bulk_track_filter" class="c-label">Track</label>
+              <%= select_tag :bulk_track_filter,
+                             options_for_select([ ["Select all tracks", ""], ["Residential", "Residential"], ["Executive", "Executive"] ], @default_track_label),
+                             id: "bulk_track_filter",
+                             class: "c-select u-w-full",
+                             data: { assignment_students_target: "trackFilter", action: "change->assignment-students#applyFiltersToSelection" } %>
+            </div>
+
+            <div class="c-field">
+              <label for="bulk_year_filter" class="c-label">Class Year</label>
+              <%= select_tag :bulk_year_filter,
+                             options_for_select([ ["All years", ""] ] + recent_year_options.map { |year| [year, year] }),
+                             id: "bulk_year_filter",
+                             class: "c-select u-w-full",
+                             data: { assignment_students_target: "yearFilter", action: "change->assignment-students#applyFiltersToSelection" } %>
+            </div>
+
+            <div class="c-field">
+              <label for="bulk_due_date" class="c-label">Student Due Date</label>
+              <%= datetime_field_tag :bulk_due_date,
+                                     nil,
+                                     id: "bulk_due_date",
+                                     disabled: !@survey.is_active?,
+                                     class: "c-input",
+                                     data: { assignment_students_target: "dueDateInput" } %>
+            </div>
+
+            <div class="c-field">
+              <label class="c-label c-label--placeholder" aria-hidden="true">Clear</label>
+              <button
+                type="button"
+                class="<%= button_classes(:secondary) %> u-w-full"
+                data-action="assignment-students#clearFiltersAndSelection"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <% if @students.present? %>
+        <section class="c-card c-card--flush u-overflow-hidden">
+          <div class="c-panel-header c-panel-header--with-border">
+            <div class="u-responsive-split u-w-full">
+              <div class="u-stack u-stack--sm">
+                <h2 class="c-panel-title">Student Assignment Status</h2>
+                <p class="c-panel-subtitle">Select students to assign, unassign, or update individual assignment deadlines.</p>
+              </div>
+              <p class="c-muted-meta" data-assignment-students-target="counter">No students selected.</p>
+            </div>
+          </div>
+
+          <div class="c-selection-row">
+            <div class="c-selection-row__left">
+              <input
+                id="select_all_students"
+                type="checkbox"
+                class="c-choice"
+                data-assignment-students-target="selectAll"
+                data-action="change->assignment-students#toggleAll"
+              >
+              <label for="select_all_students" class="c-label">Select all filtered students</label>
+            </div>
+          </div>
+
           <%= render TableComponent.new(
-          headers: ["Select", "Student", "Track", "Class Year", "Status", "Last Notified", "Completed At", "Closes", "Actions"],
-          right_align: []
-        ) do %>
-          <% @students.each do |student| %>
-            <% assignment = @assignments_by_student_id&.[](student.student_id) %>
-            <% assigned = assignment.present? %>
-            <% completed = assignment&.completed_at? %>
-            <% overdue = assignment&.overdue? %>
-            <% status_text = if completed
-                               "Completed"
-                             elsif assigned && overdue
-                               "Overdue"
-                             elsif assigned
-                               "Assigned"
-                             else
-                               "Unassigned"
-                             end %>
-            <% effective_due_at = assignment&.available_until.presence || @survey.available_until %>
-            <% due_label = if assigned
-                             effective_due_at.present? ? format_calendar_date(effective_due_at) : "No deadline"
-                           else
-                             ""
-                           end %>
-            <% completed_label = assignment&.completed_at.present? ? (l(assignment.completed_at, format: :long) rescue assignment.completed_at.to_fs(:long)) : "—" %>
-            <% last_notified_at = assignment&.id.present? ? @last_notified_at_by_assignment_id&.[](assignment.id) : nil %>
-            <% last_notified_label = last_notified_at.present? ? (l(last_notified_at, format: :short) rescue last_notified_at.to_fs(:short)) : "—" %>
+            headers: ["Select", "Student", "Track", "Class Year", "Status", "Last Notified", "Completed", "Closes", "Changes"],
+            right_align: []
+          ) do %>
+            <% @students.each do |student| %>
+              <% assignment = @assignments_by_student_id&.[](student.student_id) %>
+              <% assigned = assignment.present? %>
+              <% completed = assignment&.completed_at? %>
+              <% overdue = assignment&.overdue? %>
+              <% status_text = if completed
+                                  "Completed"
+                                elsif assigned && overdue
+                                  "Overdue"
+                                elsif assigned
+                                  "Assigned"
+                                else
+                                  "Unassigned"
+                                end %>
+              <% effective_due_at = assignment&.available_until.presence || @survey.available_until %>
+              <% due_label = if assigned
+                                effective_due_at.present? ? format_calendar_date(effective_due_at) : "No deadline"
+                              else
+                                "—"
+                              end %>
+              <% completed_label = assignment&.completed_at.present? ? (l(assignment.completed_at, format: :long) rescue assignment.completed_at.to_fs(:long)) : "—" %>
+              <% last_notified_at = assignment&.id.present? ? @last_notified_at_by_assignment_id&.[](assignment.id) : nil %>
+              <% last_notified_label = last_notified_at.present? ? (l(last_notified_at, format: :short) rescue last_notified_at.to_fs(:short)) : "—" %>
 
-            <tr
-              class="transition hover:bg-slate-50"
-              data-assignment-students-target="row"
-              data-student-name="<%= student.full_name.presence || student.email %>"
-              data-student-email="<%= student.email %>"
-              data-student-track="<%= student.track_key.to_s %>"
-              data-student-program-year="<%= student.program_year.to_s %>"
-            >
-              <td class="px-4 py-3 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  value="<%= student.student_id %>"
-                  class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  data-assignment-students-target="checkbox"
-                  data-action="change->assignment-students#markChanged"
-                >
-              </td>
+              <tr
+                data-assignment-students-target="row"
+                data-student-name="<%= student.full_name.presence || student.email %>"
+                data-student-email="<%= student.email %>"
+                data-student-track="<%= student.track_key.to_s %>"
+                data-student-program-year="<%= student.program_year.to_s %>"
+              >
+                <td>
+                  <input
+                    type="checkbox"
+                    value="<%= student.student_id %>"
+                    class="c-choice"
+                    data-assignment-students-target="checkbox"
+                    data-action="change->assignment-students#markChanged"
+                  >
+                </td>
 
-              <td class="px-4 py-3 text-sm text-slate-700">
-                <div class="font-semibold text-slate-900"><%= student.full_name.presence || student.email %></div>
-                <div class="mt-1 text-xs text-slate-500 space-y-1">
-                  <% if student.uin.present? %><div><%= student.uin %></div><% end %>
-                  <% if student.email.present? %><div><%= student.email %></div><% end %>
-                </div>
-              </td>
+                <td>
+                  <div class="c-table__title"><%= student.full_name.presence || student.email %></div>
+                  <div class="c-table__meta u-stack u-stack--xs">
+                    <% if student.uin.present? %><span><%= student.uin %></span><% end %>
+                    <% if student.email.present? %><span><%= student.email %></span><% end %>
+                  </div>
+                </td>
 
-              <td class="px-4 py-3 text-sm text-slate-700"><%= student.track.presence || "—" %></td>
-
-              <td class="px-4 py-3 text-sm text-slate-700"><%= student.program_year.presence || "—" %></td>
-
-              <td class="px-4 py-3 text-sm text-slate-700">
-                <span class="<%= survey_status_badge_classes(status_text) %>"><%= status_text %></span>
-              </td>
-
-              <td class="px-4 py-3 text-sm text-slate-700"><%= last_notified_label %></td>
-
-              <td class="px-4 py-3 text-sm text-slate-700"><%= completed_label %></td>
-
-              <td class="px-4 py-3 text-sm text-slate-700"><%= due_label %></td>
-
-              <td class="px-4 py-3 text-sm text-slate-700">
-                <span class="c-change-indicator" data-assignment-students-target="rowIndicator">No changes</span>
-              </td>
-            </tr>
+                <td><%= student.track.presence || "—" %></td>
+                <td><%= student.program_year.presence || "—" %></td>
+                <td><span class="<%= survey_status_badge_classes(status_text) %>"><%= status_text %></span></td>
+                <td><%= last_notified_label %></td>
+                <td><%= completed_label %></td>
+                <td><%= due_label %></td>
+                <td><span class="c-change-indicator" data-assignment-students-target="rowIndicator">No changes</span></td>
+              </tr>
+            <% end %>
           <% end %>
-          <% end %>
-        </div>
 
-        <div class="c-actions-row c-actions-row--split">
-          <div class="c-actions-row__item">
-            <%= link_to "Cancel", assignments_surveys_path, class: tailwind_button_classes(:secondary) %>
-          </div>
-
-          <div class="c-actions-row__group">
-            <div class="c-actions-row__item c-actions-row__item--sm">
-              <%= form_with url: unassign_selected_assignments_survey_path(@survey), method: :delete, local: true, class: "w-full", data: { action: "submit->assignment-students#prepareUnassign" } do %>
-                <%= hidden_field_tag :track, "", data: { assignment_students_target: "unassignTrackHidden" } %>
-                <%= hidden_field_tag :program_year, "", data: { assignment_students_target: "unassignYearHidden" } %>
-                <div data-assignment-students-target="unassignSelection"></div>
-                <%= submit_tag "Unassign", class: "#{tailwind_button_classes(:danger)} w-full", disabled: !@survey.is_active? %>
-              <% end %>
+          <div class="c-actions-row c-actions-row--split">
+            <div class="c-actions-row__item">
+              <%= link_to "Cancel", back_path, class: button_classes(:secondary), data: { turbo: false } %>
             </div>
 
-            <div class="c-actions-row__item c-actions-row__item--sm">
-              <%= form_with url: assign_all_assignments_survey_path(@survey), method: :post, local: true, class: "w-full", data: { action: "submit->assignment-students#prepareAssignGroup" } do %>
-                <%= hidden_field_tag :track, "", data: { assignment_students_target: "assignTrackHidden" } %>
-                <%= hidden_field_tag :program_year, "", data: { assignment_students_target: "assignYearHidden" } %>
-                <%= hidden_field_tag :available_until, "", data: { assignment_students_target: "assignDueHidden" } %>
-                <div data-assignment-students-target="assignSelection"></div>
-                <%= submit_tag "Assign", class: "#{tailwind_button_classes(:primary)} w-full", disabled: !@survey.is_active? %>
-              <% end %>
-            </div>
+            <div class="c-actions-row__group">
+              <div class="c-actions-row__item c-actions-row__item--sm">
+                <%= form_with url: unassign_selected_assignments_survey_path(@survey), method: :delete, local: true, class: "u-w-full", data: { action: "submit->assignment-students#prepareUnassign" } do %>
+                  <%= hidden_field_tag :track, "", data: { assignment_students_target: "unassignTrackHidden" } %>
+                  <%= hidden_field_tag :program_year, "", data: { assignment_students_target: "unassignYearHidden" } %>
+                  <div data-assignment-students-target="unassignSelection"></div>
+                  <%= submit_tag "Unassign", class: "#{button_classes(:danger)} u-w-full", disabled: !@survey.is_active? %>
+                <% end %>
+              </div>
 
-            <div class="c-actions-row__item c-actions-row__item--md">
-              <%= form_with url: extend_group_deadline_assignments_survey_path(@survey), method: :patch, local: true, class: "w-full", data: { action: "submit->assignment-students#prepareExtendDeadline" } do %>
-                <%= hidden_field_tag :track, "", data: { assignment_students_target: "extendTrackHidden" } %>
-                <%= hidden_field_tag :program_year, "", data: { assignment_students_target: "extendYearHidden" } %>
-                <%= hidden_field_tag :new_available_until, "", data: { assignment_students_target: "extendDueHidden" } %>
-                <div data-assignment-students-target="extendSelection"></div>
-                <%= submit_tag "Change Deadline", class: "#{tailwind_button_classes(:secondary)} w-full", disabled: !@survey.is_active? %>
-              <% end %>
+              <div class="c-actions-row__item c-actions-row__item--sm">
+                <%= form_with url: assign_all_assignments_survey_path(@survey), method: :post, local: true, class: "u-w-full", data: { action: "submit->assignment-students#prepareAssignGroup" } do %>
+                  <%= hidden_field_tag :track, "", data: { assignment_students_target: "assignTrackHidden" } %>
+                  <%= hidden_field_tag :program_year, "", data: { assignment_students_target: "assignYearHidden" } %>
+                  <%= hidden_field_tag :available_until, "", data: { assignment_students_target: "assignDueHidden" } %>
+                  <div data-assignment-students-target="assignSelection"></div>
+                  <%= submit_tag "Assign", class: "#{button_classes(:primary)} u-w-full", disabled: !@survey.is_active? %>
+                <% end %>
+              </div>
+
+              <div class="c-actions-row__item c-actions-row__item--md">
+                <%= form_with url: extend_group_deadline_assignments_survey_path(@survey), method: :patch, local: true, class: "u-w-full", data: { action: "submit->assignment-students#prepareExtendDeadline" } do %>
+                  <%= hidden_field_tag :track, "", data: { assignment_students_target: "extendTrackHidden" } %>
+                  <%= hidden_field_tag :program_year, "", data: { assignment_students_target: "extendYearHidden" } %>
+                  <%= hidden_field_tag :new_available_until, "", data: { assignment_students_target: "extendDueHidden" } %>
+                  <div data-assignment-students-target="extendSelection"></div>
+                  <%= submit_tag "Change Deadline", class: "#{button_classes(:secondary)} u-w-full", disabled: !@survey.is_active? %>
+                <% end %>
+              </div>
             </div>
           </div>
+        </section>
+      <% else %>
+        <div class="c-empty-state c-card c-tile">
+          <div class="c-tile__title">No students available</div>
+          <div class="c-tile__description">Students assigned to you will appear here for survey assignment.</div>
         </div>
-      </div>
-    <% else %>
-      <div class="empty-state c-card c-tile">
-        <div class="c-tile__icon" aria-hidden="true">📭</div>
-        <div class="c-tile__title">No students available</div>
-        <div class="c-tile__description">Students assigned to you will appear here for survey assignment.</div>
-      </div>
-    <% end %>
-  </section>
+      <% end %>
+    </section>
+  </div>
 </main>

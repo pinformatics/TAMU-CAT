@@ -1,9 +1,9 @@
 require "csv"
 
 class Admin::GradeImportBatchesController < Admin::BaseController
-  IMPORT_EXTENSIONS = %w[.xlsx .xlsm .csv].freeze
+  IMPORT_EXTENSIONS = GradeImports::FileUploadRouter::SUPPORTED_EXTENSIONS
 
-  before_action :set_batch, only: %i[show commit rollback recommit destroy export_ratings error_report]
+  before_action :set_batch, only: %i[show commit rollback recommit semester destroy export_ratings error_report]
 
   def index
     @batches = GradeImportBatch.includes(:uploaded_by, :grade_import_files).order(created_at: :desc).limit(100)
@@ -108,6 +108,18 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     )
 
     redirect_to admin_grade_import_batch_path(@batch), notice: "Batch recommitted. Its course competency data is visible in the app again."
+  end
+
+  def semester
+    @batch.update!(program_semester_id: grade_import_batch_params[:program_semester_id].presence)
+
+    message = if @batch.program_semester.present?
+      "Batch semester updated to #{@batch.program_semester.name}."
+    else
+      "Batch semester cleared. It will only appear in unfiltered course competency views."
+    end
+
+    redirect_to admin_grade_import_batch_path(@batch), notice: message
   end
 
   def destroy

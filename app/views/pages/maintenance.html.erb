@@ -4,23 +4,23 @@
   <%= render "shared/login_navbar" %>
 <% end %>
 
-<div class="page-title">
-  <div class="survey-meta">
-    <span class="status-badge status-badge--muted">Status 503</span>
+<div class="c-page-banner">
+  <div class="c-meta-list">
+    <span class="c-status-badge c-status-badge--muted">Status 503</span>
   </div>
   <h1 class="text-primary">Under Maintenance</h1>
-  <p class="page-subtitle">The portal is temporarily unavailable due to maintenance or a login provider issue.</p>
+  <p class="c-page-subtitle">The portal is temporarily unavailable due to maintenance or a login provider issue.</p>
 </div>
 
-<section class="c-card maintenance-card">
-  <p class="text-base maintenance-body">
+<section class="c-card c-narrow-card">
+  <p class="text-base c-rich-text">
     Please try again in a few minutes. If you need help, contact support at
     <a class="text-primary font-semibold" href="mailto:ruoqiwei@tamu.edu">ruoqiwei@tamu.edu</a>.
   </p>
 
-  <div class="heading-actions mt-xl">
-    <%= link_to "Try signing in again", new_user_session_path, class: tailwind_button_classes(:primary) %>
-    <button type="button" onclick="window.location.reload()" class="<%= tailwind_button_classes(:secondary) %>">
+  <div class="u-actions u-actions--start mt-xl">
+    <%= link_to "Try signing in again", new_user_session_path, class: button_classes(:primary) %>
+    <button type="button" onclick="window.location.reload()" class="<%= button_classes(:secondary) %>">
       Reload page
     </button>
   </div>

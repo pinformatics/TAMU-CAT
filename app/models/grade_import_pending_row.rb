@@ -29,6 +29,11 @@ class GradeImportPendingRow < ApplicationRecord
       values[:email] = student.user.email.downcase
     end
 
+    if student.user&.name.present?
+      clauses << "(student_identifier_type = 'student_name' AND LOWER(student_name) = :student_name)"
+      values[:student_name] = student.user.name.downcase
+    end
+
     return none if clauses.empty?
 
     scope.where(clauses.join(" OR "), values)

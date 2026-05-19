@@ -18,7 +18,7 @@ export default class extends Controller {
   show(tabId) {
     this.buttonTargets.forEach((button) => {
       const active = button.dataset.tabId === tabId
-      button.classList.toggle("reports-tabs__button--active", active)
+      button.classList.toggle("is-active", active)
       button.setAttribute("aria-selected", active ? "true" : "false")
       button.tabIndex = active ? 0 : -1
     })

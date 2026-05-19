@@ -1318,6 +1318,10 @@ module Reports
         scope = scope.where(students: { track: filters[:track] }) if filters[:track]
         scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
         scope = scope.where(student_id: filters[:student_id]) if filters[:student_id]
+        if filters[:semester]
+          semester = ProgramSemester.find_by_name_case_insensitive(filters[:semester])
+          scope = semester ? scope.where(grade_import_batches: { program_semester_id: semester.id }) : scope.none
+        end
 
         if filters[:competency]
           competency_name = competency_lookup[filters[:competency]]&.dig(:name)

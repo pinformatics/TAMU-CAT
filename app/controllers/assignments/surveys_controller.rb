@@ -13,6 +13,12 @@ module Assignments
 
     # Lists surveys with their categories and questions.
     def index
+      if current_user&.role_admin?
+        redirect_to admin_surveys_path(anchor: "active-surveys"),
+                    notice: "Survey assignments are now managed from Survey Builder."
+        return
+      end
+
       @surveys = Survey.includes(:categories, :questions).order(created_at: :desc)
     end
 

@@ -1,43 +1,40 @@
-<section class="c-card p-8 md:p-10">
-  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-    <div class="flex items-baseline justify-between gap-4">
+<section class="c-card u-stack u-stack--lg">
+  <div class="u-responsive-split">
+    <div class="u-responsive-row">
       <h2 class="c-section-title c-heading-inline">Member Management</h2>
-      <div class="text-sm text-slate-500">
+      <div class="c-muted">
         <%= pluralize(@users.size, "member") %>
       </div>
     </div>
-    <p class="mt-1 text-sm leading-relaxed text-slate-600">Manage member roles and permissions for the MHA Program.</p>
+    <p class="c-lede">Manage member roles and permissions for the MHA Program.</p>
   </div>
 
-  <div class="c-stats-grid grid grid-cols-1 gap-4 my-6 items-stretch sm:grid-cols-3">
-    <div class="c-stat c-stat--info bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl shadow p-5 flex flex-col !items-center !justify-center !text-center w-full h-full">
-      <div class="c-stat__icon mb-2 text-3xl">👨‍🎓</div>
-      <div class="c-stat__label text-base font-semibold text-blue-800">Students</div>
-      <div class="c-stat__value c-stat__value--md text-4xl font-bold text-blue-900 mt-1"><%= @role_counts[:student] %></div>
+  <div class="c-stats-grid">
+    <div class="c-stat c-stat--info">
+      <div class="c-stat__label">Students</div>
+      <div class="c-stat__value c-stat__value--md"><%= @role_counts[:student] %></div>
     </div>
 
-    <div class="c-stat c-stat--success bg-gradient-to-br from-green-100 to-green-50 rounded-xl shadow p-5 flex flex-col !items-center !justify-center !text-center w-full h-full">
-      <div class="c-stat__icon mb-2 text-3xl">👨‍🏫</div>
-      <div class="c-stat__label text-base font-semibold text-green-800">Advisors</div>
-      <div class="c-stat__value c-stat__value--md text-4xl font-bold text-green-900 mt-1"><%= @role_counts[:advisor] %></div>
+    <div class="c-stat c-stat--success">
+      <div class="c-stat__label">Advisors</div>
+      <div class="c-stat__value c-stat__value--md"><%= @role_counts[:advisor] %></div>
     </div>
 
-    <div class="c-stat c-stat--warning bg-gradient-to-br from-yellow-100 to-yellow-50 rounded-xl shadow p-5 flex flex-col !items-center !justify-center !text-center w-full h-full">
-      <div class="c-stat__icon mb-2 text-3xl">👨‍💼</div>
-      <div class="c-stat__label text-base font-semibold text-yellow-800">Admins</div>
-      <div class="c-stat__value c-stat__value--md text-4xl font-bold text-yellow-900 mt-1"><%= @role_counts[:admin] %></div>
+    <div class="c-stat c-stat--warning">
+      <div class="c-stat__label">Admins</div>
+      <div class="c-stat__value c-stat__value--md"><%= @role_counts[:admin] %></div>
     </div>
   </div>
 
-  <div class="my-6 c-callout">
-    <div class="mb-2 text-sm font-semibold text-slate-700">Search members</div>
-    <form class="c-toolbar__row c-toolbar__row--airy w-full md:flex-nowrap" action="<%= people_management_path %>" accept-charset="UTF-8" method="get">
+  <div class="c-callout">
+    <div class="c-callout__title">Search members</div>
+    <form class="c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" action="<%= people_management_path %>" accept-charset="UTF-8" method="get">
       <input type="hidden" name="tab" value="members">
-      <div class="c-toolbar__item relative flex-1">
+      <div class="c-toolbar__item u-relative u-flex-1">
         <label class="sr-only" for="q">Search</label>
-        <input type="text" name="q" id="q" value="<%= params[:q].to_s %>" placeholder="Search by name, email, or UID" class="c-input c-search-input w-full pr-16">
+        <input type="text" name="q" id="q" value="<%= params[:q].to_s %>" placeholder="Search by name, email, or UID" class="c-input c-search-input u-w-full">
       </div>
-      <div class="c-toolbar__item flex items-center gap-2">
+      <div class="c-toolbar__item u-flex u-items-center u-gap-sm">
         <button name="button" type="submit" class="btn btn-secondary">Search</button>
         <% if params[:q].present? %>
           <%= link_to "Reset", people_management_path(tab: "members"), class: "btn btn-subtle" %>
@@ -58,7 +55,7 @@
             <th class="table-header-name">Name</th>
             <th class="table-header-current-role">
               Role
-              <div class="text-xs text-slate-500 font-normal">
+              <div class="c-table__meta">
                 Click a role tag to change the role.
               </div>
             </th>
@@ -68,18 +65,18 @@
         <tbody>
           <% @users.each do |user| %>
             <tr class="c-table-row <%= 'current-user' if user == current_user %>">
-              <td class="px-3 py-3 text-center align-middle">
+              <td class="u-text-center">
                 <% if user == current_user %>
                   <span class="c-help">-</span>
                 <% else %>
                   <input type="checkbox"
-                         class="member-select-checkbox h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                         class="member-select-checkbox"
                          value="<%= user.id %>"
                          data-user-id="<%= user.id %>"
                          aria-label="Select <%= user.email %> for removal" />
                 <% end %>
               </td>
-              <td class="user-avatar-cell">
+              <td>
                 <div class="c-table-avatar"
                      <% if user.avatar_url.present? %>
                        style="background-image: url('<%= user.avatar_url %>');"
@@ -89,25 +86,25 @@
               </td>
               <td class="user-name-cell">
                 <div class="c-value"><%= user.full_name || "N/A" %></div>
-                <div class="mt-1 text-xs text-slate-500">
+                <div class="c-table__meta">
                   Email: <%= user.email.presence || "—" %>
                 </div>
               </td>
               <td class="user-current-role-cell">
                 <div class="role-edit-container" data-user-id="<%= user.id %>">
-                  <div class="role-badge <%= user.role || 'student' %> inline-flex role-badge-clickable" id="role_badge_<%= user.id %>" tabindex="0" style="cursor:pointer;">
+                  <div class="c-role-badge c-role-badge--<%= user.role || 'student' %> u-inline-flex js-role-badge" id="role_badge_<%= user.id %>" tabindex="0" style="cursor:pointer;">
                     <%= (user.role || 'student').upcase %>
                   </div>
                   <% if user == current_user %>
-                    <div class="mt-2">
+                    <div class="u-mt-sm">
                       <span class="c-help">Role Locked</span>
                     </div>
                   <% else %>
-                    <div class="mt-2 c-select-wrapper" id="role_select_wrapper_<%= user.id %>" style="display:none;">
+                    <div class="u-mt-sm c-select-wrapper" id="role_select_wrapper_<%= user.id %>" style="display:none;">
                       <%= select_tag "role_updates[#{user.id}]",
                           options_for_select(User.roles.map { |key, value| [key.titleize, key] }, user.role || 'student'),
                           {
-                            class: 'c-select w-full',
+                            class: 'c-select u-w-full',
                             data: {
                               user_id: user.id,
                               current_role: user.role || 'student',
@@ -134,22 +131,22 @@
       </table>
     </div>
 
-    <div class="c-toolbar mt-6">
-      <div class="c-toolbar__row items-center w-full gap-3 justify-between">
-        <div class="shrink-0">
-          <%= link_to "Back", admin_dashboard_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar u-mt-lg">
+      <div class="c-toolbar__row u-items-center u-w-full u-gap-md u-justify-between">
+        <div class="u-shrink-0">
+          <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
         </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <div class="text-sm text-slate-600" id="changes-summary" style="display: none;">
-            <span id="role-changes-count" class="c-change-indicator changed whitespace-nowrap">0 changes pending</span>
+        <div class="u-actions">
+          <div class="c-lede" id="changes-summary" style="display: none;">
+            <span id="role-changes-count" class="c-change-indicator changed u-whitespace-nowrap">0 changes pending</span>
           </div>
           <%= button_tag "Delete Selected",
                          type: :submit,
                          form: "batch-remove-form",
-                         class: tailwind_button_classes(:danger),
+                         class: button_classes(:danger),
                          id: "delete-selected-btn",
                          disabled: true %>
-          <%= form.submit "Save Changes", class: tailwind_button_classes(:primary), id: "save-changes-btn", disabled: true %>
+          <%= form.submit "Save Changes", class: button_classes(:primary), id: "save-changes-btn", disabled: true %>
         </div>
       </div>
     </div>
@@ -259,7 +256,7 @@
           if (selectedRole === originalRole) {
             delete pendingChanges[userId];
             badge.textContent = originalRole.toUpperCase();
-            badge.className = `role-badge ${originalRole || 'student'} inline-flex role-badge-clickable`;
+            badge.className = `c-role-badge c-role-badge--${originalRole || 'student'} inline-flex js-role-badge`;
             if (indicator && !memberCheckboxes.find(box => box.dataset.userId === userId && box.checked)) {
               indicator.textContent = 'No changes';
               indicator.className = 'c-change-indicator';
@@ -267,7 +264,7 @@
           } else {
             pendingChanges[userId] = selectedRole;
             badge.textContent = selectedRole.toUpperCase();
-            badge.className = `role-badge ${selectedRole || 'student'} inline-flex role-badge-clickable`;
+            badge.className = `c-role-badge c-role-badge--${selectedRole || 'student'} inline-flex js-role-badge`;
             if (indicator) {
               indicator.textContent = `${originalRole} → ${selectedRole}`;
               indicator.className = 'c-change-indicator changed';
@@ -279,7 +276,7 @@
         });
       });
 
-      form.querySelectorAll('.role-badge-clickable').forEach(badge => {
+      form.querySelectorAll('.js-role-badge').forEach(badge => {
         badge.addEventListener('click', () => {
           const userId = badge.id.replace('role_badge_', '');
           const wrapper = document.getElementById(`role_select_wrapper_${userId}`);

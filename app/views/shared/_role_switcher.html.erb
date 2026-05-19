@@ -18,7 +18,7 @@
           <%= key.to_s.titleize %> (current)
         </span>
       <% else %>
-        <%= button_to "Switch to #{key.to_s.titleize}", switch_role_path(role: value), method: :post, data: { turbo: false }, class: tailwind_button_classes(:secondary, extra_classes: "btn-sm") %>
+        <%= button_to "Switch to #{key.to_s.titleize}", switch_role_path(role: value), method: :post, data: { turbo: false }, class: button_classes(:secondary, extra_classes: "btn-sm") %>
       <% end %>
     <% end %>
   </div>

@@ -225,25 +225,53 @@ class StudentCompetencyDashboard
   end
 
   def self_ratings
-    @self_ratings ||= latest_rating_lookup(
-      filtered_by_semester(self_rating_scope)
+    @self_ratings ||= begin
+      lookup = latest_rating_lookup(
+        filtered_by_semester(self_rating_scope)
         .select("questions.question_text, student_questions.response_value, student_questions.updated_at, student_questions.id")
         .order("questions.question_text ASC, student_questions.updated_at DESC, student_questions.id DESC"),
-      value_method: :response_value
-    )
+        value_method: :response_value
+      )
+
+      version_ratings = CompetencySurveyVersionRatings.call(
+        student_ids: [ student.student_id ],
+        survey_scope: self_rating_version_survey_scope,
+        competency_titles: COMPETENCY_TITLES
+      ).fetch(student.student_id, {})
+
+      version_ratings.each do |title, value|
+        lookup[title] ||= value
+      end
+
+      lookup
+    end
   end
 
   def advisor_ratings
-    @advisor_ratings ||= latest_rating_lookup(
-      filtered_by_semester(
-        Feedback
-          .joins(:question, survey: :program_semester)
-          .where(student_id: student.student_id, questions: { question_text: COMPETENCY_TITLES })
+    @advisor_ratings ||= begin
+      lookup = latest_rating_lookup(
+        filtered_by_semester(
+          Feedback
+            .joins(:question, survey: :program_semester)
+            .where(student_id: student.student_id, questions: { question_text: COMPETENCY_TITLES })
+        )
+          .select("questions.question_text, feedback.average_score, feedback.updated_at, feedback.id")
+          .order("questions.question_text ASC, feedback.updated_at DESC, feedback.id DESC"),
+        value_method: :average_score
       )
-        .select("questions.question_text, feedback.average_score, feedback.updated_at, feedback.id")
-        .order("questions.question_text ASC, feedback.updated_at DESC, feedback.id DESC"),
-      value_method: :average_score
-    )
+
+      submitted_ratings = CompetencySurveyVersionRatings.call(
+        student_ids: [ student.student_id ],
+        survey_scope: submitted_advisor_feedback_survey_scope,
+        competency_titles: COMPETENCY_TITLES
+      ).fetch(student.student_id, {})
+
+      submitted_ratings.each do |title, value|
+        lookup[title] ||= value
+      end
+
+      lookup
+    end
   end
 
   def advisor_visible?
@@ -336,6 +364,26 @@ class StudentCompetencyDashboard
     return scope if filters[:semester].blank?
 
     scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
+  end
+
+  def self_rating_version_survey_scope
+    scope = Survey.joins(:program_semester)
+    if filters[:semester].present?
+      scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
+    end
+    scope
+  end
+
+  def submitted_advisor_feedback_survey_scope
+    scope = Survey
+      .joins(:program_semester, :advisor_feedback_submissions)
+      .merge(AdvisorFeedbackSubmission.submitted.where(student_id: student.student_id))
+
+    if filters[:semester].present?
+      scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
+    end
+
+    scope.distinct
   end
 
   def normalize_rating(value)

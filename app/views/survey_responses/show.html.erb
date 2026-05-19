@@ -1,4 +1,4 @@
-<div class="survey-container survey-show mx-auto w-full space-y-8 px-4 sm:px-6 lg:px-4" style="max-width: 90rem;">
+<div data-survey-scroll-scope class="c-document-shell">
   <% return_to = @return_to.presence %>
   <% back_path = return_to.presence || student_dashboard_path %>
   <% viewer_is_student_owner = defined?(current_user) && current_user.present? && current_user.role == 'student' && @survey_response&.student.present? && (current_user.id == @survey_response.student.user&.id) %>
@@ -8,16 +8,16 @@
 
   <div class="c-toolbar c-toolbar--spaced">
     <div class="c-toolbar__row">
-      <%= link_to "← Back", back_path, class: tailwind_button_classes(:secondary) %>
+      <%= link_to "← Back", back_path, class: button_classes(:secondary) %>
       <% if viewer_is_student_owner %>
         <% viewing_latest_version = !(defined?(@versions) && @versions.present?) || @selected_version.blank? || @selected_version == @versions.last %>
         <% can_edit = viewing_latest_version && can_edit_by_closing_time && survey_active_for_edit %>
         <% edit_disabled_hint = !survey_active_for_edit ? "Edit disabled: this survey is archived." : (!can_edit_by_closing_time ? "Edit disabled: deadline has passed." : "Edit disabled for this version.") %>
         <% if can_edit %>
-          <%= link_to "Edit", survey_path(@survey_response.survey, return_to: request.fullpath), class: tailwind_button_classes(:secondary) %>
+          <%= link_to "Edit", survey_path(@survey_response.survey, return_to: request.fullpath), class: button_classes(:secondary) %>
         <% else %>
           <span
-            class="<%= tailwind_button_classes(:secondary) %> opacity-50 cursor-not-allowed"
+            class="<%= button_classes(:secondary) %> u-disabled"
             aria-disabled="true"
             tabindex="0"
             role="button"
@@ -30,7 +30,7 @@
       <% end %>
       <%= link_to "Download as PDF",
                   download_survey_response_path(@survey_response, token: @survey_response.signed_download_token),
-                  class: tailwind_button_classes(:primary),
+                  class: button_classes(:primary),
                   target: "_blank",
                   rel: "noopener noreferrer" %>
 
@@ -43,18 +43,18 @@
         <% latest_version = @versions.last %>
         <% is_latest_version = (defined?(@selected_version) && @selected_version.present?) ? (@selected_version == latest_version) : true %>
 
-        <div class="ml-auto c-version-nav">
+        <div class="u-ml-auto c-version-nav">
           <%# Previous/Next version arrows. Default view is "latest" (no version_id). %>
           <% if defined?(@previous_version) && @previous_version.present? %>
             <%= link_to "←",
                         survey_response_path(@survey_response.id, version_id: @previous_version.id, return_to: return_to),
-                        class: tailwind_button_classes(:secondary, extra_classes: "c-version-nav__arrow"),
+                        class: button_classes(:secondary, extra_classes: "c-version-nav__arrow"),
                         aria: { label: "Previous version" } %>
           <% else %>
-            <span class="<%= tailwind_button_classes(:secondary, extra_classes: "c-version-nav__arrow") %>" aria-disabled="true">←</span>
+            <span class="<%= button_classes(:secondary, extra_classes: "c-version-nav__arrow") %>" aria-disabled="true">←</span>
           <% end %>
 
-          <span class="c-version-nav__label text-xs text-slate-600">
+          <span class="c-version-nav__label c-help">
             <% if total_versions > 0 && version_number.present? %>
               Version <%= version_number %>/<%= total_versions %>
             <% else %>
@@ -73,10 +73,10 @@
           <% if defined?(@next_version) && @next_version.present? %>
             <%= link_to "→",
                         survey_response_path(@survey_response.id, version_id: @next_version.id, return_to: return_to),
-                        class: tailwind_button_classes(:secondary, extra_classes: "c-version-nav__arrow"),
+                        class: button_classes(:secondary, extra_classes: "c-version-nav__arrow"),
                         aria: { label: "Next version" } %>
           <% else %>
-            <span class="<%= tailwind_button_classes(:secondary, extra_classes: "c-version-nav__arrow") %>" aria-disabled="true">→</span>
+            <span class="<%= button_classes(:secondary, extra_classes: "c-version-nav__arrow") %>" aria-disabled="true">→</span>
           <% end %>
         </div>
       <% end %>
@@ -87,16 +87,16 @@
 
   <div class="c-toolbar c-toolbar--spaced">
     <div class="c-toolbar__row">
-      <%= link_to "← Back", back_path, class: tailwind_button_classes(:secondary) %>
+      <%= link_to "← Back", back_path, class: button_classes(:secondary) %>
       <% if viewer_is_student_owner %>
         <% viewing_latest_version = !(defined?(@versions) && @versions.present?) || @selected_version.blank? || @selected_version == @versions.last %>
         <% can_edit = viewing_latest_version && can_edit_by_closing_time && survey_active_for_edit %>
         <% edit_disabled_hint = !survey_active_for_edit ? "Edit disabled: this survey is archived." : (!can_edit_by_closing_time ? "Edit disabled: deadline has passed." : "Edit disabled for this version.") %>
         <% if can_edit %>
-          <%= link_to "Edit", survey_path(@survey_response.survey, return_to: request.fullpath), class: tailwind_button_classes(:secondary) %>
+          <%= link_to "Edit", survey_path(@survey_response.survey, return_to: request.fullpath), class: button_classes(:secondary) %>
         <% else %>
           <span
-            class="<%= tailwind_button_classes(:secondary) %> opacity-50 cursor-not-allowed"
+            class="<%= button_classes(:secondary) %> u-disabled"
             aria-disabled="true"
             tabindex="0"
             role="button"
@@ -109,7 +109,7 @@
       <% end %>
       <%= link_to "Download as PDF",
                   download_survey_response_path(@survey_response, token: @survey_response.signed_download_token),
-                  class: tailwind_button_classes(:primary),
+                  class: button_classes(:primary),
                   target: "_blank",
                   rel: "noopener noreferrer" %>
 
@@ -122,18 +122,18 @@
         <% latest_version = @versions.last %>
         <% is_latest_version = (defined?(@selected_version) && @selected_version.present?) ? (@selected_version == latest_version) : true %>
 
-        <div class="ml-auto c-version-nav">
+        <div class="u-ml-auto c-version-nav">
           <%# Previous/Next version arrows. Default view is "latest" (no version_id). %>
           <% if defined?(@previous_version) && @previous_version.present? %>
             <%= link_to "←",
                         survey_response_path(@survey_response.id, version_id: @previous_version.id, return_to: return_to),
-                        class: tailwind_button_classes(:secondary, extra_classes: "c-version-nav__arrow"),
+                        class: button_classes(:secondary, extra_classes: "c-version-nav__arrow"),
                         aria: { label: "Previous version" } %>
           <% else %>
-            <span class="<%= tailwind_button_classes(:secondary, extra_classes: "c-version-nav__arrow") %>" aria-disabled="true">←</span>
+            <span class="<%= button_classes(:secondary, extra_classes: "c-version-nav__arrow") %>" aria-disabled="true">←</span>
           <% end %>
 
-          <span class="c-version-nav__label text-xs text-slate-600">
+          <span class="c-version-nav__label c-help">
             <% if total_versions > 0 && version_number.present? %>
               Version <%= version_number %>/<%= total_versions %>
             <% else %>
@@ -152,10 +152,10 @@
           <% if defined?(@next_version) && @next_version.present? %>
             <%= link_to "→",
                         survey_response_path(@survey_response.id, version_id: @next_version.id, return_to: return_to),
-                        class: tailwind_button_classes(:secondary, extra_classes: "c-version-nav__arrow"),
+                        class: button_classes(:secondary, extra_classes: "c-version-nav__arrow"),
                         aria: { label: "Next version" } %>
           <% else %>
-            <span class="<%= tailwind_button_classes(:secondary, extra_classes: "c-version-nav__arrow") %>" aria-disabled="true">→</span>
+            <span class="<%= button_classes(:secondary, extra_classes: "c-version-nav__arrow") %>" aria-disabled="true">→</span>
           <% end %>
         </div>
       <% end %>

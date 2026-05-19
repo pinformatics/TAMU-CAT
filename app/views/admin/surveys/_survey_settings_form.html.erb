@@ -22,23 +22,23 @@
       <%= form.label :title, "Survey title", class: "c-label" %>
       <%= form.text_field :title,
                           required: true,
-                          class: "#{input_classes} c-input w-full",
+                          class: "#{input_classes} c-input u-w-full",
                           placeholder: "Capstone Competency Survey" %>
     </div>
 
     <div class="c-field">
       <%= form.label :semester, "Semester", class: "c-label" %>
       <% if @program_semester_options.present? %>
-        <div class="c-select-wrapper max-w-md">
+        <div class="c-select-wrapper u-max-w-md">
           <%= form.select :semester,
                           options_for_select(@program_semester_options, survey.semester.presence || @program_semester_options.first),
                           { include_blank: "Select semester" },
-                          class: "c-select w-full" %>
+                          class: "c-select u-w-full" %>
         </div>
       <% else %>
         <%= form.text_field :semester,
                             required: true,
-                            class: "#{input_classes} c-input max-w-md",
+                            class: "#{input_classes} c-input u-max-w-md",
                             placeholder: "Fall 2025" %>
       <% end %>
     </div>
@@ -47,22 +47,22 @@
       <label for="survey-track-list" class="c-label">Track assignment</label>
       <%= hidden_field_tag "survey[track_list][]", "" %>
       <% track_dropdown_options = [["Select a track", ""]] + track_options.map { |track| [track, track] } %>
-      <div class="c-select-wrapper max-w-md">
+      <div class="c-select-wrapper u-max-w-md">
         <%= select_tag "survey[track_list][]",
                        options_for_select(track_dropdown_options, survey.track_list.first),
                        id: "survey-track-list",
-                       class: "c-select w-full" %>
+                       class: "c-select u-w-full" %>
       </div>
     </div>
 
     <div class="c-field">
       <%= form.label :available_from, "Available from", class: "c-label" %>
-      <%= form.datetime_local_field :available_from, class: "#{input_classes} c-input max-w-md" %>
+      <%= form.datetime_local_field :available_from, class: "#{input_classes} c-input u-max-w-md" %>
     </div>
 
     <div class="c-field">
       <%= form.label :available_until, "Available until", class: "c-label" %>
-      <%= form.datetime_local_field :available_until, class: "#{input_classes} c-input max-w-md" %>
+      <%= form.datetime_local_field :available_until, class: "#{input_classes} c-input u-max-w-md" %>
     </div>
 
     <div class="c-field md:col-span-2">

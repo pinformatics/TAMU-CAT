@@ -3,23 +3,23 @@
 <% survey = sr&.survey %>
 
 <%- content_for :header do -%>
-  <div style="display:flex; justify-content:space-between; align-items:center;">
+  <div class="u-actions u-actions--split">
     <div>
-      <div class="survey-title"><%= survey&.title.presence || "Survey ##{survey&.id}" %></div>
-      <div style="font-size:0.9rem; color:#444;">Student: <%= sr&.student&.user&.name.presence || "Student ##{sr&.student_id}" %></div>
+      <div class="c-item-title"><%= survey&.title.presence || "Survey ##{survey&.id}" %></div>
+      <div class="c-help">Student: <%= sr&.student&.user&.name.presence || "Student ##{sr&.student_id}" %></div>
     </div>
-    <div style="text-align:right; font-size:0.9rem; color:#444;">
+    <div class="c-help u-text-right">
       <div>Printed: <%= Time.current.strftime('%Y-%m-%d') %></div>
     </div>
   </div>
 <%- end -%>
 
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: .75rem;">
+<div class="u-actions u-actions--split">
   <div>
-    <a href="<%= student_dashboard_path %>" class="<%= tailwind_button_classes(:secondary) %>">← Back</a>
+    <a href="<%= student_dashboard_path %>" class="<%= button_classes(:secondary) %>">← Back</a>
   </div>
   <div>
-    <button onclick="window.print();" class="<%= tailwind_button_classes(:primary) %>">Print</button>
+    <button onclick="window.print();" class="<%= button_classes(:primary) %>">Print</button>
   </div>
 </div>
 

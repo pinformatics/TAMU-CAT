@@ -12,19 +12,19 @@
 
       /* Header */
       .print-header { display: block; margin-bottom: 6mm }
-      .survey-title { font-size: 1.1rem; font-weight: 700 }
+      .c-item-title { font-size: 1.1rem; font-weight: 700 }
 
       /* Content */
       .category-block { margin-bottom: 8mm }
-      .question-block { margin-bottom: 6mm }
-      .question-text { margin-bottom: .25rem }
+      .c-question-card { margin-bottom: 6mm }
+      .c-question-body { margin-bottom: .25rem }
 
       /* Controls render as text */
       input[disabled], textarea[disabled], select[disabled], .form-control[disabled] { border: none !important; background: transparent !important; box-shadow: none !important; padding: 0; margin: 0; font: inherit }
       textarea[disabled] { white-space: pre-wrap }
 
       /* Prevent breaking inside question blocks */
-      .question-block { page-break-inside: avoid; break-inside: avoid }
+      .c-question-card { page-break-inside: avoid; break-inside: avoid }
 
       /* Print cleanup and footer */
       @media print {

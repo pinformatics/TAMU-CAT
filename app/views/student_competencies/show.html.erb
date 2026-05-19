@@ -1,29 +1,43 @@
 <% selected_semester = @payload.dig(:filters, :semester).presence || "All semesters" %>
 <% show_advisor = @payload[:show_advisor] %>
+<% page_title = @competency_page_title.presence || "My Competencies" %>
+<% page_subtitle = @competency_page_subtitle.presence || (show_advisor ? "Self, advisor, course, and target levels in one semester view." : "Self, course, and target levels in one semester view.") %>
+<% back_path = @competency_back_path %>
+<% form_path = @competency_form_path.presence || student_competencies_path %>
+<% export_path = @competency_export_path.presence || student_competencies_path(format: :csv, semester: @payload.dig(:filters, :semester)) %>
 
-<main class="main-content c-page">
+<main class="c-main c-page">
   <header class="c-card c-page-header">
     <div class="u-stack u-stack--sm">
       <span class="c-eyebrow"><%= selected_semester %></span>
-      <h1 class="c-page-title">My Competencies</h1>
-      <p class="c-page-subtitle"><%= show_advisor ? "Self, advisor, course, and target levels in one semester view." : "Self, course, and target levels in one semester view." %></p>
+      <h1 class="c-page-title"><%= page_title %></h1>
+      <p class="c-page-subtitle"><%= page_subtitle %></p>
     </div>
 
-    <%= link_to "Export CSV",
-          student_competencies_path(format: :csv, semester: @payload.dig(:filters, :semester)),
-          class: tailwind_button_classes(:secondary),
-          data: { turbo: false } %>
+    <div class="u-actions">
+      <% if back_path.present? %>
+        <%= link_to "Back",
+              back_path,
+              class: button_classes(:ghost),
+              data: { turbo: false } %>
+      <% end %>
+
+      <%= link_to "Export CSV",
+            export_path,
+            class: button_classes(:secondary),
+            data: { turbo: false } %>
+    </div>
   </header>
 
   <section class="c-card c-card--tight">
-    <%= form_with url: student_competencies_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
+    <%= form_with url: form_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
       <div class="c-filter-bar__field">
         <label class="c-label" for="semester">Semester</label>
         <%= select_tag :semester,
               options_for_select(@payload[:semesters], @payload.dig(:filters, :semester)),
               class: "c-select" %>
       </div>
-      <%= submit_tag "Apply", class: tailwind_button_classes(:primary) %>
+      <%= submit_tag "Apply", class: button_classes(:primary) %>
       <span class="c-status-pill <%= @payload[:course_released] ? 'c-status-pill--success' : 'c-status-pill--warning' %>">
         Course results: <%= @payload[:release_label] %>
       </span>

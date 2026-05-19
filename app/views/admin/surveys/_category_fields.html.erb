@@ -8,7 +8,7 @@
 <% end %>
 <% category_uid = category.persisted? ? "category-#{category.id}" : "category-temp-#{category.object_id}" %>
 <article id="<%= category_uid %>"
-         class="c-card survey-category-card c-builder-node c-builder-collapsible space-y-6"
+         class="c-card c-builder-node c-builder-collapsible space-y-6"
          data-builder-kind="category"
          data-builder-label="<%= category.name.to_s.strip.presence || 'Untitled category' %>"
          data-category-fields-target="item">
@@ -54,14 +54,14 @@
     </div>
 
     <button type="button"
-            class="<%= tailwind_button_classes(:secondary, extra_classes: 'btn-sm') %> text-rose-600"
+            class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %> text-rose-600"
             data-action="category-fields#remove">
       <span aria-hidden="true">🗑️</span>
       <span>Remove</span>
     </button>
   </div>
 
-  <div class="survey-builder-category-body c-builder-collapsible__body space-y-5" data-builder-category-body>
+  <div class="c-builder-collapsible__body space-y-5" data-builder-category-body>
     <div class="space-y-2">
       <%= category_fields.label :description, "Description", class: "block text-sm font-medium text-slate-700" %>
       <%= category_fields.text_area :description, class: textarea_classes, placeholder: "Optional context shown to advisors and students." %>

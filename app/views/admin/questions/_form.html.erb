@@ -10,14 +10,14 @@
     </div>
   <% end %>
 
-  <div class="survey-form-layout">
+  <div class="c-form-layout">
     <div class="u-stack u-stack--2xl">
-      <section class="c-card form-card">
-        <header class="form-card-header">
-          <span class="step-pill">Question Details</span>
+      <section class="c-card c-form-card">
+        <header class="c-form-card__header">
+          <span class="c-step-pill">Question Details</span>
           <div>
             <h2 class="section-heading">Prompt content</h2>
-            <p class="section-subtext">Define the prompt, type, and ordering so it appears correctly in surveys.</p>
+            <p class="c-help">Define the prompt, type, and ordering so it appears correctly in surveys.</p>
           </div>
         </header>
 
@@ -51,7 +51,7 @@
 
           <div class="c-field">
             <%= form.label :question_type, "Question type", class: "c-label" %>
-            <%= form.select :question_type, Question.question_types.keys.map { |type| [type.humanize, type] }, {}, class: "c-select w-full", required: true %>
+            <%= form.select :question_type, Question.question_types.keys.map { |type| [type.humanize, type] }, {}, class: "c-select u-w-full", required: true %>
           </div>
 
           <div class="c-field">
@@ -59,7 +59,7 @@
             <%= form.select :prompt_format,
                             [["Plain text", "plain_text"], ["Rich text", "rich_text"]],
                             {},
-                            class: "c-select w-full" %>
+                            class: "c-select u-w-full" %>
             <p class="c-help field-hint">Rich text uses Markdown syntax (for example: **bold**, *italic*, [link](https://example.com)).</p>
           </div>
 
@@ -81,23 +81,23 @@
         </div>
       </section>
 
-      <section class="c-card form-card">
-        <header class="form-card-header">
-          <span class="step-pill">Configuration</span>
+      <section class="c-card c-form-card">
+        <header class="c-form-card__header">
+          <span class="c-step-pill">Configuration</span>
           <div>
             <h2 class="section-heading">Answer options & tags</h2>
-            <p class="section-subtext">Add category tags and optional predefined answers for multiple choice prompts.</p>
+            <p class="c-help">Add category tags and optional predefined answers for multiple choice prompts.</p>
           </div>
         </header>
 
-        <div class="form-columns">
-          <div class="form-column">
-            <label class="section-subheading" for="question_category_ids">Categories</label>
+        <div class="u-grid u-grid--2">
+          <div class="c-field">
+            <label class="c-label" for="question_category_ids">Categories</label>
             <p class="c-help field-hint">Tagged categories help advisors filter and find related prompts.</p>
-            <%= form.collection_select :category_ids, @categories, :id, :name, { include_hidden: false }, { multiple: true, size: 8, class: "c-select w-full multi-select" } %>
+            <%= form.collection_select :category_ids, @categories, :id, :name, { include_hidden: false }, { multiple: true, size: 8, class: "c-select u-w-full multi-select" } %>
           </div>
 
-          <div class="form-column">
+          <div class="c-field">
             <%= form.label :answer_options, "Answer options", class: "c-label" %>
             <%= form.text_area :answer_options, rows: 6, class: "c-input input", placeholder: "Provide comma separated options or JSON array (used for multiple choice)." %>
             <p class="c-help field-hint">Leave blank for free-form answers. Example: [\"Strongly Agree\", \"Agree\", \"Neutral\", \"Disagree\", \"Strongly Disagree\"].</p>
@@ -106,8 +106,8 @@
       </section>
 
       <div class="c-form-actions u-actions">
-        <%= form.submit(question.persisted? ? "Update Question" : "Create Question", class: tailwind_button_classes(:primary)) %>
-        <%= link_to "Cancel", admin_questions_path, class: tailwind_button_classes(:secondary) %>
+        <%= form.submit(question.persisted? ? "Update Question" : "Create Question", class: button_classes(:primary)) %>
+        <%= link_to "Cancel", admin_questions_path, class: button_classes(:secondary) %>
       </div>
     </div>
   </div>

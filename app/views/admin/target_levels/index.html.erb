@@ -1,59 +1,62 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <div class="shrink-0">
-        <%= link_to "Back", admin_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
+      <div class="u-shrink-0">
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
       </div>
     </div>
   </div>
 
-  <section class="c-card p-8 md:p-10">
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <h1 class="c-section-title c-heading-inline">Target Levels</h1>
-      <p class="mt-1 text-sm leading-relaxed text-slate-600">Set program target levels per competency, semester, track, and class.</p>
-    </div>
+  <section class="c-card u-stack u-stack--xl">
+    <header class="c-page-header">
+      <div>
+        <p class="c-eyebrow">Program setup</p>
+        <h1 class="c-page-title c-page-title--brand">Target Levels</h1>
+        <p class="c-page-subtitle">Set program target levels per competency, semester, track, and class.</p>
+      </div>
+    </header>
 
     <% if @post_save_warning.present? %>
-      <div class="c-card c-card--tight mb-6" role="alert">
-        <p class="text-sm text-slate-900">
-          <span class="font-semibold">Warning:</span>
+      <div class="c-callout c-callout--warning" role="alert">
+        <p>
+          <strong>Warning:</strong>
           <%= @post_save_warning %>
         </p>
       </div>
     <% end %>
 
     <%= form_with url: admin_target_levels_path, method: :get, local: true, data: { turbo: false } do %>
-      <div class="c-card c-card--tight mb-6">
-        <div class="flex flex-wrap items-end gap-4">
-          <div class="min-w-[14rem]">
-            <label class="block text-sm font-medium text-slate-700">Semester</label>
-            <div class="c-select-wrapper mt-1">
+      <div class="c-card c-card--tight">
+        <div class="c-toolbar__row c-toolbar__row--airy u-w-full">
+          <div class="c-toolbar__item u-min-w-md">
+            <label class="c-label">Semester</label>
+            <div class="c-select-wrapper">
               <%= select_tag :program_semester_id,
                 options_for_select([["Select a semester", ""]] + @semesters.map { |s| [s.name, s.id] }, @selected_semester_id),
-                class: "c-select w-full" %>
+                class: "c-select u-w-full" %>
             </div>
           </div>
 
-          <div class="min-w-[12rem]">
-            <label class="block text-sm font-medium text-slate-700">Track</label>
-            <div class="c-select-wrapper mt-1">
+          <div class="c-toolbar__item u-min-w-sm">
+            <label class="c-label">Track</label>
+            <div class="c-select-wrapper">
               <%= select_tag :track,
                 options_for_select([["Select a track", ""]] + @tracks.map { |t| [t, t] }, @selected_track),
-                class: "c-select w-full" %>
+                class: "c-select u-w-full" %>
             </div>
           </div>
 
-          <div class="min-w-[12rem]">
-            <label class="block text-sm font-medium text-slate-700">Class</label>
-            <div class="c-select-wrapper mt-1">
+          <div class="c-toolbar__item u-min-w-sm">
+            <label class="c-label">Class</label>
+            <div class="c-select-wrapper">
               <%= select_tag :class_of,
                 options_for_select(@class_of_options, @selected_class_of.to_s),
-                class: "c-select w-full" %>
+                class: "c-select u-w-full" %>
             </div>
           </div>
 
-          <div>
-            <%= submit_tag "Apply Filters", class: tailwind_button_classes(:secondary) %>
+          <div class="c-toolbar__item">
+            <%= submit_tag "Apply Filters", class: button_classes(:secondary) %>
           </div>
         </div>
       </div>
@@ -93,7 +96,7 @@
                 <% original_value = @targets_by_title[title].to_s %>
                 <tr>
                   <td>
-                    <div class="font-medium text-slate-900"><%= title %></div>
+                    <div class="c-table__title"><%= title %></div>
                   </td>
                   <td>
                     <%= hidden_field_tag "targets[#{idx}][competency_title]", title %>
@@ -156,18 +159,18 @@
           })();
         </script>
 
-        <div class="c-card c-card--tight mt-6 flex flex-wrap items-center justify-end gap-3">
-          <%= link_to "Cancel", admin_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
-          <%= submit_tag "Save Target Levels", class: tailwind_button_classes(:primary) %>
+        <div class="c-card c-card--tight u-actions">
+          <%= link_to "Cancel", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+          <%= submit_tag "Save Target Levels", class: button_classes(:primary) %>
         </div>
       <% end %>
     <% else %>
       <div class="c-card c-card--tight">
-        <p class="text-sm text-slate-700">Select a semester and track above to view and edit competency target levels.</p>
+        <p class="c-lede">Select a semester and track above to view and edit competency target levels.</p>
       </div>
 
-      <div class="c-card c-card--tight mt-6 flex flex-wrap items-center justify-end gap-3">
-        <%= link_to "Back", admin_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+      <div class="c-card c-card--tight u-actions">
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
       </div>
     <% end %>
   </section>

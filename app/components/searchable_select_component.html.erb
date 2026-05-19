@@ -1,13 +1,13 @@
-<div class="space-y-2" data-combobox="true">
-  <label for="<%= "#{id}-display" %>" class="block text-sm font-semibold text-slate-800"><%= label %></label>
+<div class="c-field" data-combobox="true">
+  <label for="<%= "#{id}-display" %>" class="c-label"><%= label %></label>
 
   <input type="hidden" name="<%= name %>" value="" data-combobox-value="true" />
 
-  <div class="relative">
+  <div class="u-relative">
     <input
       id="<%= "#{id}-display" %>"
       type="text"
-      class="c-input c-search-input w-full"
+      class="c-input c-search-input u-w-full"
       placeholder="<%= placeholder %>"
       autocomplete="off"
       data-combobox-input="true"
@@ -17,14 +17,14 @@
     />
 
     <div
-      class="absolute z-20 mt-2 hidden max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+      class="c-popup u-hidden"
       data-combobox-menu="true"
       role="listbox"
     >
       <% normalized_options.each do |opt| %>
         <button
           type="button"
-          class="block w-full px-3 py-2 text-left text-sm text-slate-900 hover:bg-slate-50"
+          class="c-popup__item"
           data-combobox-option="true"
           data-combobox-option-value="<%= opt[:value] %>"
           data-combobox-option-label="<%= opt[:label] %>"
@@ -33,16 +33,16 @@
         >
           <div class="font-medium"><%= opt[:label] %></div>
           <% if opt[:description].present? %>
-            <div class="text-xs text-slate-500"><%= opt[:description] %></div>
+            <div class="c-muted text-xs"><%= opt[:description] %></div>
           <% end %>
         </button>
       <% end %>
 
-      <div class="px-3 py-2 text-sm text-slate-500" data-combobox-empty="true" hidden>
+      <div class="c-popup__empty" data-combobox-empty="true" hidden>
         No matches.
       </div>
     </div>
   </div>
 
-  <p class="text-xs text-slate-500">Start typing to search.</p>
+  <p class="c-help">Start typing to search.</p>
 </div>

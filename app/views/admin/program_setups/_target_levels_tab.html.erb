@@ -1,5 +1,5 @@
 <section class="c-card c-card--spacious u-stack u-stack--md">
-  <header class="toolbar">
+  <header class="c-toolbar__row c-toolbar__row--airy justify-between">
     <div>
       <h2 class="text-xl font-semibold text-slate-900">Competency Targets</h2>
       <p class="text-sm text-slate-600">Set program target levels per competency, semester, track, and class.</p>
@@ -41,7 +41,7 @@
           <div class="c-select-wrapper mt-1">
             <%= select_tag :program_semester_id,
               options_for_select([["Select a semester", ""]] + @semesters.map { |s| [s.name, s.id] }, @selected_semester_id),
-              class: "c-select w-full" %>
+              class: "c-select u-w-full" %>
           </div>
         </div>
 
@@ -50,7 +50,7 @@
           <div class="c-select-wrapper mt-1">
             <%= select_tag :track,
               options_for_select([["Select a track", ""]] + @tracks.map { |t| [t, t] }, @selected_track),
-              class: "c-select w-full" %>
+              class: "c-select u-w-full" %>
           </div>
         </div>
 
@@ -59,12 +59,12 @@
           <div class="c-select-wrapper mt-1">
             <%= select_tag :class_of,
               options_for_select(@class_of_options, @selected_class_of.to_s),
-              class: "c-select w-full" %>
+              class: "c-select u-w-full" %>
           </div>
         </div>
 
         <div>
-          <%= submit_tag "Apply Filters", class: tailwind_button_classes(:secondary) %>
+          <%= submit_tag "Apply Filters", class: button_classes(:secondary) %>
         </div>
       </div>
     </div>
@@ -113,7 +113,7 @@
                                name: "targets[#{idx}][target_level]",
                                selected: original_value,
                                id: "target_level_#{idx}",
-                               class_name: "c-select w-full js-target-level-select",
+                               class_name: "c-select u-w-full js-target-level-select",
                                data: { row_id: idx, original_value: original_value } %>
                   </div>
                 </td>
@@ -171,8 +171,8 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm text-slate-600">Changes are saved for the selected semester, track, and class context.</p>
           <div class="flex flex-wrap items-center gap-3">
-            <%= link_to "Reset Filters", admin_program_setup_path(tab: "targets"), class: tailwind_button_classes(:ghost), data: { turbo: false } %>
-            <%= submit_tag "Save Target Levels", class: tailwind_button_classes(:primary) %>
+            <%= link_to "Reset Filters", admin_program_setup_path(tab: "targets"), class: button_classes(:ghost), data: { turbo: false } %>
+            <%= submit_tag "Save Target Levels", class: button_classes(:primary) %>
           </div>
         </div>
       </div>

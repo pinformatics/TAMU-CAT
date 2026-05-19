@@ -1,23 +1,24 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <%= link_to "Back to release dates", admin_course_grade_release_dates_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
+      <%= link_to "Back to release dates", admin_course_grade_release_dates_path, class: button_classes(:secondary) %>
     </div>
   </div>
 
-  <div class="c-container c-container--wide c-page">
+  <div class="c-page">
     <section class="u-stack u-stack--lg">
-      <header class="c-card p-6 md:p-8 bg-slate-50 border border-slate-200">
+      <header class="c-card c-card--brand">
         <div>
-          <h1 class="text-2xl font-semibold text-slate-900">Set Release Date</h1>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="c-eyebrow">Admin controls</p>
+          <h1 class="c-page-title c-page-title--brand">Set Release Date</h1>
+          <p class="c-page-subtitle">
             Configure when <strong><%= @semester.name %></strong> course competency results become visible.
           </p>
         </div>
       </header>
 
-      <div class="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section class="c-card p-6 md:p-8">
+      <div class="c-two-column-layout">
+        <section class="c-card">
           <%= form_with model: @release_date, url: admin_course_grade_release_dates_path, method: :post, local: true, class: "u-stack u-stack--md" do |f| %>
             <input type="hidden" name="course_grade_release_date[program_semester_id]" value="<%= @semester.id %>" />
 
@@ -29,36 +30,36 @@
               <small class="c-help">Leave blank to make results visible immediately (default behavior).</small>
             </div>
 
-            <div class="border-t pt-4">
-              <p class="text-sm text-slate-700 mb-3"><strong>Preview:</strong></p>
-              <p class="text-sm">
-                Results will be <span class="font-semibold text-green-700">visible immediately (no embargo)</span>
+            <div class="u-border-top u-pt-lg">
+              <p class="c-help"><strong>Preview:</strong></p>
+              <p class="c-lede">
+                Results will be <span class="u-success">visible immediately (no embargo)</span>
               </p>
             </div>
 
             <div class="c-form-actions u-actions u-actions--start">
-              <%= f.submit "Create", class: tailwind_button_classes(:primary) %>
+              <%= f.submit "Create", class: button_classes(:primary) %>
             </div>
           <% end %>
         </section>
 
         <aside class="u-stack u-stack--sm">
-          <div class="c-card bg-slate-50 border border-slate-200 p-4">
-            <p class="text-sm font-semibold text-slate-900 mb-2">Semester Details</p>
-            <dl class="space-y-2 text-xs text-slate-700">
+          <div class="c-card c-card--muted u-stack u-stack--sm">
+            <p class="c-section-title">Semester Details</p>
+            <dl class="u-stack u-stack--sm c-help">
               <div>
-                <dt class="font-medium">Name</dt>
+                <dt><strong>Name</strong></dt>
                 <dd><%= @semester.name %></dd>
               </div>
               <div>
-                <dt class="font-medium">Current semester</dt>
+                <dt><strong>Current semester</strong></dt>
                 <dd><%= @semester.is_current? ? "Yes" : "No" %></dd>
               </div>
             </dl>
           </div>
 
-          <div class="c-card bg-blue-50 border border-blue-200 p-4">
-            <p class="text-xs text-blue-900">
+          <div class="c-callout c-callout--info">
+            <p>
               <strong>Note:</strong> This release date applies to all surveys in this semester. Students cannot see course-derived competency results until the date passes.
             </p>
           </div>

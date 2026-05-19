@@ -1,12 +1,12 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar c-toolbar--spaced">
-    <div class="c-toolbar__row justify-between w-full">
-      <%= link_to "Back", admin_dashboard_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row u-justify-between u-w-full">
+      <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
     </div>
   </div>
 
-  <div class="c-container c-container--dashboard c-page">
-    <section class="c-card p-8 md:p-10 u-stack u-stack--xl">
+  <div class="c-page">
+    <section class="c-card u-stack u-stack--xl">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Admin activity</p>
@@ -18,20 +18,20 @@
       <section class="u-stack u-stack--md">
         <header class="u-stack u-stack--sm">
           <h2 class="c-section-title c-heading-inline">Activity feed</h2>
-          <p class="text-sm text-slate-600">Search across survey, student, actor, and action details to narrow the timeline.</p>
+          <p class="c-lede">Search across survey, student, actor, and action details to narrow the timeline.</p>
         </header>
 
         <div class="c-card c-card--flush">
           <div class="c-panel-header c-panel-header--with-border">
             <div class="c-callout">
-              <%= form_with url: admin_activities_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy w-full md:flex-nowrap" do %>
-                <div class="c-toolbar__item relative flex-1">
-                  <%= text_field_tag :q, @search_query, placeholder: "Search logs by survey, student, actor, or action", class: "c-input c-search-input w-full pr-16" %>
+              <%= form_with url: admin_activities_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" do %>
+                <div class="c-toolbar__item u-relative u-flex-1">
+                  <%= text_field_tag :q, @search_query, placeholder: "Search logs by survey, student, actor, or action", class: "c-input c-search-input u-w-full" %>
                 </div>
-                <div class="c-toolbar__item flex items-center gap-2">
-                  <%= submit_tag "Search", class: tailwind_button_classes(:secondary) %>
+                <div class="c-toolbar__item u-flex u-items-center u-gap-sm">
+                  <%= submit_tag "Search", class: button_classes(:secondary) %>
                   <% if @search_query.present? %>
-                    <%= link_to "Reset", admin_activities_path, class: tailwind_button_classes(:subtle) %>
+                    <%= link_to "Reset", admin_activities_path, class: button_classes(:subtle) %>
                   <% end %>
                 </div>
               <% end %>
@@ -39,44 +39,42 @@
           </div>
 
           <% if @entries.blank? %>
-            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-600">
-              <%= @search_query.present? ? "No logs matched your search." : "No activity logs yet." %>
+            <div class="c-empty-state">
+              <p class="c-empty-state__body"><%= @search_query.present? ? "No logs matched your search." : "No activity logs yet." %></p>
             </div>
           <% else %>
             <div class="c-table-wrapper">
-              <table class="c-table min-w-full w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-slate-600">
+              <table class="c-table">
+                <thead>
                   <tr>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Timestamp</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Type</th>
-                    <th scope="col" class="px-4 py-3 text-left font-semibold">Activity</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">User</th>
+                    <th scope="col">Timestamp</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Activity</th>
+                    <th scope="col">User</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100 text-slate-600">
+                <tbody>
                   <% @entries.each do |entry| %>
-                    <tr class="hover:bg-slate-50">
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-500">
+                    <tr>
+                      <td class="u-whitespace-nowrap">
                         <%= l(entry[:timestamp], format: :long) %>
                       </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top">
-                        <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                          <%= entry[:type] %>
-                        </span>
+                      <td class="u-whitespace-nowrap">
+                        <span class="c-pill c-pill--muted"><%= entry[:type] %></span>
                       </td>
-                      <td class="px-4 py-3 align-top">
-                        <p class="font-semibold text-slate-900">
+                      <td>
+                        <p class="c-table__title">
                           <% if entry[:link].present? %>
-                            <%= link_to entry[:title], entry[:link], class: "text-indigo-700 hover:text-indigo-800" %>
+                            <%= link_to entry[:title], entry[:link], class: "u-link" %>
                           <% else %>
                             <%= entry[:title] %>
                           <% end %>
                         </p>
                         <% if entry[:subtitle].present? %>
-                          <p class="mt-1 text-xs text-slate-500"><%= entry[:subtitle] %></p>
+                          <p class="c-table__meta"><%= entry[:subtitle] %></p>
                         <% end %>
                       </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-700"><%= entry[:actor] %></td>
+                      <td class="u-whitespace-nowrap"><%= entry[:actor] %></td>
                     </tr>
                   <% end %>
                 </tbody>

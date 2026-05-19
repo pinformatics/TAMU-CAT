@@ -21,7 +21,7 @@ class GuidanceTextHelperTest < ActionView::TestCase
 
     html = render_guidance_text(input, heading_tag: :h3)
 
-    assert_includes html, "guidance-text"
+    assert_includes html, "c-rich-text"
     assert_includes html, "<h3"
     assert_includes html, "Title One"
     assert_includes html, "<ul"

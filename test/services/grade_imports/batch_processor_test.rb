@@ -81,6 +81,44 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.course_target_level
   end
 
+  test "direct competency rows without numeric identifiers are staged for name-based reconciliation" do
+    path = build_direct_competency_workbook(
+      sheet_name: "PHPM_790_001",
+      rows: [
+        [
+          @student.user.name,
+          nil,
+          nil,
+          4,
+          3
+        ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeImportPendingRow.pending_student_match.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "direct_competency_missing_ids.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    pending = batch.reload.grade_import_pending_rows.first
+    assert_equal "student_name", pending.student_identifier_type
+    assert_equal @student.user.name, pending.student_name
+    assert_equal 4, pending.mapped_level
+    assert_equal 3, pending.course_target_level
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      assert_equal 1, GradeImports::PendingRowReconciler.call(student: @student)
+    end
+
+    assert_equal "reconciled", pending.reload.status
+    assert_equal @student.student_id, pending.matched_student_id
+  end
+
   test "canvas workbook with mapping sheet creates evidence and ratings" do
     path = build_canvas_workbook(
       grade_sheet_name: "PHPM_791_002",
@@ -107,6 +145,32 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "Policy Analysis", evidence.competency_title
     assert_equal 5, evidence.mapped_level
     assert_equal 1, batch.grade_competency_ratings.count
+  end
+
+  test "canvas workbook matches scientific notation sis identifiers as uins" do
+    @student.update!(uin: "934000152")
+    path = build_canvas_workbook(
+      grade_sheet_name: "PHPM_631_600",
+      course_code: "PHPM-631-600",
+      rows: [
+        [ @student.user.name, 8001, "9.34000152E8", "9.34000152E8", "PHPM-631-600", 94 ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "canvas_scientific_sis.xlsx") ],
+      dry_run: true
+    ).call
+
+    assert_equal "completed", batch.reload.status
+    assert_equal 1, batch.grade_competency_evidences.count
+    assert_equal 0, batch.grade_import_pending_rows.pending_student_match.count
+    assert_equal @student.student_id, batch.grade_competency_evidences.first.student_id
+  ensure
+    @student.update!(uin: "123456789")
   end
 
   test "canvas contains mapping averages all matching assignment columns before mapping level" do

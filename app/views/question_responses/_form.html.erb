@@ -13,17 +13,17 @@
 
   <div>
     <%= form.label :student_id, "Student", style: "display: block" %>
-    <%= form.collection_select :student_id, Student.order(:student_id), :student_id, :full_name, { include_blank: true }, { class: "c-select w-full" } %>
+    <%= form.collection_select :student_id, Student.order(:student_id), :student_id, :full_name, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <div>
     <%= form.label :advisor_id, "Advisor", style: "display: block" %>
-    <%= form.collection_select :advisor_id, Advisor.order(:advisor_id), :advisor_id, :display_name, { include_blank: true }, { class: "c-select w-full" } %>
+    <%= form.collection_select :advisor_id, Advisor.order(:advisor_id), :advisor_id, :display_name, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <div>
     <%= form.label :question_id, style: "display: block" %>
-    <%= form.collection_select :question_id, Question.order(:question_order), :id, :question_text, { include_blank: true }, { class: "c-select w-full" } %>
+    <%= form.collection_select :question_id, Question.order(:question_order), :id, :question_text, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <div>

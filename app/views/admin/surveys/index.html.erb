@@ -1,233 +1,158 @@
-<main class="main-content main-content--dashboard">
-
-  <div class="c-toolbar c-toolbar--spaced">
-    <div class="c-toolbar__row justify-between w-full">
-      <%= link_to "Back",
-                  admin_dashboard_path,
-                  class: tailwind_button_classes(:secondary),
-                  data: { turbo: false } %>
-
-      <div class="flex flex-wrap gap-3">
-        <%= link_to "Create Survey", new_admin_survey_path, class: tailwind_button_classes(:primary) %>
-      </div>
-    </div>
-  </div>
-
-  <div class="c-container c-container--dashboard c-page">
-    <section class="c-card p-8 md:p-10 u-stack u-stack--xl">
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Survey admin</p>
-          <h1 class="c-page-title">Survey Builder</h1>
-          <p class="c-page-subtitle">Launch new advisor surveys, monitor what is live, and review the audit trail of recent changes.</p>
+          <h1 class="c-page-title c-page-title--brand">Survey Builder</h1>
+          <p class="c-page-subtitle">Build surveys, assign them to students, monitor what is live, and review recent changes.</p>
+        </div>
+        <div class="u-actions">
+          <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+          <%= link_to "Change Log", admin_survey_change_logs_path, class: button_classes(:secondary) %>
+          <%= link_to "Create Survey", new_admin_survey_path, class: button_classes(:primary) %>
         </div>
       </header>
+    </section>
 
-      <% active_count = @active_surveys.size %>
-      <% archived_count = @archived_surveys.size %>
-      <% total_questions = @active_surveys.sum { |survey| survey.respond_to?(:question_count) ? survey.question_count.to_i : survey.questions.size } %>
-      <% latest_activity_at = (@recent_logs.first&.created_at || @active_surveys.map(&:updated_at).compact.max) %>
+    <% active_count = @active_surveys.size %>
+    <% archived_count = @archived_surveys.size %>
+    <% total_questions = @active_surveys.sum { |survey| survey.respond_to?(:question_count) ? survey.question_count.to_i : survey.questions.size } %>
+    <% latest_activity_at = (@recent_logs.first&.created_at || @active_surveys.map(&:updated_at).compact.max) %>
 
-      <section class="c-stats-grid">
-        <div class="c-stat c-stat--info">
-          <p class="c-stat__label">Active surveys</p>
-          <p class="c-stat__value c-stat__value--lg"><%= active_count %></p>
-          <p class="c-stat__subtext">Currently visible to advisors</p>
-        </div>
-        <div class="c-stat c-stat--success">
-          <p class="c-stat__label">Question inventory</p>
-          <p class="c-stat__value c-stat__value--lg"><%= number_with_delimiter(total_questions) %></p>
-          <p class="c-stat__subtext">Across all active surveys</p>
-        </div>
-        <div class="c-stat c-stat--warning">
-          <p class="c-stat__label">Archived surveys</p>
-          <p class="c-stat__value c-stat__value--lg"><%= archived_count %></p>
-          <p class="c-stat__subtext">Ready to reactivate when needed</p>
-        </div>
-        <div class="c-stat c-stat--muted">
-          <p class="c-stat__label">Last change</p>
-          <% if latest_activity_at.present? %>
-            <p class="c-stat__value c-stat__value--md"><%= time_ago_in_words(latest_activity_at) %></p>
-            <p class="c-stat__subtext">ago via admin activity</p>
-          <% else %>
-            <p class="c-stat__value c-stat__value--md">—</p>
-            <p class="c-stat__subtext">No edits recorded yet</p>
-          <% end %>
-        </div>
-      </section>
+    <section class="c-stats-grid">
+      <div class="c-stat c-stat--info">
+        <p class="c-stat__label">Active surveys</p>
+        <p class="c-stat__value c-stat__value--lg"><%= active_count %></p>
+        <p class="c-stat__subtext">Currently visible to advisors</p>
+      </div>
+      <div class="c-stat c-stat--success">
+        <p class="c-stat__label">Question inventory</p>
+        <p class="c-stat__value c-stat__value--lg"><%= number_with_delimiter(total_questions) %></p>
+        <p class="c-stat__subtext">Across all active surveys</p>
+      </div>
+      <div class="c-stat c-stat--warning">
+        <p class="c-stat__label">Archived surveys</p>
+        <p class="c-stat__value c-stat__value--lg"><%= archived_count %></p>
+        <p class="c-stat__subtext">Ready to reactivate when needed</p>
+      </div>
+      <div class="c-stat c-stat--muted">
+        <p class="c-stat__label">Last change</p>
+        <% if latest_activity_at.present? %>
+          <p class="c-stat__value c-stat__value--md"><%= time_ago_in_words(latest_activity_at) %></p>
+          <p class="c-stat__subtext">ago via admin activity</p>
+        <% else %>
+          <p class="c-stat__value c-stat__value--md">—</p>
+          <p class="c-stat__subtext">No edits recorded yet</p>
+        <% end %>
+      </div>
+    </section>
 
-      <section class="u-stack u-stack--md">
-        <header class="flex items-center justify-between">
+    <section id="active-surveys" class="c-card c-card--flush u-overflow-hidden">
+      <div class="c-panel-header c-panel-header--with-border">
+        <div class="u-responsive-split u-w-full">
           <div class="u-stack u-stack--sm">
             <h2 class="c-section-title c-heading-inline">Active surveys</h2>
-            <p class="text-sm text-slate-600">Search, filter, and sort active surveys currently visible to advisors.</p>
+            <p class="c-lede">Search, filter, edit, preview, and open student assignment controls for active surveys.</p>
           </div>
           <% if @active_surveys.present? %>
-            <span class="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700"><%= pluralize(@active_surveys.size, "active survey") %></span>
+            <span class="c-status-badge c-status-badge--success"><%= pluralize(@active_surveys.size, "active survey") %></span>
           <% end %>
-        </header>
+        </div>
+      </div>
 
-        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <div class="c-panel-header c-panel-header--with-border">
-            <div class="u-stack u-stack--sm">
-              <div>
-                <h3 class="text-sm font-semibold text-slate-900">Browse active surveys</h3>
-                <p class="mt-1 text-sm text-slate-600">Use search and track filters to narrow the list before editing, previewing, or archiving.</p>
-              </div>
-
-              <div class="c-callout">
-              <%= form_with url: admin_surveys_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy w-full md:flex-nowrap" do %>
+      <div class="c-panel-header c-panel-header--with-border">
+        <div class="u-stack u-stack--sm u-w-full">
+          <div class="c-callout u-w-full">
+              <%= form_with url: admin_surveys_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" do %>
                 <%= hidden_field_tag :sort, @sort_column %>
                 <%= hidden_field_tag :direction, @sort_direction %>
 
-                <div class="c-toolbar__item relative flex-1 min-w-[220px]">
-                  <%= text_field_tag :q, @search_query, placeholder: "Search by title, semester, or description", class: "c-input c-search-input w-full pr-16" %>
+                <div class="c-toolbar__item u-relative u-flex-1 u-min-w-sm">
+                  <%= text_field_tag :q, @search_query, placeholder: "Search by title, semester, or description", class: "c-input c-search-input u-w-full" %>
                 </div>
 
-                <div class="c-toolbar__item md:w-52">
+                <div class="c-toolbar__item u-min-w-md">
                   <%= select_tag :track,
                                  options_for_select([
                                    ["All tracks", ""],
                                    ["Unassigned", @unassigned_track_token]
                                  ] + @track_filter_options.map { |track| [track, track] }, @selected_track),
-                                 class: "c-select w-full" %>
+                                 class: "c-select u-w-full" %>
                 </div>
 
-                <div class="c-toolbar__item flex items-center gap-3">
-                  <%= submit_tag "Apply", class: tailwind_button_classes(:primary) %>
+                <div class="c-toolbar__item u-flex u-items-center u-gap-md u-shrink-0 u-ml-auto">
+                  <%= submit_tag "Apply", class: button_classes(:primary) %>
                   <% if @search_query.present? || @selected_track.present? %>
-                    <%= link_to "Reset", admin_surveys_path(sort: @sort_column, direction: @sort_direction), class: tailwind_button_classes(:subtle) %>
+                    <%= link_to "Reset", admin_surveys_path(sort: @sort_column, direction: @sort_direction), class: button_classes(:subtle) %>
                   <% end %>
                 </div>
               <% end %>
-              </div>
-
-              <% if @search_query.present? || @selected_track.present? %>
-                <div class="flex flex-wrap items-center gap-2 text-xs">
-                  <% if @search_query.present? %>
-                    <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600">Search: "<%= @search_query %>"</span>
-                  <% end %>
-                  <% if @selected_track.present? %>
-                    <% track_label = @selected_track == @unassigned_track_token ? "Unassigned" : @selected_track %>
-                    <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600">Track: <%= track_label %></span>
-                  <% end %>
-                </div>
-              <% end %>
-            </div>
           </div>
 
-          <% if @active_surveys.blank? %>
-            <div class="bg-slate-50 px-6 py-10 text-center text-sm text-slate-600">No surveys match the current search or filter criteria.</div>
-          <% else %>
-            <div class="c-table-wrapper">
-              <table class="c-table min-w-full w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-slate-600">
-                  <tr>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold"><%= sortable_header("Title", "title") %></th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold"><%= sortable_header("Semester", "semester") %></th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Tracks</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Available Date</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Due Date</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-right font-semibold"><%= sortable_header("Updated", "updated_at") %></th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-right font-semibold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 text-slate-600">
-                  <% @active_surveys.each do |survey| %>
-                    <% tracks = survey.track_list %>
-                    <tr class="hover:bg-slate-50">
-                      <td class="px-4 py-3 align-top">
-                        <div class="font-semibold text-slate-900"><%= survey.title %></div>
-                        <div class="mt-1 text-xs text-slate-500"><%= survey.description.presence || "No description provided." %></div>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-700"><%= survey.semester.presence || "Unscheduled" %></td>
-                      <td class="px-4 py-3 align-top">
-                        <% if tracks.present? %>
-                          <div class="flex flex-wrap gap-1">
-                            <% tracks.each do |track| %>
-                              <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"><%= track %></span>
-                            <% end %>
-                          </div>
-                        <% else %>
-                          <span class="text-xs font-medium text-amber-600">Unassigned</span>
-                        <% end %>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-700"><%= survey.available_from.present? ? format_calendar_date(survey.available_from) : "No start date" %></td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-700"><%= survey.available_until.present? ? format_calendar_date(survey.available_until) : "No due date" %></td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-right text-slate-500"><%= time_ago_in_words(survey.updated_at) %> ago</td>
-                      <td class="px-4 py-3 align-top">
-                        <div class="flex flex-wrap justify-end gap-2">
-                          <%= link_to "Preview", preview_admin_survey_path(survey), class: tailwind_button_classes(:subtle, extra_classes: "btn-sm") %>
-                          <%= link_to "Edit", edit_admin_survey_path(survey), class: tailwind_button_classes(:subtle, extra_classes: "btn-sm") %>
-                          <%= button_to "Archive", archive_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Archive '#{survey.title}' and remove it from advisors?" }, class: tailwind_button_classes(:secondary) %>
-                          <%= button_to "Delete", admin_survey_path(survey), method: :delete, data: { turbo_confirm: "Delete '#{survey.title}' permanently?" }, class: tailwind_button_classes(:danger) %>
-                        </div>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
+          <% if @search_query.present? || @selected_track.present? %>
+            <div class="u-actions u-actions--start">
+              <% if @search_query.present? %>
+                <span class="c-pill c-pill--muted">Search: "<%= @search_query %>"</span>
+              <% end %>
+              <% if @selected_track.present? %>
+                <% track_label = @selected_track == @unassigned_track_token ? "Unassigned" : @selected_track %>
+                <span class="c-pill c-pill--muted">Track: <%= track_label %></span>
+              <% end %>
             </div>
           <% end %>
         </div>
-      </section>
+      </div>
 
-      <section class="u-stack u-stack--md">
-        <header class="flex items-center justify-between">
-          <div class="u-stack u-stack--sm">
-            <h2 class="c-section-title c-heading-inline">Archived surveys</h2>
-            <p class="text-sm text-slate-600">Re-activate an archived survey to make it available for new assignments.</p>
-          </div>
-          <% if @archived_surveys.present? %>
-            <span class="inline-flex items-center rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"><%= pluralize(@archived_surveys.size, "archived survey") %></span>
-          <% end %>
-        </header>
-
-        <% if @archived_surveys.blank? %>
-          <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-600">No archived surveys yet.</div>
-        <% else %>
-          <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <% if @active_surveys.blank? %>
+            <div class="c-empty-state"><p class="c-empty-state__body">No surveys match the current search or filter criteria.</p></div>
+          <% else %>
             <div class="c-table-wrapper">
-              <table class="c-table min-w-full w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-slate-600">
+              <table class="c-table c-table--zebra">
+                <thead>
                   <tr>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Title</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Semester</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Tracks</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Available Date</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Due Date</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-right font-semibold">Updated</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-right font-semibold">Actions</th>
+                    <th scope="col"><%= sortable_header("Survey", "title") %></th>
+                    <th scope="col"><%= sortable_header("Semester", "semester") %></th>
+                    <th scope="col">Available Date / Due Date</th>
+                    <th scope="col">Tracks</th>
+                    <th scope="col" class="u-text-right"><%= sortable_header("Updated", "updated_at") %></th>
+                    <th scope="col" class="u-text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100 text-slate-600">
-                  <% @archived_surveys.each do |survey| %>
+                <tbody>
+                  <% @active_surveys.each do |survey| %>
                     <% tracks = survey.track_list %>
-                    <tr class="hover:bg-slate-50">
-                      <td class="px-4 py-3 align-top">
-                        <div class="font-semibold text-slate-900"><%= survey.title %></div>
-                        <div class="mt-1 text-xs text-slate-500"><%= survey.description.presence || "No description provided." %></div>
+                    <tr>
+                      <td>
+                        <div class="c-table__title"><%= survey.title %></div>
+                        <div class="c-table__meta"><%= survey.description.presence || "No description provided." %></div>
                       </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-700"><%= survey.semester.presence || "Unscheduled" %></td>
-                      <td class="px-4 py-3 align-top">
+                      <td class="u-whitespace-nowrap"><%= survey.semester.presence || "Unscheduled" %></td>
+                      <td>
+                        <div class="u-stack u-stack--xs">
+                          <span><strong>Available:</strong> <%= survey.available_from.present? ? format_calendar_date(survey.available_from) : "No start date" %></span>
+                          <span><strong>Due:</strong> <%= survey.available_until.present? ? format_calendar_date(survey.available_until) : "No due date" %></span>
+                        </div>
+                      </td>
+                      <td>
                         <% if tracks.present? %>
-                          <div class="flex flex-wrap gap-1">
+                          <div class="u-actions u-actions--start u-gap-xs">
                             <% tracks.each do |track| %>
-                              <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"><%= track %></span>
+                              <span class="c-pill c-pill--muted"><%= track %></span>
                             <% end %>
                           </div>
                         <% else %>
-                          <span class="text-xs font-medium text-amber-600">Unassigned</span>
+                          <span class="c-status-pill c-status-pill--warning">Unassigned</span>
                         <% end %>
                       </td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-700"><%= survey.available_from.present? ? format_calendar_date(survey.available_from) : "No start date" %></td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-700"><%= survey.available_until.present? ? format_calendar_date(survey.available_until) : "No due date" %></td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-right text-slate-500"><%= time_ago_in_words(survey.updated_at) %> ago</td>
-                      <td class="px-4 py-3 align-top">
-                        <div class="flex flex-wrap justify-end gap-2">
-                          <%= link_to "Preview", preview_admin_survey_path(survey), class: tailwind_button_classes(:subtle, extra_classes: "btn-sm") %>
-                          <%= button_to "Activate", activate_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Activate '#{survey.title}' for advisors?" }, class: tailwind_button_classes(:primary) %>
-                          <%= button_to "Delete", admin_survey_path(survey), method: :delete, data: { turbo_confirm: "Delete '#{survey.title}' permanently?" }, class: tailwind_button_classes(:danger) %>
+                      <td class="u-whitespace-nowrap u-text-right"><%= time_ago_in_words(survey.updated_at) %> ago</td>
+                      <td class="u-whitespace-nowrap">
+                        <div class="u-actions u-actions--nowrap">
+                          <%= link_to "Assign", assignments_survey_path(survey), class: button_classes(:primary, extra_classes: "btn-sm"), data: { turbo: false } %>
+                          <%= link_to "Preview", preview_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+                          <%= link_to "Edit", edit_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+                          <%= button_to "Archive", archive_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Archive '#{survey.title}' and remove it from advisors?" }, class: button_classes(:secondary) %>
+                          <%= button_to "Delete", admin_survey_path(survey), method: :delete, data: { turbo_confirm: "Delete '#{survey.title}' permanently?" }, class: button_classes(:danger) %>
                         </div>
                       </td>
                     </tr>
@@ -235,10 +160,77 @@
                 </tbody>
               </table>
             </div>
+          <% end %>
+    </section>
+
+    <section class="c-card c-card--flush u-overflow-hidden">
+      <div class="c-panel-header c-panel-header--with-border">
+        <div class="u-responsive-split u-w-full">
+          <div class="u-stack u-stack--sm">
+            <h2 class="c-section-title c-heading-inline">Archived surveys</h2>
+            <p class="c-lede">Re-activate an archived survey to make it available for new assignments.</p>
           </div>
+          <% if @archived_surveys.present? %>
+            <span class="c-status-badge c-status-badge--muted"><%= pluralize(@archived_surveys.size, "archived survey") %></span>
+          <% end %>
+        </div>
+      </div>
+
+        <% if @archived_surveys.blank? %>
+          <div class="c-empty-state"><p class="c-empty-state__body">No archived surveys yet.</p></div>
+        <% else %>
+            <div class="c-table-wrapper">
+              <table class="c-table c-table--zebra">
+                <thead>
+                  <tr>
+                    <th scope="col">Title</th>
+                    <th scope="col">Semester</th>
+                    <th scope="col">Available Date / Due Date</th>
+                    <th scope="col">Tracks</th>
+                    <th scope="col" class="u-text-right">Updated</th>
+                    <th scope="col" class="u-text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @archived_surveys.each do |survey| %>
+                    <% tracks = survey.track_list %>
+                    <tr>
+                      <td>
+                        <div class="c-table__title"><%= survey.title %></div>
+                        <div class="c-table__meta"><%= survey.description.presence || "No description provided." %></div>
+                      </td>
+                      <td class="u-whitespace-nowrap"><%= survey.semester.presence || "Unscheduled" %></td>
+                      <td>
+                        <div class="u-stack u-stack--xs">
+                          <span><strong>Available:</strong> <%= survey.available_from.present? ? format_calendar_date(survey.available_from) : "No start date" %></span>
+                          <span><strong>Due:</strong> <%= survey.available_until.present? ? format_calendar_date(survey.available_until) : "No due date" %></span>
+                        </div>
+                      </td>
+                      <td>
+                        <% if tracks.present? %>
+                          <div class="u-actions u-actions--start u-gap-xs">
+                            <% tracks.each do |track| %>
+                              <span class="c-pill c-pill--muted"><%= track %></span>
+                            <% end %>
+                          </div>
+                        <% else %>
+                          <span class="c-status-pill c-status-pill--warning">Unassigned</span>
+                        <% end %>
+                      </td>
+                      <td class="u-whitespace-nowrap u-text-right"><%= time_ago_in_words(survey.updated_at) %> ago</td>
+                      <td class="u-whitespace-nowrap">
+                        <div class="u-actions u-actions--nowrap">
+                          <%= link_to "Preview", preview_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+                          <%= button_to "Activate", activate_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Activate '#{survey.title}' for advisors?" }, class: button_classes(:primary) %>
+                          <%= button_to "Delete", admin_survey_path(survey), method: :delete, data: { turbo_confirm: "Delete '#{survey.title}' permanently?" }, class: button_classes(:danger) %>
+                        </div>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
         <% end %>
-      </section>
     </section>
   </div>
-
 </main>

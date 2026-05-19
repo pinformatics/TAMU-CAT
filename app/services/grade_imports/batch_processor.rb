@@ -173,18 +173,16 @@ module GradeImports
     end
 
     def process_file!(grade_file, uploaded_file)
-      ext = File.extname(uploaded_file.original_filename.to_s).downcase
-      unless [ ".xlsx", ".xlsm", ".csv" ].include?(ext)
-        raise "Unsupported file type: #{ext.presence || 'unknown'}. Upload Excel or CSV files."
-      end
+      router = FileUploadRouter.new(uploaded_file)
+      router.validate!
 
-      if ext == ".csv"
+      if router.csv?
         result = process_direct_competency_csv_file!(grade_file:, uploaded_file:)
         update_grade_file_with_result!(grade_file:, result:)
         return
       end
 
-      workbook = Roo::Spreadsheet.open(uploaded_file.path, extension: ext.delete_prefix("."))
+      workbook = Roo::Spreadsheet.open(uploaded_file.path, extension: router.spreadsheet_extension)
       if (direct_info = detect_direct_competency_sheet(workbook))
         sheet = workbook.sheet(direct_info[:sheet_name])
         result = process_direct_competency_sheet_file!(
@@ -227,8 +225,8 @@ module GradeImports
         end
       end
 
-      grade_sheet = Roo::Spreadsheet.open(uploaded_file.path, extension: ext.delete_prefix(".")).sheet(grade_sheet_name)
-      mapping_sheet = Roo::Spreadsheet.open(uploaded_file.path, extension: ext.delete_prefix(".")).sheet(mapping_sheet_name)
+      grade_sheet = Roo::Spreadsheet.open(uploaded_file.path, extension: router.spreadsheet_extension).sheet(grade_sheet_name)
+      mapping_sheet = Roo::Spreadsheet.open(uploaded_file.path, extension: router.spreadsheet_extension).sheet(mapping_sheet_name)
 
       mapping_header_index, mapping_header_row = extract_header_index_from_rows!(
         mapping_sheet,
@@ -355,13 +353,20 @@ module GradeImports
         end
 
         student_name = row[student_name_header].to_s.strip.presence
-        student_id_token = row[student_id_header].to_s.strip
-        student_sis_id = row[student_sis_id_header].to_s.strip
-        identifier = student_sis_id.presence || student_id_token.presence
+        student_id_token = normalize_numeric_identifier(row[student_id_header])
+        student_sis_id = normalize_numeric_identifier(row[student_sis_id_header])
+        identifier = student_sis_id.presence || student_id_token.presence || student_name.presence
+        identifier_type = if student_sis_id.present?
+          "uin"
+        elsif student_id_token.present?
+          "student_id"
+        elsif student_name.present?
+          "student_name"
+        end
 
         if identifier.blank?
           error_rows += 1
-          errors << row_error(row_number, "Student SIS ID or Student ID is required")
+          errors << row_error(row_number, "Student SIS ID, Student ID, or Student name is required")
           next
         end
 
@@ -414,7 +419,7 @@ module GradeImports
             create_pending_row!(
               grade_file: grade_file,
               identifier: identifier,
-              identifier_type: student_sis_id.present? ? "uin" : "student_id",
+              identifier_type: identifier_type,
               student_uin: student_sis_id,
               student_email: nil,
               student_name: student_name,
@@ -663,19 +668,10 @@ module GradeImports
     end
 
     def failure_diagnostics(uploaded_file:, error:)
-      diagnostics = {
-        mode: "failed_before_parse",
-        error_class: error.class.name,
-        error_message: error.message
-      }
-
-      begin
-        ext = File.extname(uploaded_file.original_filename.to_s).downcase
-        workbook = Roo::Spreadsheet.open(uploaded_file.path, extension: ext.delete_prefix("."))
-        sheet_names = workbook.sheets.map(&:to_s)
-        diagnostics[:sheets] = sheet_names
-        diagnostics[:sheet_previews] = sheet_names.map do |name|
-          sheet = workbook.sheet(name)
+      ImportDiagnostics.failure(
+        uploaded_file: uploaded_file,
+        error: error,
+        sheet_analyzer: lambda do |name, sheet|
           header_row_num, normalized = detect_any_header_row(sheet, max_probe: 12)
           {
             name: name,
@@ -686,11 +682,7 @@ module GradeImports
             canvas_identifier_present: canvas_identifier_present?(sheet)
           }
         end
-      rescue StandardError => diagnostics_error
-        diagnostics[:diagnostic_error] = "#{diagnostics_error.class}: #{diagnostics_error.message}"
-      end
-
-      diagnostics
+      )
     end
 
     def grade_sheet_token_match?(sheet)
@@ -836,7 +828,7 @@ module GradeImports
     end
 
     def find_student(row)
-      uin = row[:student_uin].to_s.strip
+      uin = normalize_numeric_identifier(row[:student_uin])
       email = row[:student_email].to_s.strip.downcase
 
       if uin.present?
@@ -1150,7 +1142,7 @@ module GradeImports
           next
         end
 
-        identifier = row_values[id_index[:student_identifier]].to_s.strip
+        identifier = normalize_numeric_identifier(row_values[id_index[:student_identifier]])
         canvas_id = id_index[:canvas_id] ? row_values[id_index[:canvas_id]].to_s.strip : nil
         section = id_index[:section].nil? ? "" : row_values[id_index[:section]].to_s.strip
         if identifier.blank?
@@ -1376,6 +1368,21 @@ module GradeImports
       true
     rescue StandardError
       false
+    end
+
+    def extract_narrow_grade_headers!(sheet)
+      header_index, header_row = extract_header_index_from_rows!(
+        sheet,
+        GRADE_HEADER_ALIASES,
+        required: %i[assignment_name grade],
+        max_probe: 12
+      )
+
+      unless header_index.key?(:student_uin) || header_index.key?(:student_email)
+        raise "Missing required narrow grade headers: student_uin or student_email"
+      end
+
+      [ header_index, header_row ]
     end
 
     def canvas_grade_sheet?(sheet)
@@ -1664,7 +1671,7 @@ module GradeImports
     end
 
     def find_student_by_uin(uin)
-      normalized_uin = uin.to_s.strip
+      normalized_uin = normalize_numeric_identifier(uin)
       return nil if normalized_uin.blank?
       return student_cache_by_uin[normalized_uin] if student_cache_by_uin.key?(normalized_uin)
 
@@ -1672,7 +1679,7 @@ module GradeImports
     end
 
     def find_student_by_canvas_identifier(identifier)
-      token = identifier.to_s.strip
+      token = normalize_numeric_identifier(identifier)
       return nil if token.blank?
 
       by_uin = find_student_by_uin(token)
@@ -1682,6 +1689,19 @@ module GradeImports
       return nil if numeric_id.nil?
 
       Student.find_by(student_id: numeric_id)
+    end
+
+    def normalize_numeric_identifier(value)
+      token = value.to_s.strip
+      return "" if token.blank?
+      return token if token.match?(/\A\d+\z/)
+
+      decimal = BigDecimal(token)
+      return token unless decimal.frac.zero?
+
+      decimal.to_i.to_s
+    rescue ArgumentError
+      token
     end
 
     def parse_boolean(value)
@@ -1809,17 +1829,3 @@ module GradeImports
     end
   end
 end
-    def extract_narrow_grade_headers!(sheet)
-      header_index, header_row = extract_header_index_from_rows!(
-        sheet,
-        GRADE_HEADER_ALIASES,
-        required: %i[assignment_name grade],
-        max_probe: 12
-      )
-
-      unless header_index.key?(:student_uin) || header_index.key?(:student_email)
-        raise "Missing required narrow grade headers: student_uin or student_email"
-      end
-
-      [ header_index, header_row ]
-    end

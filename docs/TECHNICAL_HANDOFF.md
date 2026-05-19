@@ -29,28 +29,20 @@ This document summarizes the current operating state of the MHA Survey Portal fo
 
 ### Pending / incomplete operational work
 
-- Add dedicated smoke tests for the highest-risk grade import paths:
-  - mapping workbook import
-  - direct competency import
-  - duplicate suppression
-  - pending-row reconciliation
-  - dry run commit
-  - rollback
-- Add clearer operator guidance on the Grade Import Batch results page, especially for direct competency detection, pending versus failed rows, duplicate suppression, and course-rating semester scope.
-- Split `GradeImports::BatchProcessor` into smaller parser/router/validator services. It currently owns too much behavior and is the main maintainability risk.
+- Continue splitting `GradeImports::BatchProcessor` into smaller parser/router/validator services. File routing and failure diagnostics are already extracted; parser extraction can continue incrementally.
 - Add more representative import sample files:
   - successful direct competency import
   - duplicate upload example
   - pending-row example
   - intentionally invalid mapping example
-- Add true semester support to course-derived ratings. The UI can filter self/advisor data by semester, but imported course ratings are not semester-scoped at the storage layer.
 - Improve admin competencies usability with remembered filters, export of filtered matrices, or quick-jump/sticky context.
 - Keep repo docs and GitHub wiki docs synchronized. The README treats the wiki as the broader knowledge base.
 
 ### Known bugs / risks
 
-- Direct competency imports require a real `Student SIS ID` or `Student ID`; blank identifiers cannot be matched or staged correctly.
-- Course ratings shown in `Admin > Competencies` are latest reportable imported values, not truly semester-filtered values.
+- No active release-blocking product bugs are known in the repository.
+- Direct competency imports with only `Student name` are staged as pending matches and can reconcile by exact name; `Student SIS ID` or `Student ID` is still preferred for reliable matching.
+- Course ratings shown in semester-filtered competency/report views use the import batch semester. Legacy batches without a semester can be repaired from the batch detail page.
 - Production currently sets `config.active_job.queue_adapter = :inline` in `config/environments/production.rb`. This avoids a separate queue dependency but means background jobs run synchronously in request flow.
 - `config/recurring.yml` defines a Solid Queue hourly cleanup task, but production is not currently wired to run Solid Queue as the Active Job adapter. Treat recurring Solid Queue behavior as inactive unless production queue configuration is restored.
 - `Procfile` only defines `release` and `web`; there is no Heroku worker process.
@@ -272,7 +264,7 @@ After rotating Google OAuth credentials:
 ### Known technical debt
 
 - `GradeImports::BatchProcessor` should be decomposed.
-- Course-derived ratings need first-class semester/term storage.
+- Legacy course-derived ratings without an import batch semester should be assigned a semester before relying on semester-filtered views.
 - Production background jobs need a deliberate decision: keep inline for simplicity or restore Solid Queue with worker capacity.
 - Production Active Storage needs durable object storage or explicit persistent volume management.
 - Mailer host and SMTP settings need production values before depending on email delivery.

@@ -4,7 +4,7 @@
 
 <div>
   <%= link_to "Edit this feedback", edit_feedback_path(@feedback) %> |
-  <%= link_to "Back to feedbacks", feedbacks_path, class: tailwind_button_classes(:secondary) %>
+  <%= link_to "Back to feedbacks", feedbacks_path, class: button_classes(:secondary) %>
 
   <%= button_to "Destroy this feedback", @feedback, method: :delete %>
 </div>

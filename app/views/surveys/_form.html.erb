@@ -1,9 +1,9 @@
-<%= form_with(model: survey, local: true) do |form| %>
+<%= form_with(model: survey, local: true, class: "u-stack u-stack--lg") do |form| %>
   <% if survey.errors.any? %>
-    <div style="color: red">
-      <h2><%= pluralize(survey.errors.count, "error") %> prohibited this survey from being saved:</h2>
+    <div class="c-card c-card--tight c-card--danger">
+      <h2 class="c-h3"><%= pluralize(survey.errors.count, "error") %> prohibited this survey from being saved:</h2>
 
-      <ul>
+      <ul class="c-rich-text">
         <% survey.errors.each do |error| %>
           <li><%= error.full_message %></li>
         <% end %>
@@ -11,17 +11,17 @@
     </div>
   <% end %>
 
-  <div>
-    <%= form.label :title, "Title", style: "display: block" %>
-    <%= form.text_field :title %>
+  <div class="c-field">
+    <%= form.label :title, "Title", class: "c-label" %>
+    <%= form.text_field :title, class: "c-input u-w-full" %>
   </div>
 
-  <div>
-    <%= form.label :semester, "Semester", style: "display: block" %>
-    <%= form.text_field :semester %>
+  <div class="c-field">
+    <%= form.label :semester, "Semester", class: "c-label" %>
+    <%= form.text_field :semester, class: "c-input u-w-full" %>
   </div>
 
-  <div>
-    <%= form.submit %>
+  <div class="u-actions">
+    <%= form.submit "Save survey", class: button_classes(:primary) %>
   </div>
 <% end %>

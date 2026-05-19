@@ -46,12 +46,14 @@ class Admin::SurveysController < Admin::BaseController
     end
 
     active_scope = active_scope
-      .left_joins(:categories, :questions, :sections)
+      .left_joins(:categories, :questions, :sections, :survey_assignments)
       .select(
         "surveys.*, " \
         "COUNT(DISTINCT survey_sections.id) AS section_count, " \
         "COUNT(DISTINCT categories.id) AS category_count, " \
-        "COUNT(DISTINCT questions.id) AS question_count"
+        "COUNT(DISTINCT questions.id) AS question_count, " \
+        "COUNT(DISTINCT survey_assignments.id) AS assignment_count, " \
+        "COUNT(DISTINCT CASE WHEN survey_assignments.completed_at IS NOT NULL THEN survey_assignments.id END) AS completed_assignment_count"
       )
       .group("surveys.id", "program_semesters.name")
 

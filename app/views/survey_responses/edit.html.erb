@@ -1,18 +1,18 @@
 <% content_for :title, "Edit survey responses" %>
 
-<div class="survey-container survey-show mx-auto w-full space-y-8 px-4 sm:px-6 lg:px-4" style="max-width: 90rem;">
+<div data-survey-scroll-scope class="c-document-shell">
   <% return_to = @return_to.presence %>
 
-  <%= form_with url: survey_response_path(@survey_response.id, return_to: return_to), method: :patch, local: true, data: { disable_submit_if_unchanged: true }, html: { class: "survey-form" } do %>
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <%= link_to "← Back", (return_to.presence || student_records_path), class: tailwind_button_classes(:secondary) %>
+  <%= form_with url: survey_response_path(@survey_response.id, return_to: return_to), method: :patch, local: true, data: { disable_submit_if_unchanged: true }, html: { class: "survey-form u-stack u-stack--xl" } do %>
+    <div class="u-actions u-actions--split">
+      <%= link_to "← Back", (return_to.presence || student_records_path), class: button_classes(:secondary) %>
 
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="u-actions">
         <%= submit_tag "Save changes",
-                       class: tailwind_button_classes(:primary),
+                       class: button_classes(:primary),
                        data: { save_button: true, turbo_confirm: "Save changes to this student's survey response?" },
                        disabled: true %>
-        <%= link_to "Cancel", survey_response_path(@survey_response.id, return_to: return_to), class: tailwind_button_classes(:secondary) %>
+        <%= link_to "Cancel", survey_response_path(@survey_response.id, return_to: return_to), class: button_classes(:secondary) %>
       </div>
     </div>
 
@@ -22,12 +22,12 @@
                existing_answers: @existing_answers,
                other_answers: @other_answers %>
 
-    <div class="flex flex-wrap items-center gap-3">
+    <div class="u-actions">
       <%= submit_tag "Save changes",
-                     class: tailwind_button_classes(:primary),
+                     class: button_classes(:primary),
                      data: { save_button: true, turbo_confirm: "Save changes to this student's survey response?" },
                      disabled: true %>
-      <%= link_to "Cancel", survey_response_path(@survey_response.id, return_to: return_to), class: tailwind_button_classes(:secondary) %>
+      <%= link_to "Cancel", survey_response_path(@survey_response.id, return_to: return_to), class: button_classes(:secondary) %>
     </div>
   <% end %>
 </div>

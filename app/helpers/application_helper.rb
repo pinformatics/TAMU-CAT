@@ -110,12 +110,12 @@ module ApplicationHelper
     nil
   end
 
-  # Builds Tailwind button classes for the provided variant.
+  # Builds application button classes for the provided variant.
   #
   # @param variant [Symbol]
   # @param extra_classes [String]
   # @return [String]
-  def tailwind_button_classes(variant = :primary, extra_classes: "")
+  def button_classes(variant = :primary, extra_classes: "")
     base = "btn"
 
     variant_class = case variant.to_sym
@@ -134,6 +134,11 @@ module ApplicationHelper
     end
 
     [ base, variant_class, extra_classes.presence ].compact.join(" ")
+  end
+
+  # Backward-compatible alias for older views/helpers.
+  def tailwind_button_classes(...)
+    button_classes(...)
   end
 
   # Returns CSS classes for a survey status pill.

@@ -1,31 +1,31 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <%= link_to "Back", admin_dashboard_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
+      <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary) %>
     </div>
   </div>
 
-  <div class="c-container c-container--wide c-page">
-    <section class="c-card p-8 md:p-10 u-stack u-stack--xl">
+  <div class="c-page">
+    <section class="c-card u-stack u-stack--xl">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Faculty imports</p>
-          <h1 class="c-page-title c-page-title--brand text-3xl font-semibold">Grade Import Batches</h1>
+          <h1 class="c-page-title c-page-title--brand">Grade Import Batches</h1>
           <p class="c-page-subtitle">Staff-only workspace for previews, committed batches, and audit history.</p>
         </div>
-        <%= link_to "New batch", new_admin_grade_import_batch_path, class: tailwind_button_classes(:primary) %>
+        <%= link_to "New batch", new_admin_grade_import_batch_path, class: button_classes(:primary) %>
       </header>
 
       <section class="u-stack u-stack--md">
         <div>
-        <div class="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 class="c-section-title c-heading-inline">Batch history</h2>
-          <%= link_to "Release Dates", admin_course_grade_release_dates_path, class: tailwind_button_classes(:secondary) %>
-        </div>
-          <p class="text-sm text-slate-600">Review previews, committed imports, and the evidence and ratings generated from each batch.</p>
+          <div class="u-responsive-split">
+            <h2 class="c-section-title c-heading-inline">Batch history</h2>
+            <%= link_to "Release Dates", admin_course_grade_release_dates_path, class: button_classes(:secondary) %>
+          </div>
+          <p class="c-lede">Review previews, committed imports, and the evidence and ratings generated from each batch.</p>
         </div>
 
-        <div class="c-card c-card--flush overflow-hidden">
+        <div class="c-card c-card--flush u-overflow-hidden">
         <%= render TableComponent.new(
           headers: ["Batch", "Status", "Mode", "Semester", "Uploaded By", "Files", "Evidence", "Pending", "Ratings", "Created", ""]
         ) do %>
@@ -38,18 +38,18 @@
             else
               "—"
             end %>
-            <tr class="transition hover:bg-slate-50">
-              <td class="px-4 py-3 text-sm font-semibold text-slate-900">#<%= batch.id %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= batch.status.humanize %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= mode_label %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= batch.program_semester&.name || "—" %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= batch.uploaded_by&.email %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= "#{batch.processed_files}/#{batch.total_files}" %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= batch.evidence_count %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= batch.pending_count %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= batch.rating_count %></td>
-              <td class="px-4 py-3 text-sm text-slate-700"><%= l(batch.created_at, format: :short) %></td>
-              <td class="px-4 py-3 text-right text-sm"><%= link_to "View", admin_grade_import_batch_path(batch), class: "font-medium text-blue-700 hover:text-blue-900" %></td>
+            <tr>
+              <td class="c-table__title">#<%= batch.id %></td>
+              <td><%= batch.status.humanize %></td>
+              <td><%= mode_label %></td>
+              <td><%= batch.program_semester&.name || "—" %></td>
+              <td><%= batch.uploaded_by&.email %></td>
+              <td><%= "#{batch.processed_files}/#{batch.total_files}" %></td>
+              <td><%= batch.evidence_count %></td>
+              <td><%= batch.pending_count %></td>
+              <td><%= batch.rating_count %></td>
+              <td><%= l(batch.created_at, format: :short) %></td>
+              <td class="u-text-right"><%= link_to "View", admin_grade_import_batch_path(batch), class: "u-link" %></td>
             </tr>
           <% end %>
         <% end %>

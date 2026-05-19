@@ -16,6 +16,7 @@ class Admin::CompetencyMatrix
     self_ratings = latest_self_ratings(student_ids)
     advisor_ratings = latest_advisor_ratings(student_ids)
     course_ratings = latest_course_ratings(student_ids)
+    target_levels = target_levels_for(students)
 
     {
       filters: normalized_filters,
@@ -26,7 +27,7 @@ class Admin::CompetencyMatrix
       course_competency_rule_label: CourseCompetencyRule.label_for(active_course_competency_rule),
       course_competency_rule_options: CourseCompetencyRule.options,
       students: students.map do |student|
-        build_student_row(student, self_ratings:, advisor_ratings:, course_ratings:)
+        build_student_row(student, self_ratings:, advisor_ratings:, course_ratings:, target_levels:)
       end
     }
   end
@@ -35,7 +36,7 @@ class Admin::CompetencyMatrix
 
   attr_reader :params, :actor_user
 
-  def build_student_row(student, self_ratings:, advisor_ratings:, course_ratings:)
+  def build_student_row(student, self_ratings:, advisor_ratings:, course_ratings:, target_levels:)
     {
       id: student.student_id,
       name: student.user&.display_name || student.student_id.to_s,
@@ -48,7 +49,8 @@ class Admin::CompetencyMatrix
         {
           self_rating: self_ratings.dig(student.student_id, title),
           advisor_rating: advisor_ratings.dig(student.student_id, title),
-          course_rating: course_ratings.dig(student.student_id, title)
+          course_rating: course_ratings.dig(student.student_id, title),
+          program_target: target_levels.dig(student.student_id, title)
         }
       end
     }
@@ -136,11 +138,25 @@ class Admin::CompetencyMatrix
       rows = rows.where("LOWER(program_semesters.name) = ?", normalized_filters[:semester].downcase)
     end
 
-    rows.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |row, lookup|
-      next if lookup[row.student_id].key?(row.question_text)
+    lookup = rows.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |row, memo|
+      next if memo[row.student_id].key?(row.question_text)
 
-      lookup[row.student_id][row.question_text] = normalize_rating(row.response_value)
+      memo[row.student_id][row.question_text] = normalize_rating(row.response_value)
     end
+
+    version_ratings = CompetencySurveyVersionRatings.call(
+      student_ids: student_ids,
+      survey_scope: self_rating_version_survey_scope,
+      competency_titles: visible_competency_titles
+    )
+
+    version_ratings.each do |student_id, ratings|
+      ratings.each do |title, value|
+        lookup[student_id][title] ||= value
+      end
+    end
+
+    lookup
   end
 
   def latest_advisor_ratings(student_ids)
@@ -156,11 +172,25 @@ class Admin::CompetencyMatrix
       rows = rows.where("LOWER(program_semesters.name) = ?", normalized_filters[:semester].downcase)
     end
 
-    rows.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |row, lookup|
+    lookup = rows.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |row, lookup|
       next if lookup[row.student_id].key?(row.question_text)
 
       lookup[row.student_id][row.question_text] = normalize_rating(row.average_score)
     end
+
+    submitted_ratings = CompetencySurveyVersionRatings.call(
+      student_ids: student_ids,
+      survey_scope: submitted_advisor_feedback_survey_scope,
+      competency_titles: visible_competency_titles
+    )
+
+    submitted_ratings.each do |student_id, ratings|
+      ratings.each do |title, value|
+        lookup[student_id][title] ||= value
+      end
+    end
+
+    lookup
   end
 
   def latest_course_ratings(student_ids)
@@ -172,6 +202,11 @@ class Admin::CompetencyMatrix
       .where(student_id: student_ids, competency_title: visible_competency_titles)
       .select("grade_competency_ratings.student_id, grade_competency_ratings.competency_title, grade_competency_ratings.aggregated_level")
 
+    if normalized_filters[:semester].present?
+      semester = ProgramSemester.find_by_name_case_insensitive(normalized_filters[:semester])
+      rows = semester ? rows.where(grade_import_batches: { program_semester_id: semester.id }) : rows.none
+    end
+
     grouped = rows.group_by { |row| [ row.student_id, row.competency_title ] }
 
     grouped.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |((student_id, competency_title), entries), lookup|
@@ -182,6 +217,60 @@ class Admin::CompetencyMatrix
 
   def active_course_competency_rule
     @active_course_competency_rule ||= SiteSetting.course_competency_rule
+  end
+
+  def self_rating_version_survey_scope
+    scope = Survey.joins(:program_semester)
+    if normalized_filters[:semester].present?
+      scope = scope.where("LOWER(program_semesters.name) = ?", normalized_filters[:semester].downcase)
+    end
+    scope
+  end
+
+  def submitted_advisor_feedback_survey_scope
+    scope = Survey
+      .joins(:program_semester, :advisor_feedback_submissions)
+      .merge(AdvisorFeedbackSubmission.submitted)
+
+    if normalized_filters[:semester].present?
+      scope = scope.where("LOWER(program_semesters.name) = ?", normalized_filters[:semester].downcase)
+    end
+
+    scope.distinct
+  end
+
+  def target_levels_for(students)
+    semester = selected_program_semester
+    return {} if students.empty? || semester.blank?
+
+    tracks = students.map { |student| track_label_for(student) }.compact.uniq
+    records = CompetencyTargetLevel
+      .where(program_semester_id: semester.id, competency_title: visible_competency_titles)
+      .where(track: tracks)
+      .to_a
+
+    students.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |student, lookup|
+      student_track = track_label_for(student)
+      next if student_track.blank?
+
+      visible_competency_titles.each do |title|
+        matches = records.select { |record| record.track == student_track && record.competency_title == title }
+        exact_year = matches.find { |record| record.program_year == student.program_year }
+        exact_class = matches.find { |record| record.class_of == student.program_year }
+        fallback = matches.find { |record| record.program_year.blank? && record.class_of.blank? }
+        lookup[student.student_id][title] = (exact_year || exact_class || fallback || matches.first)&.target_level
+      end
+    end
+  end
+
+  def selected_program_semester
+    @selected_program_semester ||= begin
+      if normalized_filters[:semester].present?
+        ProgramSemester.find_by_name_case_insensitive(normalized_filters[:semester])
+      else
+        ProgramSemester.current
+      end
+    end
   end
 
   def normalize_rating(value)
@@ -218,8 +307,32 @@ class Admin::CompetencyMatrix
           .max_by(&:last)
           &.first
 
-        lookup[title] = domain_name
+        lookup[title] = domain_name || fallback_domain_lookup[title]
       end
+    end
+  end
+
+  def fallback_domain_lookup
+    @fallback_domain_lookup ||= begin
+      {
+        "Public and Population Health Assessment" => "Health Care Environment and Community",
+        "Delivery, Organization, and Financing of Health Services and Health Systems" => "Health Care Environment and Community",
+        "Policy Analysis" => "Health Care Environment and Community",
+        "Legal & Ethical Bases for Health Services and Health Systems" => "Health Care Environment and Community",
+        "Ethics, Accountability, and Self-Assessment" => "Leadership Skills",
+        "Organizational Dynamics" => "Leadership Skills",
+        "Problem Solving, Decision Making, and Critical Thinking" => "Leadership Skills",
+        "Team Building and Collaboration" => "Leadership Skills",
+        "Strategic Planning" => "Management Skills",
+        "Business Planning" => "Management Skills",
+        "Communication" => "Management Skills",
+        "Financial Management" => "Management Skills",
+        "Performance Improvement" => "Management Skills",
+        "Project Management" => "Management Skills",
+        "Systems Thinking" => "Analytic and Technical Skills",
+        "Data Analysis and Information Management" => "Analytic and Technical Skills",
+        "Quantitative Methods for Health Services Delivery" => "Analytic and Technical Skills"
+      }
     end
   end
 

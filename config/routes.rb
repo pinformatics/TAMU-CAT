@@ -62,7 +62,7 @@ Rails.application.routes.draw do
   namespace :admin do
     resource :maintenance, only: %i[show update]
     get "program_setup", to: "program_setups#show", as: :program_setup
-    resources :competencies, only: :index do
+    resources :competencies, only: %i[index show] do
       collection do
         get :export
         patch :course_rule
@@ -76,6 +76,7 @@ Rails.application.routes.draw do
         post :commit
         post :rollback
         post :recommit
+        patch :semester
         get :export_ratings
         get :error_report
       end

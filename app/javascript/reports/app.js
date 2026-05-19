@@ -264,7 +264,7 @@ const ErrorState = ({ message, onRetry }) => {
     )
   }
 
-  return h("div", { className: "reports-panel reports-panel--error", role: "alert" }, children)
+  return h("div", { className: "c-analytics-panel c-analytics-panel--error", role: "alert" }, children)
 }
 
 const FilterBar = ({ filters, options, onChange, onReset }) => {
@@ -337,8 +337,8 @@ const FilterBar = ({ filters, options, onChange, onReset }) => {
     }
   ]
 
-  return h("section", { className: "reports-panel reports-filters", "aria-label": "Dashboard filters" }, [
-    h("div", { className: "reports-filters__grid" },
+  return h("section", { className: "c-analytics-panel c-analytics-filters", "aria-label": "Dashboard filters" }, [
+    h("div", { className: "c-analytics-filters__grid" },
       selectConfigs.map((config) => {
         const value = mergedFilters[config.name] ?? "all"
         const optionsNodes = [
@@ -355,7 +355,7 @@ const FilterBar = ({ filters, options, onChange, onReset }) => {
           )
         })
 
-        return h("label", { key: config.name, className: "reports-field" }, [
+        return h("label", { key: config.name, className: "c-analytics-field" }, [
           h("span", null, config.label),
           h("select", { name: config.name, value, onChange: handleChange }, optionsNodes)
         ])
@@ -366,13 +366,13 @@ const FilterBar = ({ filters, options, onChange, onReset }) => {
 }
 
 const SummaryCards = ({ cards }) =>
-  h("section", { className: "reports-summary" },
+  h("section", { className: "c-analytics-summary" },
     cards
       .filter((card) => !["overall_average", "overall_advisor_average"].includes(card.key))
       .map((card) => {
-      const headerChildren = [ h("p", { className: "reports-summary__label" }, card.title) ]
+      const headerChildren = [ h("p", { className: "c-analytics-summary__label" }, card.title) ]
       if (card.meta && card.meta.name) {
-        headerChildren.push(h("span", { className: "reports-summary__meta" }, card.meta.name))
+        headerChildren.push(h("span", { className: "c-analytics-summary__meta" }, card.meta.name))
       }
 
         const trackSummaries = Array.isArray(card.meta?.tracks) ? card.meta.tracks : []
@@ -388,46 +388,46 @@ const SummaryCards = ({ cards }) =>
             }
 
             const children = [
-              h("span", { className: "reports-summary__meta" }, track.label),
+              h("span", { className: "c-analytics-summary__meta" }, track.label),
               h("strong", null, formatMetricValue(track.percent, "percent", 0))
             ]
 
             if (detailParts.length > 0) {
               children.push(
-                h("span", { className: "reports-summary__subtext" }, detailParts.join(" • "))
+                h("span", { className: "c-analytics-summary__subtext" }, detailParts.join(" • "))
               )
             }
 
-            return h("div", { key: track.label, className: "reports-summary__value-track" }, children)
+            return h("div", { key: track.label, className: "c-analytics-summary__value-track" }, children)
           })
-          valueNode = h("div", { className: "reports-summary__value reports-summary__value--tracks" }, trackRows)
+          valueNode = h("div", { className: "c-analytics-summary__value c-analytics-summary__value--tracks" }, trackRows)
         } else {
           const valueChildren = [ h("strong", null, formatMetricValue(card.value, card.unit, card.precision)) ]
           if (card.meta && card.meta.advisor_average !== undefined && card.meta.advisor_average !== null) {
             valueChildren.push(
-              h("span", { className: "reports-summary__subtext" }, `Advisor avg ${formatMetricValue(card.meta.advisor_average, "score", 1)}`)
+              h("span", { className: "c-analytics-summary__subtext" }, `Advisor avg ${formatMetricValue(card.meta.advisor_average, "score", 1)}`)
             )
           }
-          valueNode = h("div", { className: "reports-summary__value" }, valueChildren)
+          valueNode = h("div", { className: "c-analytics-summary__value" }, valueChildren)
         }
 
       const footerChildren = [
-        h("span", { className: `reports-summary__trend reports-summary__trend--${card.change_direction || "flat"}` }, formatChange(card.change, card.unit)),
-        h("span", { className: "reports-summary__description" }, card.description)
+        h("span", { className: `c-analytics-summary__trend c-analytics-summary__trend--${card.change_direction || "flat"}` }, formatChange(card.change, card.unit)),
+        h("span", { className: "c-analytics-summary__description" }, card.description)
       ]
 
       if (card.meta && card.meta.goal_percent) {
         footerChildren.push(
-          h("span", { className: "reports-summary__description" }, `Program goal: ${formatMetricValue(card.meta.goal_percent, "percent", 0)}`)
+          h("span", { className: "c-analytics-summary__description" }, `Program goal: ${formatMetricValue(card.meta.goal_percent, "percent", 0)}`)
         )
       }
       if (card.meta && card.meta.students_met_goal !== undefined) {
         footerChildren.push(
-          h("span", { className: "reports-summary__description" }, `Students meeting goal: ${card.meta.students_met_goal}`)
+          h("span", { className: "c-analytics-summary__description" }, `Students meeting goal: ${card.meta.students_met_goal}`)
         )
       }
 
-      return h("article", { key: card.key, className: "reports-summary__card", "aria-label": card.title }, [
+      return h("article", { key: card.key, className: "c-analytics-summary__card", "aria-label": card.title }, [
         h("header", null, headerChildren),
         valueNode,
         h("footer", null, footerChildren)
@@ -515,7 +515,7 @@ const TrendChart = ({ timeline, yAxisMode }) => {
 
   const ariaLabel = yAxisMode === "percent" ? "% meeting target over time" : "Monthly average scores"
 
-  return h("div", { className: "reports-chart", role: "img", "aria-label": ariaLabel },
+  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": ariaLabel },
     h("canvas", { ref: canvasRef })
   )
 }
@@ -607,10 +607,10 @@ const CompetencyAchievementChart = ({ items, yAxisMode }) => {
   }, [ items, yAxisMode ])
 
   if (!Array.isArray(items) || items.length === 0) {
-    return h("p", { className: "reports-placeholder" }, "No competency data available for the selected filters.")
+    return h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   }
 
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Average score by competency", style: { minHeight: "360px" } },
+  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by competency", style: { minHeight: "360px" } },
     h("canvas", { ref: canvasRef })
   )
 }
@@ -700,10 +700,10 @@ const DomainAverageChart = ({ items, yAxisMode }) => {
   }, [ items, yAxisMode ])
 
   if (!Array.isArray(items) || items.length === 0) {
-    return h("p", { className: "reports-placeholder" }, "No competency data available for the selected filters.")
+    return h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   }
 
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Average score by domain", style: { minHeight: "360px" } },
+  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by domain", style: { minHeight: "360px" } },
     h("canvas", { ref: canvasRef })
   )
 }
@@ -780,7 +780,7 @@ const CompetencyDetailChart = ({ data, selectedDomain, onDomainChange, sort, onS
 
   return h("div", { className: "space-y-4" }, [
     h("div", { className: "flex flex-wrap gap-3" }, [
-      h("label", { className: "reports-field" }, [
+      h("label", { className: "c-analytics-field" }, [
         h("span", null, "Domain"),
         h("select", {
           value: selectedDomain,
@@ -790,7 +790,7 @@ const CompetencyDetailChart = ({ data, selectedDomain, onDomainChange, sort, onS
           ...domainOptions.map((domain) => h("option", { key: `domain-${domain.id}`, value: String(domain.id) }, domain.name))
         ])
       ]),
-      h("label", { className: "reports-field" }, [
+      h("label", { className: "c-analytics-field" }, [
         h("span", null, "Sort by"),
         h("select", {
           value: sort,
@@ -804,8 +804,8 @@ const CompetencyDetailChart = ({ data, selectedDomain, onDomainChange, sort, onS
       ])
     ]),
     Array.isArray(data?.items) && data.items.length > 0
-      ? h("div", { className: "reports-chart", style: { minHeight: "360px" } }, h("canvas", { ref: canvasRef }))
-      : h("p", { className: "reports-placeholder" }, "No competency data available for the selected filters.")
+      ? h("div", { className: "c-analytics-chart", style: { minHeight: "360px" } }, h("canvas", { ref: canvasRef }))
+      : h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   ])
 }
 
@@ -905,10 +905,10 @@ const TrackAchievementChart = ({ tracks }) => {
   }, [ tracks ])
 
   if (!Array.isArray(tracks) || tracks.length === 0) {
-    return h("p", { className: "reports-placeholder" }, "No track performance data available.")
+    return h("p", { className: "c-analytics-placeholder" }, "No track performance data available.")
   }
 
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Percent achieved by track", style: { minHeight: "360px" } },
+  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Percent achieved by track", style: { minHeight: "360px" } },
     h("canvas", { ref: canvasRef })
   )
 }
@@ -954,9 +954,9 @@ const EmploymentStatusChart = ({ statusCounts }) => {
   }, [ statusCounts ])
 
   if (!Array.isArray(statusCounts) || statusCounts.length === 0) {
-    return h("p", { className: "reports-placeholder" }, "No employment status data available.")
+    return h("p", { className: "c-analytics-placeholder" }, "No employment status data available.")
   }
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Employment status breakdown", style: { minHeight: "280px" } },
+  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Employment status breakdown", style: { minHeight: "280px" } },
     h("canvas", { ref: canvasRef })
   )
 }
@@ -989,8 +989,8 @@ const EmploymentHoursChart = ({ distribution }) => {
     return () => chart.destroy()
   }, [ distribution ])
 
-  if (!distribution) return h("p", { className: "reports-placeholder" }, "No hours data available.")
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Hours per week distribution", style: { minHeight: "260px" } },
+  if (!distribution) return h("p", { className: "c-analytics-placeholder" }, "No hours data available.")
+  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Hours per week distribution", style: { minHeight: "260px" } },
     h("canvas", { ref: canvasRef })
   )
 }
@@ -1024,14 +1024,14 @@ const EmploymentFlexibilityChart = ({ distribution }) => {
     return () => chart.destroy()
   }, [ distribution ])
 
-  if (!distribution) return h("p", { className: "reports-placeholder" }, "No flexibility data available.")
-  return h("div", { className: "reports-chart", role: "img", "aria-label": "Work schedule flexibility distribution", style: { minHeight: "260px" } },
+  if (!distribution) return h("p", { className: "c-analytics-placeholder" }, "No flexibility data available.")
+  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Work schedule flexibility distribution", style: { minHeight: "260px" } },
     h("canvas", { ref: canvasRef })
   )
 }
 
 const EmploymentTab = ({ data, onExport }) => {
-  if (!data) return h("p", { className: "reports-placeholder" }, "Loading employment data…")
+  if (!data) return h("p", { className: "c-analytics-placeholder" }, "Loading employment data…")
 
   const { total_respondents, employment_rate, status_counts, hours_distribution, flexibility_distribution } = data
 
@@ -1137,10 +1137,10 @@ const ViewToggle = ({ mode, onChange, singleStudentDisabled }) => {
 const TabNavigation = ({ tabs, activeKey, onChange }) => {
   if (!Array.isArray(tabs) || tabs.length === 0) return null
 
-  return h("div", { className: "reports-tabs__list", role: "tablist" },
+  return h("div", { className: "c-tabs", role: "tablist" },
     tabs.map((tab) => {
       const isActive = tab.key === activeKey
-      const className = `reports-tabs__button${isActive ? " reports-tabs__button--active" : ""}`
+      const className = `c-tab${isActive ? " is-active" : ""}`
       return h("button", {
         key: tab.key,
         type: "button",
@@ -1380,7 +1380,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
       toolbar: h(SectionExportButtons, { onExport: handleExport, section: "trend" }),
       content: timeline.length > 0
         ? h(TrendChart, { timeline, yAxisMode })
-        : h("p", { className: "reports-placeholder" }, "No trend data available."),
+        : h("p", { className: "c-analytics-placeholder" }, "No trend data available."),
       footnote: h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
     })
 
@@ -1420,19 +1420,19 @@ const ReportsApp = ({ exportUrls = {} }) => {
     return h(ErrorState, { message: "No analytics are available for the selected filters.", onRetry: loadFilters })
   }
 
-  return h("div", { className: "reports-layout space-y-8" }, [
+  return h("div", { className: "c-analytics-layout space-y-8" }, [
     h(FilterBar, { filters, options, onChange: handleFilterChange, onReset: handleReset }),
     summaryCards.length > 0 ? h(SummaryCards, { cards: summaryCards }) : null,
-    h("section", { className: "reports-panel space-y-5" }, [
+    h("section", { className: "c-analytics-panel space-y-5" }, [
       h("div", { className: "space-y-1" }, [
         h("h2", null, "Analytics Visualizations"),
         h("p", null, "Use the tabs below to switch between the available charts.")
       ]),
-      h("div", { className: "reports-tabs space-y-4" }, [
+      h("div", { className: "c-tabs-wrap space-y-4" }, [
         h(TabNavigation, { tabs: chartTabs, activeKey: activeTab, onChange: setActiveTab }),
         activeTabConfig
-          ? h("div", { className: "reports-tab__body space-y-4" }, [
-              h("header", { className: "reports-panel__header flex flex-wrap items-start justify-between gap-4" }, [
+          ? h("div", { className: "c-tab-panel space-y-4" }, [
+              h("header", { className: "c-analytics-panel__header flex flex-wrap items-start justify-between gap-4" }, [
                 h("div", { className: "space-y-2" }, [
                   h("div", { className: "space-y-1" }, [
                     h("h2", null, activeTabConfig.title),
@@ -1445,7 +1445,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
               activeTabConfig.content,
               activeTabConfig.footnote
             ].filter(Boolean))
-          : h("p", { className: "reports-placeholder" }, "No charts available.")
+          : h("p", { className: "c-analytics-placeholder" }, "No charts available.")
       ])
     ])
   ].filter(Boolean))

@@ -7,31 +7,26 @@ module Admin::CompetenciesHelper
     number_with_precision(value, precision: 1, strip_insignificant_zeros: true)
   end
 
-  def competency_matrix_source_label(source)
-    case source.to_sym
-    when :self
-      "Self"
-    when :advisor
-      "Advisor"
-    when :course
-      "Course"
-    else
-      source.to_s.humanize
-    end
+  def competency_rating_target_class(value, target)
+    return "c-score-pill--empty" if value.nil?
+    return "c-score-pill--no-target" if target.blank?
+
+    value.to_f >= target.to_f ? "c-score-pill--met" : "c-score-pill--below"
   end
 
-  def competency_matrix_source_row_class(source)
-    base = "c-competency-scorecard__row"
-
-    case source.to_sym
+  def competency_rating_target_title(competency_title, target, source: nil)
+    target_text = target.present? ? competency_matrix_rating(target) : "not configured"
+    source_text = case source&.to_sym
     when :self
-      "#{base} c-competency-scorecard__row--self"
+      "Self score from student survey responses"
     when :advisor
-      "#{base} c-competency-scorecard__row--advisor"
+      "Advisor score from advisor feedback on surveys"
     when :course
-      "#{base} c-competency-scorecard__row--course"
+      "Course score from imported course competency data"
     else
-      base
+      "Score"
     end
+
+    "#{source_text}. Program target for #{competency_title}: #{target_text}"
   end
 end

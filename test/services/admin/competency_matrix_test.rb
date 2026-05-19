@@ -62,11 +62,22 @@ class Admin::CompetencyMatrixTest < ActiveSupport::TestCase
     assert_equal "max", payload[:course_competency_rule]
   end
 
+  test "course ratings are scoped to the selected import semester" do
+    create_course_rating(level: 2.0, semester: program_semesters(:spring_2025))
+    create_course_rating(level: 5.0, semester: program_semesters(:fall_2025))
+
+    payload = Admin::CompetencyMatrix.new(params: { semester: "Fall 2025" }, actor_user: @admin).call
+    student_row = payload[:students].find { |row| row[:id] == @student.student_id }
+
+    assert_in_delta 5.0, student_row.dig(:ratings, @competency_name, :course_rating), 0.001
+  end
+
   private
 
-  def create_course_rating(level:)
+  def create_course_rating(level:, semester: nil)
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,
+      program_semester: semester,
       status: "completed",
       summary: { "dry_run" => false }
     )

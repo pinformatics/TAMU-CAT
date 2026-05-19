@@ -31,7 +31,7 @@
     .user-info .label { font-size: 11px; color: #6b7785; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
     .user-info .value { font-weight: 600; color: #102a43; }
 
-    h1.survey-title { font-size: 18px; margin: 0 0 6px 0; color: #0f172a; }
+    h1.c-item-title { font-size: 18px; margin: 0 0 6px 0; color: #0f172a; }
     h2.c-section-title { font-size: 14px; margin: 14px 0 8px 0; color: #0f172a; }
     h3.category-title { font-size: 12.5px; margin: 0 0 5px 0; color: #0f172a; }
 
@@ -40,22 +40,18 @@
     .metric-label { font-size: 11px; color: #6b7785; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
     .metric-value { font-size: 14px; font-weight: 600; color: #102a43; }
 
-    /* Advisor summary (PDF) */
-    .advisor-summary { border: none; background: #DCE2F0; border-radius: 0; padding: 10px 12px; margin-bottom: 12px; }
-    /* Summary Statistics should be a normal card (no advisor palette). */
-    .summary-card { border: none; background: #ffffff; border-radius: 0; padding: 10px 12px; margin-bottom: 12px; }
-    .advisor-summary__header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
-    .advisor-summary__title { font-size: 14px; margin: 0; color: #0f172a; }
-    .advisor-summary__hint { margin: 0; font-size: 11px; color: #6b7785; }
-    /* Use table layout for wkhtmltopdf reliability (flex can stack). */
-    .advisor-summary__grid { display: table; width: 100%; border-collapse: separate; border-spacing: 10px 0; }
-    .advisor-summary__card { display: table-cell; width: 50%; vertical-align: top; border: none; border-radius: 0; padding: 8px 10px; background: #f8fafc; }
-    .advisor-summary__cardRow { display: flex; justify-content: space-between; gap: 10px; }
-    .advisor-summary__label { font-size: 11px; color: #6b7785; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
-    .advisor-summary__percent { font-size: 11px; color: #6b7785; }
-    .advisor-summary__count { font-size: 18px; font-weight: 800; color: #500000; }
-    .advisor-summary__footer { margin-top: 10px; }
-    .advisor-summary__note { margin: 0; font-size: 11px; color: #6b7785; }
+    .c-card { border: 1px solid #e2e8f0; background: #ffffff; padding: 10px 12px; margin-bottom: 12px; }
+    .c-card--muted { background: #f8fafc; }
+    .c-panel-header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+    .c-panel-title { font-size: 14px; margin: 0; color: #0f172a; }
+    .u-stack > * + * { margin-top: 10px; }
+    .u-grid { display: table; width: 100%; border-collapse: separate; border-spacing: 10px 0; }
+    .u-grid > * { display: table-cell; width: 50%; vertical-align: top; }
+    .c-stat { border: 1px solid #e2e8f0; background: #ffffff; padding: 8px 10px; }
+    .c-stat__label { font-size: 11px; color: #6b7785; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .c-stat__value { font-size: 18px; font-weight: 800; color: #500000; }
+    .c-stat__subtext,
+    .c-help { font-size: 11px; color: #6b7785; }
 
     .pdf-section { margin-bottom: 18px; page-break-inside: avoid; break-inside: avoid; }
     .section-card { border: none; border-radius: 0; padding: 8px 10px; margin: 8px 0; background: #F9EBDE; page-break-inside: auto; break-inside: auto; }
@@ -69,17 +65,17 @@
     .category-description { font-size: 12px; color: #475569; }
     .category-description p { margin: 0 0 6px 0; }
 
-    .question-block { padding: 4px 0; border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; }
-    .question-header { display: flex; gap: 6px; align-items: flex-start; margin-bottom: 2px; }
+    .c-question-card { padding: 4px 0; border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; }
+    .c-question-header { display: flex; gap: 6px; align-items: flex-start; margin-bottom: 2px; }
     .question-number { color: #500000; font-weight: 800; min-width: 28px; }
     .question-heading { display: flex; justify-content: space-between; gap: 10px; width: 100%; }
-    .question-body { font-weight: 700; color: #0f172a; }
+    .c-question-body { font-weight: 700; color: #0f172a; }
     .target-level-wrap { margin-left: auto; text-align: right; white-space: nowrap; }
-    .target-level-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0; }
+    .c-level-badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0; }
     .question-description { font-size: 12px; color: #475569; margin: 2px 0 4px 36px; }
     .question-description p { margin: 0 0 4px 0; }
     .question-answer { font-size: 12px; color: #102a43; margin-bottom: 2px; }
-    .question-meta { font-size: 11px; color: #6b7280; display: flex; gap: 12px; }
+    .c-muted-meta { font-size: 11px; color: #6b7280; display: flex; gap: 12px; }
 
     .choice-list { list-style: none; padding: 0; margin: 6px 0 0 0; }
     .choice-item { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; border: 1px solid transparent; margin-right: 6px; font-size: 12px; }
@@ -97,7 +93,7 @@
     .badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
     .badge-warning { background: #fef3c7; color: #92400e; }
 
-    .empty-state { font-size: 12px; color: #6b7280; font-style: italic; }
+    .c-empty-state { font-size: 12px; color: #6b7280; font-style: italic; }
   .truncation-note { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 
     /* Advisor feedback blocks should match the advisor palette used on-screen. */
@@ -124,7 +120,7 @@
     .pdf-footer { position: fixed; bottom: 6px; left: 0; right: 0; text-align: center; font-size: 11px; color: #8b99a6; }
 
     /* Small helpers */
-    .muted { color: #6b7785; }
+    .c-muted { color: #6b7785; }
   </style>
 </head>
 <body>

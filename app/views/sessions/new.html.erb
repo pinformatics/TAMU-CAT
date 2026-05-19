@@ -4,24 +4,24 @@
   <%= render "shared/login_navbar" %>
 <% end %>
 
-<section class="w-full max-w-4xl c-card c-card--spacious text-center">
+<section class="u-w-full max-w-4xl c-card c-card--spacious text-center">
   <h1 class="text-3xl font-semibold text-primary md:text-4xl">MHA Program Portal</h1>
   <p class="mt-4 text-base text-slate-600 md:text-lg">Master of Health Administration &mdash; Student and Advisor access</p>
 </section>
 
-<section id="login-sections" class="w-full max-w-5xl">
-  <div class="flex w-full flex-col gap-10 c-card c-card--spacious text-center md:flex-row md:items-stretch md:gap-12">
+<section id="login-sections" class="u-w-full max-w-5xl">
+  <div class="flex u-w-full flex-col gap-10 c-card c-card--spacious text-center md:flex-row md:items-stretch md:gap-12">
     <div id="student-login" class="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-4 md:px-10">
       <h2 class="text-2xl font-semibold text-slate-800">Student Login</h2>
-      <p class="max-w-sm text-sm leading-6 text-slate-600">Access your surveys, track requirements, and stay informed on program updates.</p>
+      <p class="u-max-w-sm text-sm leading-6 text-slate-600">Access your surveys, track requirements, and stay informed on program updates.</p>
       <%= form_with url: user_google_oauth2_omniauth_authorize_path,
                     method: :post,
                     data: { turbo: "false" },
                     html: { id: "student-login-form" },
-                    class: "w-full max-w-xs" do |form| %>
+                    class: "u-w-full max-w-xs" do |form| %>
         <%= form.hidden_field :role, value: 'student' %>
         <%= form.submit "Sign in with Google",
-                        class: tailwind_button_classes(:primary, extra_classes: "btn-block") %>
+                        class: button_classes(:primary, extra_classes: "btn-block") %>
       <% end %>
     </div>
 
@@ -30,15 +30,15 @@
 
     <div id="advisor-login" class="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-4 md:px-10">
       <h2 class="text-2xl font-semibold text-slate-800">Advisor Login</h2>
-      <p class="max-w-sm text-sm leading-6 text-slate-600">Manage student rosters, review feedback, and monitor survey responses.</p>
+      <p class="u-max-w-sm text-sm leading-6 text-slate-600">Manage student rosters, review feedback, and monitor survey responses.</p>
       <%= form_with url: user_google_oauth2_omniauth_authorize_path,
                     method: :post,
                     data: { turbo: "false" },
                     html: { id: "advisor-login-form" },
-                    class: "w-full max-w-xs" do |form| %>
+                    class: "u-w-full max-w-xs" do |form| %>
         <%= form.hidden_field :role, value: 'advisor' %>
         <%= form.submit "Sign in with Google",
-                        class: tailwind_button_classes(:primary, extra_classes: "btn-block") %>
+                        class: button_classes(:primary, extra_classes: "btn-block") %>
       <% end %>
     </div>
   </div>

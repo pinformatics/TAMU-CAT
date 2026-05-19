@@ -1,38 +1,70 @@
 <!-- Main Content for Advisor Dashboard - layout provides html/head/body and navbar -->
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard c-main--viewport u-stack u-stack--md">
   <%= render "shared/role_switcher" %>
 
-  <section class="c-card c-card--hover p-8 md:p-10">
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <h1 class="c-section-title c-heading-inline">Advisor Dashboard</h1>
-      <p class="mt-1 text-sm leading-relaxed text-slate-600">Student guidance for the MHA Program</p>
-    </div>
+  <section class="c-card c-card--compact c-card--brand">
+    <header class="c-page-header c-page-header--compact">
+      <div>
+        <p class="c-eyebrow">Advisor workspace</p>
+        <h1 class="c-page-title c-page-title--brand">Advisor Dashboard</h1>
+        <p class="c-page-subtitle">Review advisees, reports, and competency progress.</p>
+      </div>
+    </header>
+  </section>
 
-    <div class="dashboard-grid dashboard-grid-4">
-      <!-- Reports -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+  <section class="c-card c-card--compact u-stack u-stack--md">
+    <header class="c-page-header c-page-header--compact">
+      <div>
+        <p class="c-eyebrow">Navigation</p>
+        <h2 class="c-section-title">Advisor Tools</h2>
+      </div>
+    </header>
+
+    <div class="c-dashboard-grid c-dashboard-grid--dense">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to reports_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">📊</div>
+          <div class="c-tile__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" focusable="false">
+              <path d="M4 19h16" />
+              <path d="M7 16V9" />
+              <path d="M12 16V5" />
+              <path d="M17 16v-4" />
+            </svg>
+          </div>
           <div class="c-tile__title">Reports</div>
           <div class="c-tile__description"><%= @total_reports || 0 %> generated</div>
         <% end %>
       </div>
 
-      <!-- Students Records -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to student_records_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">👨‍🎓</div>
-          <div class="c-tile__title">Students Records</div>
+          <div class="c-tile__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" focusable="false">
+              <path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3" />
+              <path d="M9 3h6v4H9z" />
+              <path d="M8 13h8" />
+              <path d="M8 17h5" />
+            </svg>
+          </div>
+          <div class="c-tile__title">Records</div>
           <div class="c-tile__description"><%= pluralize(@advisee_count, "assigned student") %></div>
         <% end %>
       </div>
 
-      <!-- Competencies -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to admin_competencies_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">🎯</div>
+          <div class="c-tile__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" focusable="false">
+              <circle cx="12" cy="12" r="8" />
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v4" />
+              <path d="M12 18v4" />
+              <path d="M2 12h4" />
+              <path d="M18 12h4" />
+            </svg>
+          </div>
           <div class="c-tile__title">Competencies</div>
-          <div class="c-tile__description"><%= pluralize(@advisee_count, "assigned student") %></div>
+          <div class="c-tile__description">Compare self, advisor, and course competency scores.</div>
         <% end %>
       </div>
     </div>

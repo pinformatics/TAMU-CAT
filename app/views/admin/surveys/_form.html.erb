@@ -1,11 +1,11 @@
 <% track_options = (@available_tracks + survey.track_list).uniq.compact.sort %>
-<% input_classes = "block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" %>
+<% input_classes = "block u-w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" %>
 <% textarea_classes = "#{input_classes} min-h-[5rem]" %>
 <% checkbox_classes = "h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" %>
 
 <%= form_with(model: [:admin, survey],
               local: true,
-              class: "survey-form w-full space-y-8",
+              class: "survey-form u-w-full space-y-8",
               data: { controller: "survey-tabs" }) do |form| %>
   <% if survey.errors.any? %>
     <div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -18,7 +18,7 @@
     </div>
   <% end %>
 
-  <header class="c-card survey-header">
+  <header class="c-card c-card--brand">
     <div class="c-page-header">
       <div class="u-stack u-stack--md">
         <h2 class="text-xl font-semibold tracking-tight text-slate-900">Survey setup</h2>
@@ -73,10 +73,10 @@
                survey: survey %>
 
     <div class="c-toolbar c-toolbar--spaced sticky bottom-4 z-20 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
-      <div class="c-toolbar__row justify-end w-full">
+      <div class="c-toolbar__row justify-end u-w-full">
         <div class="flex flex-wrap items-center gap-3">
-          <%= link_to "Cancel", admin_surveys_path, class: tailwind_button_classes(:secondary) %>
-          <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: tailwind_button_classes(:primary)) %>
+          <%= link_to "Cancel", admin_surveys_path, class: button_classes(:secondary) %>
+          <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: button_classes(:primary)) %>
         </div>
       </div>
     </div>

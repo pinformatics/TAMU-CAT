@@ -12,18 +12,18 @@
 <% initials = full_name.split.first(2).map { |part| part.first&.upcase }.join.presence || "ST" %>
 <% avatar_url = @student.avatar_url.presence %>
 
-<div class="py-6 sm:py-8">
+<main class="c-main c-page">
   <div class="u-stack u-stack--lg">
     <section class="c-hero c-hero--maroon c-hero--compact">
-      <div class="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-8">
-          <div class="space-y-4">
+      <div class="u-responsive-split">
+        <div class="u-stack u-stack--xl">
+          <div class="u-stack u-stack--md">
             <p class="c-eyebrow c-eyebrow--inverse">Your student profile</p>
             <h1 class="c-h1 c-h1--inverse"><%= full_name %></h1>
-            <p class="c-lede c-lede--inverse max-w-2xl">Track your program status, advisor, and key milestones.</p>
+            <p class="c-lede c-lede--inverse u-max-w-xl">Track your program status, advisor, and key milestones.</p>
           </div>
 
-          <div class="flex flex-wrap gap-3">
+          <div class="u-actions u-actions--start">
             <span class="c-pill c-pill--inverse">
               <span class="c-pill__dot c-pill__dot--inverse"></span>
               Track · <%= track %>
@@ -37,8 +37,8 @@
           </div>
         </div>
 
-        <div class="flex flex-col gap-8 sm:flex-row sm:items-start lg:flex-col lg:items-end">
-          <div class="space-y-5">
+        <div class="u-responsive-row">
+          <div class="u-stack u-stack--md">
             <div>
               <p class="c-eyebrow c-eyebrow--inverse">Primary email</p>
               <p class="c-value c-value--xl c-value--inverse"><%= email %></p>
@@ -48,7 +48,7 @@
               <p class="c-value c-value--xl c-value--inverse"><%= advisor_name %></p>
             </div>
           </div>
-          <div class="c-avatar-tile c-avatar-tile--inverse h-24 w-24 text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@student.user)}\"" unless avatar_url %>>
+          <div class="c-avatar-tile c-avatar-tile--inverse u-size-2xl text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@student.user)}\"" unless avatar_url %>>
             <% if avatar_url %>
               <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(@student.user) %>" loading="lazy">
             <% else %>
@@ -59,7 +59,7 @@
         </div>
       </div>
 
-      <div class="mt-6 grid gap-4 md:grid-cols-3">
+      <div class="u-grid u-grid--stats mt-xl">
         <article class="c-kv c-kv--inverse c-kv--compact">
           <p class="c-eyebrow c-eyebrow--inverse">Major / Program</p>
           <p class="c-value c-value--xl c-value--inverse"><%= major %></p>
@@ -76,16 +76,16 @@
     </section>
 
     <div>
-      <section class="c-card c-card--tight space-y-8">
-        <header class="space-y-2">
+      <section class="c-card c-card--tight u-stack u-stack--xl">
+        <header class="u-stack u-stack--sm">
           <p class="c-eyebrow">Overview</p>
           <h2 class="c-h2">Profile details</h2>
         </header>
 
-        <div class="space-y-8">
-          <div class="space-y-4">
+        <div class="u-stack u-stack--xl">
+          <div class="u-stack u-stack--md">
             <p class="c-h3">Personal</p>
-            <dl class="grid gap-4 sm:grid-cols-2">
+            <dl class="u-grid u-grid--form">
               <div class="c-kv c-kv--compact">
                 <dt class="c-eyebrow">Full name</dt>
                 <dd class="c-value c-value--lg"><%= full_name %></dd>
@@ -94,16 +94,16 @@
                 <dt class="c-eyebrow">UIN</dt>
                 <dd class="c-value c-value--lg"><%= uin %></dd>
               </div>
-              <div class="c-kv c-kv--compact sm:col-span-2">
+              <div class="c-kv c-kv--compact u-col-span-all">
                 <dt class="c-eyebrow">Email</dt>
                 <dd class="c-value c-value--lg"><%= email %></dd>
               </div>
             </dl>
           </div>
 
-          <div class="space-y-4 border-t border-slate-100 pt-6">
+          <div class="u-stack u-stack--md u-section-divider">
             <p class="c-h3">Academic</p>
-            <dl class="grid gap-4 sm:grid-cols-2">
+            <dl class="u-grid u-grid--form">
               <div class="c-kv c-kv--compact">
                 <dt class="c-eyebrow">Major / Program</dt>
                 <dd class="c-value c-value--lg"><%= major %></dd>
@@ -116,7 +116,7 @@
                 <dt class="c-eyebrow">Program track</dt>
                 <dd class="c-value c-value--lg"><%= track %></dd>
               </div>
-              <div class="c-kv c-kv--compact sm:col-span-2">
+              <div class="c-kv c-kv--compact u-col-span-all">
                 <dt class="c-eyebrow">Advisor</dt>
                 <dd class="c-value c-value--lg"><%= advisor_name %></dd>
               </div>
@@ -124,16 +124,16 @@
           </div>
         </div>
 
-        <div class="u-actions u-actions--split border-t border-slate-100 pt-6">
-          <%= link_to student_dashboard_path, class: tailwind_button_classes(:secondary) do %>
+        <div class="u-actions u-actions--split u-section-divider">
+          <%= link_to student_dashboard_path, class: button_classes(:secondary) do %>
             Back to dashboard
           <% end %>
 
-          <%= link_to edit_student_profile_path, class: tailwind_button_classes(:primary) do %>
+          <%= link_to edit_student_profile_path, class: button_classes(:primary) do %>
             Edit profile
           <% end %>
         </div>
       </section>
     </div>
   </div>
-</div>
+</main>

@@ -1,7 +1,7 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <%= link_to "Back to Surveys", admin_surveys_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row items-center u-w-full gap-3">
+      <%= link_to "Back to Surveys", admin_surveys_path, class: button_classes(:secondary) %>
     </div>
   </div>
 
@@ -13,7 +13,7 @@
           <h1 class="c-page-title">Question Bank</h1>
           <p class="c-page-subtitle">Create, edit, and remove prompts that can be assigned to surveys.</p>
         </div>
-        <%= link_to "New Question", new_admin_question_path, class: tailwind_button_classes(:primary) %>
+        <%= link_to "New Question", new_admin_question_path, class: button_classes(:primary) %>
       </header>
 
     <section class="u-stack u-stack--md">
@@ -27,7 +27,7 @@
         <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-600">No questions have been created yet.</div>
       <% else %>
         <div class="c-table-wrapper">
-          <table class="c-table survey-table">
+          <table class="c-table c-table--zebra">
             <thead>
               <tr>
                 <th>Order</th>
@@ -40,31 +40,31 @@
             </thead>
             <tbody>
               <% @questions.each do |question| %>
-                <tr class="survey-table-row">
-                  <td class="survey-meta-cell"><%= question.question_order %></td>
-                  <td class="survey-title"><%= question.question %></td>
-                  <td class="survey-meta-cell"><%= question.question_type.humanize %></td>
+                <tr class="c-table-row">
+                  <td class="c-table__meta"><%= question.question_order %></td>
+                  <td class="c-table__title"><%= question.question %></td>
+                  <td class="c-table__meta"><%= question.question_type.humanize %></td>
                   <% category = question.category %>
                   <% survey = category&.survey %>
-                  <td class="survey-meta-cell">
+                  <td class="c-table__meta">
                     <% if category.present? %>
-                      <span class="meta-chip"><%= category.name %></span>
+                      <span class="c-pill c-pill--muted"><%= category.name %></span>
                     <% else %>
-                      <span class="meta-chip">Unassigned</span>
+                      <span class="c-pill c-pill--muted">Unassigned</span>
                     <% end %>
                   </td>
-                  <td class="survey-meta-cell">
+                  <td class="c-table__meta">
                     <% if survey.present? %>
-                      <span class="meta-chip"><%= survey.title %></span>
+                      <span class="c-pill c-pill--muted"><%= survey.title %></span>
                     <% else %>
-                      <span class="meta-chip">Unassigned</span>
+                      <span class="c-pill c-pill--muted">Unassigned</span>
                     <% end %>
                   </td>
-                  <td class="survey-table-actions">
-                    <%= link_to "Edit", edit_admin_question_path(question), class: tailwind_button_classes(:secondary) %>
+                  <td class="c-table__actions">
+                    <%= link_to "Edit", edit_admin_question_path(question), class: button_classes(:secondary) %>
                     <%= link_to "Delete", admin_question_path(question),
                       data: { turbo_method: :delete, turbo_confirm: "Delete this question? It will be removed from any surveys it's assigned to." },
-                      class: tailwind_button_classes(:danger) %>
+                      class: button_classes(:danger) %>
                   </td>
                 </tr>
               <% end %>

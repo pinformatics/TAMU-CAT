@@ -1,67 +1,64 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <%= link_to "Back to admin", admin_dashboard_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
+      <%= link_to "Back to admin", admin_dashboard_path, class: button_classes(:secondary) %>
     </div>
   </div>
 
-  <div class="c-container c-container--wide c-page">
+  <div class="c-page">
     <section class="u-stack u-stack--lg">
-      <header class="c-card p-6 md:p-8 bg-slate-50 border border-slate-200">
+      <header class="c-card c-card--brand">
         <div>
-          <h1 class="text-2xl font-semibold text-slate-900">Course Grade Release Dates</h1>
-          <p class="mt-2 text-sm text-slate-600">Set when course-derived competency results become visible to students.</p>
+          <p class="c-eyebrow">Admin controls</p>
+          <h1 class="c-page-title c-page-title--brand">Course Grade Release Dates</h1>
+          <p class="c-page-subtitle">Set when course-derived competency results become visible to students.</p>
         </div>
       </header>
 
-      <div class="c-card">
-        <div class="overflow-x-auto">
-          <table class="c-table w-full text-sm">
-            <thead class="border-b border-slate-200 bg-slate-50">
+      <div class="c-card c-card--flush">
+        <div class="c-table-wrapper">
+          <table class="c-table">
+            <thead>
               <tr>
-                <th class="px-4 py-3 text-left font-semibold text-slate-900">Semester</th>
-                <th class="px-4 py-3 text-left font-semibold text-slate-900">Surveys</th>
-                <th class="px-4 py-3 text-left font-semibold text-slate-900">Release Date</th>
-                <th class="px-4 py-3 text-left font-semibold text-slate-900">Status</th>
-                <th class="px-4 py-3 text-right font-semibold text-slate-900">Actions</th>
+                <th>Semester</th>
+                <th>Surveys</th>
+                <th>Release Date</th>
+                <th>Status</th>
+                <th class="u-text-right">Actions</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-200">
+            <tbody>
               <% @semesters.each do |semester| %>
                 <% release_date = @release_dates[semester.id] %>
                 <% is_released = release_date.nil? || Time.current >= release_date.release_date %>
-                <tr class="hover:bg-slate-50">
-                  <td class="px-4 py-4 font-medium text-slate-900"><%= semester.name %></td>
-                  <td class="px-4 py-4 text-slate-700">
-                    <span class="text-xs text-slate-600"><%= @survey_counts[semester.id] || 0 %> survey<%= (@survey_counts[semester.id] || 0) == 1 ? '' : 's' %></span>
+                <tr>
+                  <td class="c-table__title"><%= semester.name %></td>
+                  <td>
+                    <span class="c-muted"><%= @survey_counts[semester.id] || 0 %> survey<%= (@survey_counts[semester.id] || 0) == 1 ? '' : 's' %></span>
                   </td>
-                  <td class="px-4 py-4 text-slate-700">
+                  <td>
                     <% if release_date %>
                       <%= l(release_date.release_date, format: :long) %>
                     <% else %>
-                      <span class="text-slate-500 italic">No date set</span>
+                      <span class="c-muted">No date set</span>
                     <% end %>
                   </td>
-                  <td class="px-4 py-4">
+                  <td>
                     <% if is_released %>
-                      <span class="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">
-                        ✓ Visible
-                      </span>
+                      <span class="c-status-badge c-status-badge--success">Visible</span>
                     <% else %>
-                      <span class="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
-                        🔒 Embargoed
-                      </span>
+                      <span class="c-status-pill c-status-pill--warning">Embargoed</span>
                     <% end %>
                   </td>
-                  <td class="px-4 py-4 text-right">
+                  <td class="u-text-right">
                     <% if release_date %>
                       <%= link_to "Edit",
                                   edit_admin_course_grade_release_date_path(release_date),
-                                  class: tailwind_button_classes(:secondary) %>
+                                  class: button_classes(:secondary) %>
                     <% else %>
                       <%= link_to "Set Date",
                                   new_admin_course_grade_release_date_path(semester_id: semester.id),
-                                  class: tailwind_button_classes(:secondary) %>
+                                  class: button_classes(:secondary) %>
                     <% end %>
                   </td>
                 </tr>
@@ -71,14 +68,14 @@
         </div>
 
         <% if @semesters.empty? %>
-          <div class="flex flex-col items-center justify-center py-12">
-            <p class="text-slate-600">No semesters available.</p>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No semesters available.</p>
           </div>
         <% end %>
       </div>
 
-      <div class="c-card bg-slate-50 border border-slate-200 p-4 md:p-6">
-        <p class="text-sm text-slate-700">
+      <div class="c-callout c-callout--info">
+        <p>
           <strong>How it works:</strong> One release date controls all surveys in a semester. When set, course-derived competency results remain hidden from students until that date. After the date passes, results are visible. If no date is set, results are visible by default. Admins always see all results.
         </p>
       </div>

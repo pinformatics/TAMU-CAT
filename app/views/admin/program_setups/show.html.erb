@@ -1,4 +1,4 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <% tabs = [
     ["Tracks", "tracks", "Manage the available program tracks across the portal."],
     ["Majors", "majors", "Control the degree and major options students can select."],
@@ -9,10 +9,10 @@
   <% active_tab = tabs.find { |(_label, value, _description)| value == @tab } || tabs.first %>
 
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
+    <div class="c-toolbar__row items-center u-w-full gap-3">
       <%= link_to "Back",
                 admin_dashboard_path,
-                class: tailwind_button_classes(:secondary),
+                class: button_classes(:secondary),
                 data: { turbo: false } %>
     </div>
   </div>
@@ -60,7 +60,7 @@
               <div class="u-actions u-actions--split">
                 <div class="c-h3"><%= label %></div>
                 <% if active %>
-                  <span class="status-badge status-badge--success">Open</span>
+                  <span class="c-status-badge c-status-badge--success">Open</span>
                 <% end %>
               </div>
               <p class="c-lede"><%= description %></p>
@@ -72,7 +72,7 @@
 
   <% if @tab == "tracks" %>
     <section class="c-card c-card--spacious u-stack u-stack--md">
-      <header class="toolbar">
+      <header class="c-toolbar__row c-toolbar__row--airy justify-between">
         <div>
           <h2 class="text-xl font-semibold text-slate-900">Tracks</h2>
           <p class="text-sm text-slate-600">View and manage the track options available across the app.</p>
@@ -94,9 +94,9 @@
                       <div class="flex flex-wrap items-center gap-2">
                         <p class="text-base font-semibold text-slate-900"><%= track.name %></p>
                         <% if track.active? %>
-                          <span class="status-badge status-badge--success">Active</span>
+                          <span class="c-status-badge c-status-badge--success">Active</span>
                         <% else %>
-                          <span class="status-badge status-badge--muted">Inactive</span>
+                          <span class="c-status-badge c-status-badge--muted">Inactive</span>
                         <% end %>
                       </div>
                       <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -111,21 +111,21 @@
 
                     <div class="flex flex-wrap items-center gap-2">
                       <details class="group">
-                        <summary class="cursor-pointer list-none <%= tailwind_button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
+                        <summary class="cursor-pointer list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
                         <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
                           <%= form_with model: [:admin, track], local: true, class: "space-y-3" do |form| %>
                             <div class="grid gap-3 sm:grid-cols-2">
                               <div class="space-y-1">
                                 <%= form.label :name, "Name", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.text_field :name, required: true, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
+                                <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
                               </div>
                               <div class="space-y-1">
                                 <%= form.label :key, "Key", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.text_field :key, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
+                                <%= form.text_field :key, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
                               </div>
                               <div class="space-y-1">
                                 <%= form.label :position, "Position", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.number_field :position, min: 0, step: 1, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
+                                <%= form.number_field :position, min: 0, step: 1, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
                               </div>
                               <div class="flex items-center gap-2 pt-6 text-sm text-slate-700">
                                 <%= form.check_box :active, class: "h-4 w-4 rounded border-slate-300" %>
@@ -133,12 +133,12 @@
                               </div>
                             </div>
                             <div class="flex flex-wrap gap-2">
-                              <%= form.submit "Save changes", class: tailwind_button_classes(:primary, extra_classes: "btn-sm") %>
+                              <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
                               <%= button_to "Delete",
                                             admin_program_track_path(track),
                                             method: :delete,
                                             data: { turbo_confirm: "Delete #{track.name}?" },
-                                            class: tailwind_button_classes(:danger, extra_classes: "btn-sm") %>
+                                            class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
                           <% end %>
                         </div>
@@ -157,9 +157,9 @@
           <%= form_with model: [:admin, @new_program_track], url: admin_program_tracks_path, local: true, class: "space-y-4" do |form| %>
             <div class="space-y-1">
               <%= form.label :name, "Track name", class: "text-sm font-medium text-slate-700" %>
-              <%= form.text_field :name, required: true, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm", placeholder: "Residential" %>
+              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm", placeholder: "Residential" %>
             </div>
-            <%= form.submit "Save track", class: tailwind_button_classes(:primary) %>
+            <%= form.submit "Save track", class: button_classes(:primary) %>
           <% end %>
         </div>
       </div>
@@ -168,7 +168,7 @@
 
   <% if @tab == "majors" %>
     <section class="c-card c-card--spacious u-stack u-stack--md">
-      <header class="toolbar">
+      <header class="c-toolbar__row c-toolbar__row--airy justify-between">
         <div>
           <h2 class="text-xl font-semibold text-slate-900">Majors</h2>
           <p class="text-sm text-slate-600">View and manage majors available for student profiles.</p>
@@ -189,7 +189,7 @@
                     <div class="u-stack u-stack--sm">
                       <div class="flex flex-wrap items-center gap-2">
                         <p class="text-base font-semibold text-slate-900"><%= major.name %></p>
-                        <span class="status-badge status-badge--muted">Major</span>
+                        <span class="c-status-badge c-status-badge--muted">Major</span>
                       </div>
                       <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                         <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
@@ -200,20 +200,20 @@
 
                     <div class="flex flex-wrap items-center gap-2">
                       <details>
-                        <summary class="cursor-pointer list-none <%= tailwind_button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
+                        <summary class="cursor-pointer list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
                         <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
                           <%= form_with model: [:admin, major], local: true, class: "space-y-3" do |form| %>
                             <div class="space-y-1">
                               <%= form.label :name, "Name", class: "text-sm font-medium text-slate-700" %>
-                              <%= form.text_field :name, required: true, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
+                              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
                             </div>
                             <div class="flex flex-wrap gap-2">
-                              <%= form.submit "Save changes", class: tailwind_button_classes(:primary, extra_classes: "btn-sm") %>
+                              <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
                               <%= button_to "Delete",
                                             admin_major_path(major),
                                             method: :delete,
                                             data: { turbo_confirm: "Delete #{major.name}?" },
-                                            class: tailwind_button_classes(:danger, extra_classes: "btn-sm") %>
+                                            class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
                           <% end %>
                         </div>
@@ -232,9 +232,9 @@
           <%= form_with model: [:admin, @new_major], url: admin_majors_path, local: true, class: "space-y-4" do |form| %>
             <div class="space-y-1">
               <%= form.label :name, "Major / Program name", class: "text-sm font-medium text-slate-700" %>
-              <%= form.text_field :name, required: true, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm" %>
+              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm" %>
             </div>
-            <%= form.submit "Save major", class: tailwind_button_classes(:primary) %>
+            <%= form.submit "Save major", class: button_classes(:primary) %>
           <% end %>
         </div>
       </div>
@@ -243,7 +243,7 @@
 
   <% if @tab == "years" %>
     <section class="c-card c-card--spacious u-stack u-stack--md">
-      <header class="toolbar">
+      <header class="c-toolbar__row c-toolbar__row--airy justify-between">
         <div>
           <h2 class="text-xl font-semibold text-slate-900">Cohort years</h2>
           <p class="text-sm text-slate-600">Manage the “Class of YYYY” options used for cohort assignment and reporting.</p>
@@ -265,9 +265,9 @@
                       <div class="flex flex-wrap items-center gap-2">
                         <p class="text-base font-semibold text-slate-900">Class of <%= year.value %></p>
                         <% if year.active? %>
-                          <span class="status-badge status-badge--success">Active</span>
+                          <span class="c-status-badge c-status-badge--success">Active</span>
                         <% else %>
-                          <span class="status-badge status-badge--muted">Inactive</span>
+                          <span class="c-status-badge c-status-badge--muted">Inactive</span>
                         <% end %>
                       </div>
                       <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -282,17 +282,17 @@
 
                     <div class="flex flex-wrap items-center gap-2">
                       <details>
-                        <summary class="cursor-pointer list-none <%= tailwind_button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
+                        <summary class="cursor-pointer list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
                         <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
                           <%= form_with model: [:admin, year], local: true, class: "space-y-3" do |form| %>
                             <div class="grid gap-3 sm:grid-cols-2">
                               <div class="space-y-1">
                                 <%= form.label :value, "Class of year", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
+                                <%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
                               </div>
                               <div class="space-y-1">
                                 <%= form.label :position, "Position", class: "text-sm font-medium text-slate-700" %>
-                                <%= form.number_field :position, min: 0, step: 1, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
+                                <%= form.number_field :position, min: 0, step: 1, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
                               </div>
                               <div class="flex items-center gap-2 pt-6 text-sm text-slate-700">
                                 <%= form.check_box :active, class: "h-4 w-4 rounded border-slate-300" %>
@@ -300,12 +300,12 @@
                               </div>
                             </div>
                             <div class="flex flex-wrap gap-2">
-                              <%= form.submit "Save changes", class: tailwind_button_classes(:primary, extra_classes: "btn-sm") %>
+                              <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
                               <%= button_to "Delete",
                                             admin_program_year_path(year),
                                             method: :delete,
                                             data: { turbo_confirm: "Delete Class of #{year.value}?" },
-                                            class: tailwind_button_classes(:danger, extra_classes: "btn-sm") %>
+                                            class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
                           <% end %>
                         </div>
@@ -324,9 +324,9 @@
           <%= form_with model: [:admin, @new_program_year], url: admin_program_years_path, local: true, class: "space-y-4" do |form| %>
             <div class="space-y-1">
               <%= form.label :value, "Class of year", class: "text-sm font-medium text-slate-700" %>
-              <%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm" %>
+              <%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm" %>
             </div>
-            <%= form.submit "Save cohort", class: tailwind_button_classes(:primary) %>
+            <%= form.submit "Save cohort", class: button_classes(:primary) %>
           <% end %>
         </div>
       </div>
@@ -335,7 +335,7 @@
 
   <% if @tab == "semesters" %>
     <section class="c-card c-card--spacious u-stack u-stack--md">
-      <header class="toolbar">
+      <header class="c-toolbar__row c-toolbar__row--airy justify-between">
         <div>
           <h2 class="text-xl font-semibold text-slate-900">Program semesters</h2>
           <p class="text-sm text-slate-600">View and manage semesters used for survey assignment windows.</p>
@@ -365,9 +365,9 @@
                       <div class="flex flex-wrap items-center gap-2">
                         <p class="text-base font-semibold text-slate-900"><%= semester.name %></p>
                         <% if semester.current? %>
-                          <span class="status-badge status-badge--success">Current</span>
+                          <span class="c-status-badge c-status-badge--success">Current</span>
                         <% else %>
-                          <span class="status-badge status-badge--muted">Available</span>
+                          <span class="c-status-badge c-status-badge--muted">Available</span>
                         <% end %>
                       </div>
                       <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -382,24 +382,24 @@
                         <%= button_to "Make current",
                                       make_current_admin_program_semester_path(semester),
                                       method: :patch,
-                                      class: tailwind_button_classes(:subtle, extra_classes: "btn-sm") %>
+                                      class: button_classes(:subtle, extra_classes: "btn-sm") %>
                       <% end %>
 
                       <details>
-                        <summary class="cursor-pointer list-none <%= tailwind_button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
+                        <summary class="cursor-pointer list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
                         <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
                           <%= form_with model: [:admin, semester], local: true, class: "space-y-3" do |form| %>
                             <div class="space-y-1">
                               <%= form.label :name, "Semester name", class: "text-sm font-medium text-slate-700" %>
-                              <%= form.text_field :name, required: true, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
+                              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" %>
                             </div>
                             <div class="flex flex-wrap gap-2">
-                              <%= form.submit "Save changes", class: tailwind_button_classes(:primary, extra_classes: "btn-sm") %>
+                              <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
                               <%= button_to "Delete",
                                             admin_program_semester_path(semester),
                                             method: :delete,
                                             data: { turbo_confirm: "Delete #{semester.name}?" },
-                                            class: tailwind_button_classes(:danger, extra_classes: "btn-sm") %>
+                                            class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
                           <% end %>
                         </div>
@@ -418,7 +418,7 @@
           <%= form_with model: [:admin, @new_program_semester], url: admin_program_semesters_path, local: true, class: "space-y-4" do |form| %>
             <div class="space-y-1">
               <%= form.label :name, "Semester name", class: "text-sm font-medium text-slate-700" %>
-              <%= form.text_field :name, required: true, class: "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm", placeholder: "Fall 2026" %>
+              <%= form.text_field :name, required: true, class: "u-w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm", placeholder: "Fall 2026" %>
             </div>
             <div class="flex items-start gap-2 text-sm text-slate-600">
               <%= form.check_box :current, class: "mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" %>
@@ -427,7 +427,7 @@
                 <p>Existing current semester will be turned off automatically.</p>
               </label>
             </div>
-            <%= form.submit "Save semester", class: tailwind_button_classes(:primary) %>
+            <%= form.submit "Save semester", class: button_classes(:primary) %>
           <% end %>
         </div>
       </div>

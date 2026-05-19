@@ -1062,6 +1062,59 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
     refute_match(/#{Regexp.escape(competency_title)}.*End of Program Target Level: 1\/5/m, response.body)
   end
 
+  test "show includes released course competency and target context" do
+    sign_in @student_user
+
+    student = students(:student)
+    survey = surveys(:fall_2025)
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    category = survey.categories.first || survey.categories.create!(name: "Test Category", description: "")
+    question = category.questions.create!(
+      question_text: competency_title,
+      question_order: 1000,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5].to_json
+    )
+
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: survey.program_semester,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "course-context.xlsx",
+      file_checksum: "course-context-checksum",
+      status: "processed"
+    )
+    batch.grade_competency_ratings.create!(
+      student: student,
+      competency_title: question.question_text,
+      aggregated_level: 4,
+      aggregation_rule: "max",
+      evidence_count: 1
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: student,
+      assignment_name: "Course Context",
+      course_code: "PHPM-701-001",
+      competency_title: question.question_text,
+      raw_grade: 94,
+      mapped_level: 4,
+      course_target_level: 5,
+      row_number: 2,
+      source_key: "course-context-source",
+      import_fingerprint: "course-context-fingerprint"
+    )
+
+    get survey_response_path(SurveyResponse.build(student: student, survey: survey))
+
+    assert_response :success
+    assert_includes response.body, "Course level 4"
+    assert_includes response.body, "Course target 5"
+  end
+
   test "student can view their own survey response" do
     sign_in @student_user
 

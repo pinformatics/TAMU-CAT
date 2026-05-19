@@ -559,7 +559,7 @@ export default class extends Controller {
     // Render an interactive preview similar to Google Forms.
     if (type === "short_answer") {
       this.responseTarget.innerHTML =
-        '<input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm" disabled>'
+        '<input type="text" class="u-w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm" disabled>'
       return
     }
 
@@ -579,7 +579,7 @@ export default class extends Controller {
 
     if (type === "evidence") {
       this.responseTarget.innerHTML =
-        '<input type="text" class="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm shadow-sm" placeholder="https://sites.google.com/tamu.edu/..." disabled>'
+        '<input type="text" class="u-w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm shadow-sm" placeholder="https://sites.google.com/tamu.edu/..." disabled>'
       return
     }
 
@@ -595,7 +595,7 @@ export default class extends Controller {
         .join("")
 
       this.responseTarget.innerHTML = options.length
-        ? `<div class="space-y-2"><select class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm bg-white" disabled>${optionTags}</select><div class="flex flex-col gap-1">${editableRows}</div></div>`
+        ? `<div class="space-y-2"><select class="u-w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm bg-white" disabled>${optionTags}</select><div class="flex flex-col gap-1">${editableRows}</div></div>`
         : '<p class="text-xs text-slate-500">No options yet. Use Manage Options to add choices.</p>'
       return
     }
@@ -626,7 +626,7 @@ export default class extends Controller {
     }
 
     // Default preview
-    this.responseTarget.innerHTML = '<input type="text" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm" disabled>'
+    this.responseTarget.innerHTML = '<input type="text" class="u-w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm" disabled>'
   }
 
   renderSafePromptHtml(text) {
@@ -719,7 +719,7 @@ export default class extends Controller {
     const input = document.createElement("input")
     input.type = "text"
     input.value = current
-    input.className = "w-full max-w-xl rounded-md border border-slate-300 px-2 py-1 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+    input.className = "u-w-full u-max-w-xl rounded-md border border-slate-300 px-2 py-1 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
 
     const replaceBack = (nextValue) => {
       const next = (nextValue || "").trim()
@@ -808,7 +808,7 @@ export default class extends Controller {
     textarea.value = (inputEl.value || "").trim()
     textarea.placeholder = placeholder || ""
     textarea.className =
-      "w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      "u-w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
 
     if (multiline) {
       textarea.rows = 2

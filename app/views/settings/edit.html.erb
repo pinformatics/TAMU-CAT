@@ -19,18 +19,18 @@
                  root_path
                end %>
 
-<div class="py-6 sm:py-8">
-  <div class="u-stack u-stack--lg">
+<main class="c-main">
+  <div class="u-stack u-stack--xl">
     <section class="c-hero c-hero--maroon c-hero--compact">
-      <div class="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-8">
-          <div class="space-y-4">
+      <div class="u-responsive-split">
+        <div class="u-stack u-stack--xl">
+          <div class="u-stack u-stack--md">
             <p class="c-eyebrow c-eyebrow--inverse">Settings</p>
             <h1 class="c-h1 c-h1--inverse">Personalize your workspace</h1>
-            <p class="c-lede c-lede--inverse max-w-2xl">Language and text settings sync everywhere you sign in, so dashboards, surveys, and reports stay readable.</p>
+            <p class="c-lede c-lede--inverse u-max-w-xl">Language and text settings sync everywhere you sign in, so dashboards, surveys, and reports stay readable.</p>
           </div>
 
-          <div class="flex flex-wrap gap-3">
+          <div class="u-actions u-actions--start">
             <span class="c-pill c-pill--inverse">
               <span class="c-pill__dot c-pill__dot--inverse" aria-hidden="true"></span>
               Language · <span id="current-language-display"><%= current_language_label %></span>
@@ -44,14 +44,14 @@
         <div class="c-kv c-kv--inverse" style="max-width: 28rem;">
           <p class="c-eyebrow c-eyebrow--inverse">Tip</p>
           <p class="c-value c-value--lg c-value--inverse">Changes apply instantly</p>
-          <p class="c-lede c-lede--inverse" style="margin-top: var(--spacing-sm);">We refresh after saving so your preferences update app-wide.</p>
+          <p class="c-lede c-lede--inverse u-mt-sm">We refresh after saving so your preferences update app-wide.</p>
         </div>
       </div>
     </section>
 
     <div>
-      <section class="c-card c-card--tight space-y-8">
-        <header>
+      <section class="c-card c-card--spacious u-stack u-stack--xl">
+        <header class="u-stack u-stack--sm">
           <p class="c-eyebrow">Account-wide</p>
           <h2 class="c-h2">Accessibility preferences</h2>
           <p class="c-lede">These settings change typography scale and translation helpers across dashboards, surveys, and reports.</p>
@@ -59,11 +59,11 @@
 
         <%= form_with model: @user, url: settings_path, method: :patch, local: true, id: "settings-form", class: "u-stack u-stack--lg" do |f| %>
           <% if @user.errors.any? %>
-            <div class="c-card c-card--tight border border-rose-200 bg-rose-50 text-rose-800 shadow-none">
-              <h3 class="font-semibold text-rose-900">
+            <div class="c-card c-card--tight c-card--danger u-shadow-none">
+              <h3 class="c-h3">
                 <%= pluralize(@user.errors.count, "error") %> need attention
               </h3>
-              <ul class="mt-2 list-disc pl-5">
+              <ul class="c-rich-text">
                 <% @user.errors.full_messages.each do |msg| %>
                   <li><%= msg %></li>
                 <% end %>
@@ -87,7 +87,7 @@
                 <%= f.select :text_scale_percent,
                       options_for_select([["100% (default)", 100], ["125%", 125], ["150%", 150], ["175%", 175], ["200%", 200]], text_scale),
                       {},
-                      class: "c-select w-full" %>
+                      class: "c-select u-w-full" %>
                 <small class="c-help">Increase up to 200% for larger copy.</small>
               </div>
             </div>
@@ -98,14 +98,14 @@
                 <%= f.select :notifications_enabled,
                       options_for_select([["On", true], ["Off", false]], notifications_enabled),
                       {},
-                      class: "c-select w-full" %>
+                      class: "c-select u-w-full" %>
                 <small class="c-help">Turns account notifications on or off.</small>
               </div>
             </div>
 
             <div class="c-kv c-kv--compact">
               <div class="c-field">
-                <div class="flex items-baseline justify-between gap-3">
+                <div class="u-actions u-actions--split">
                   <label class="c-label" for="tts-rate">Read Aloud speed</label>
                   <span class="c-help" id="tts-rate-value" aria-live="polite">1.0×</span>
                 </div>
@@ -119,7 +119,7 @@
                   value="1.0"
                   data-tts-rate
                 />
-                <div class="mt-3 flex flex-wrap gap-2" aria-label="Read aloud speed presets">
+                <div class="u-actions u-actions--start u-mt-sm" aria-label="Read aloud speed presets">
                   <button type="button" class="btn btn-subtle" data-tts-rate-preset="0.25">0.25×</button>
                   <button type="button" class="btn btn-subtle" data-tts-rate-preset="0.5">0.5×</button>
                   <button type="button" class="btn btn-subtle" data-tts-rate-preset="0.75">0.75×</button>
@@ -134,18 +134,18 @@
             </div>
           </div>
 
-          <div class="c-form-actions u-actions u-actions--split border-t border-slate-100 pt-6">
-            <div class="flex flex-wrap gap-2">
+          <div class="u-actions u-actions--split u-border-top u-pt-lg">
+            <div class="u-actions u-actions--start">
               <button type="button" class="btn btn-secondary" id="reset-local-defaults">Reset to defaults</button>
-              <%= link_to "Cancel", back_path, class: tailwind_button_classes(:secondary) %>
+              <%= link_to "Cancel", back_path, class: button_classes(:secondary) %>
             </div>
-            <%= f.submit "Save changes", class: tailwind_button_classes(:primary) %>
+            <%= f.submit "Save changes", class: button_classes(:primary) %>
           </div>
         <% end %>
       </section>
     </div>
   </div>
-</div>
+</main>
 <script>
   // Submit settings via fetch to ensure we can reload the app immediately on success.
   (function() {

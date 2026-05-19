@@ -197,7 +197,7 @@ export default class extends Controller {
         },
         body: JSON.stringify({
           text,
-          wrapper_class: this.wrapperClassValue || "guidance-text",
+          wrapper_class: this.wrapperClassValue || "c-rich-text",
           min_heading_level: this.hasMinHeadingLevelValue ? this.minHeadingLevelValue : 3
         }),
         signal: this.abortController.signal

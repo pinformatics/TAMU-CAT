@@ -4,7 +4,7 @@
   <%= render "shared/login_navbar" %>
 <% end %>
 
-<div class="c-page container-md">
+<div class="c-page c-container c-container--md">
   <section class="c-hero c-hero--maroon">
     <div class="u-grid" style="--u-grid-min: 320px">
       <div class="u-stack u-stack--lg">
@@ -161,8 +161,8 @@
     </div>
 
     <div class="u-actions u-actions--start">
-      <a href="https://github.com/FaqiangMei/MHA-Survey-Portal/wiki" target="_blank" rel="noopener" class="<%= tailwind_button_classes(:primary) %>">Browse full wiki</a>
-      <button type="button" onclick="window.history.back()" class="<%= tailwind_button_classes(:secondary) %>">← Back to previous page</button>
+      <a href="https://github.com/FaqiangMei/MHA-Survey-Portal/wiki" target="_blank" rel="noopener" class="<%= button_classes(:primary) %>">Browse full wiki</a>
+      <button type="button" onclick="window.history.back()" class="<%= button_classes(:secondary) %>">← Back to previous page</button>
     </div>
   </section>
 

@@ -11,8 +11,8 @@ class SurveyResponse
     # @param student [Student]
     # @param survey [Survey]
     # @return [SurveyResponse]
-    def build(student:, survey:)
-      new(student: student, survey: survey)
+    def build(student:, survey:, answers_override: nil, as_of: nil)
+      new(student: student, survey: survey, answers_override: answers_override, as_of: as_of)
     end
 
     # Rehydrates a response from a composite param ("studentId-surveyId").

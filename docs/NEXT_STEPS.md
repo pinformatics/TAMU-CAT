@@ -6,9 +6,13 @@ This list is intentionally short. It is meant to help the next owner choose usef
 
 ## Urgent
 
-### 1. Add smoke tests for grade imports
+No urgent release-blocking follow-up is currently known.
 
-Focus on:
+## Completed
+
+### 1. Added smoke tests for grade imports
+
+Covered:
 
 - mapping workbook import
 - direct competency import
@@ -17,21 +21,14 @@ Focus on:
 - dry run commit
 - rollback
 
-Why:
+### 2. Added clearer operator guidance on the batch results page
 
-- this is the highest-risk admin workflow
-
-### 2. Add clearer operator guidance on the batch results page
-
-Examples:
+Covered:
 
 - label when a file was detected as direct competency import
 - explain why rows are pending versus failed
-- call out when course ratings are not semester-scoped
-
-Why:
-
-- reduces admin confusion without changing data behavior
+- call out the semester assigned to reportable course ratings
+- allow admins to repair a legacy batch semester after upload
 
 ## Next
 
@@ -49,6 +46,12 @@ Why:
 
 - easier testing
 - safer future changes
+
+Status:
+
+- file upload routing and failure diagnostics are extracted
+- direct competency rows with only student names now stage as pending rows
+- continue splitting direct competency, Canvas, narrow grade, and mapping parsing after the Fall release-critical behavior is stable
 
 ### 4. Add more sample import files
 
@@ -77,13 +80,14 @@ Why:
 
 ## Later
 
-### 6. Add true semester support for course ratings
+### 6. Continue semester support hardening for course ratings
 
-This likely requires storing semester or term context on imported course ratings/evidence.
+Semester-filtered course ratings now use `grade_import_batches.program_semester_id`.
 
 Why:
 
-- would align course data behavior with self/advisor filtering
+- keeps course, self, and advisor filtering aligned
+- batch detail allows operational cleanup for legacy imports without a semester
 
 ### 7. Continue admin UI cleanup
 

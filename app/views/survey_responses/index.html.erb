@@ -1,16 +1,26 @@
-<p style="color: green"><%= notice %></p>
-
 <% content_for :title, "Survey responses" %>
 
-<h1>Survey responses</h1>
-
-<div id="survey_responses">
-  <% @survey_responses.each do |survey_response| %>
-    <%= render survey_response %>
-    <p>
-      <%= link_to "Show this survey response", survey_response %>
-    </p>
+<main class="c-main c-page">
+  <% if notice.present? %>
+    <p class="flash flash__notice"><%= notice %></p>
   <% end %>
-</div>
 
-<%= link_to "New survey response", new_survey_response_path %>
+  <header class="c-page-header">
+    <h1 class="c-page-title">Survey responses</h1>
+  </header>
+
+  <div id="survey_responses" class="u-stack u-stack--xl">
+    <% @survey_responses.each do |survey_response| %>
+      <section class="c-card u-stack u-stack--md">
+        <%= render survey_response %>
+        <p>
+          <%= link_to "Show this survey response", survey_response, class: "u-link" %>
+        </p>
+      </section>
+    <% end %>
+  </div>
+
+  <div class="u-actions u-actions--start">
+    <%= link_to "New survey response", new_survey_response_path, class: button_classes(:primary) %>
+  </div>
+</main>

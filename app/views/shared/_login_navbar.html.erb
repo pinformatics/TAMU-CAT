@@ -1,24 +1,24 @@
 <!-- Login Navigation Header -->
-<header class="app-header" role="banner">
-  <div class="header-content">
-    <div class="header-left">
-      <%= link_to root_path, class: "logo", aria: { label: "Texas A&M University home" } do %>
-        <div class="logo-icon" aria-hidden="true"></div>
+<header class="c-app-header" role="banner">
+  <div class="c-app-header__content">
+    <div class="c-app-header__left">
+      <%= link_to root_path, class: "c-brand-link", aria: { label: "Texas A&M University home" } do %>
+        <div class="c-brand-logo" aria-hidden="true"></div>
         <span class="sr-only">Texas A&amp;M University</span>
       <% end %>
 
-      <nav class="nav-links" aria-label="Primary">
-        <%= link_to "Home", root_path, class: "nav-link" %>
+      <nav class="c-nav-links" aria-label="Primary">
+        <%= link_to "Home", root_path, class: "c-nav-link" %>
 
         <!-- About page (documentation landing) -->
-        <%= link_to "About the Portal", about_path, class: "nav-link" %>
+        <%= link_to "About the Portal", about_path, class: "c-nav-link" %>
 
         <!-- FAQ page -->
-        <%= link_to "FAQ", faq_path, class: "nav-link" %>
+        <%= link_to "FAQ", faq_path, class: "c-nav-link" %>
       </nav>
     </div>
 
-    <div class="user-section">
+    <div class="c-user-section">
       <%= render ToggleSwitchComponent.new(
         id: "high-contrast-toggle",
         checked: false,
@@ -34,13 +34,13 @@
       ) %>
 
       <a href="https://public-health.tamu.edu/degrees/hpm/mha/index.html"
-        class="<%= tailwind_button_classes(:secondary) %>">
+        class="<%= button_classes(:secondary) %>">
         Program Overview
       </a>
 
-      <div class="sign-in-launcher" data-signin-menu>
+      <div class="c-sign-in-launcher" data-signin-menu>
         <button type="button"
-          class="<%= tailwind_button_classes(:primary, extra_classes: 'sign-in-launcher__button') %>"
+          class="<%= button_classes(:primary, extra_classes: 'c-sign-in-launcher__button') %>"
                 data-signin-trigger
                 aria-haspopup="true"
                 aria-expanded="false"
@@ -48,29 +48,29 @@
           Sign In
           <span aria-hidden="true">▾</span>
         </button>
-        <div class="sign-in-launcher__panel"
+        <div class="c-sign-in-launcher__panel"
              id="sign-in-menu-panel"
              data-signin-panel
              hidden
              role="menu"
              aria-label="Choose a role to sign in">
-          <p class="sign-in-launcher__label">Pick the dashboard you need:</p>
+          <p class="c-sign-in-launcher__label">Pick the dashboard you need:</p>
           <button type="button"
-                  class="sign-in-launcher__option"
+                  class="c-sign-in-launcher__option"
                   data-login-role="student"
                   role="menuitem">
             <span>🎓 Student access</span>
-            <span class="sign-in-launcher__chevron">→</span>
+            <span class="c-sign-in-launcher__chevron">→</span>
           </button>
           <button type="button"
-                  class="sign-in-launcher__option"
+                  class="c-sign-in-launcher__option"
                   data-login-role="advisor"
                   role="menuitem">
             <span>🧑‍🏫 Advisor access</span>
-            <span class="sign-in-launcher__chevron">→</span>
+            <span class="c-sign-in-launcher__chevron">→</span>
           </button>
           <a href="<%= new_user_session_path %>"
-             class="sign-in-launcher__link"
+             class="c-sign-in-launcher__link"
              role="menuitem">
           </a>
         </div>

@@ -18,6 +18,25 @@ class Admin::CompetenciesController < ApplicationController
     @course_competency_rule_options = payload[:course_competency_rule_options]
   end
 
+  def show
+    @student = accessible_student_scope.includes(:user, advisor: :user).find(params[:id])
+    @payload = StudentCompetencyDashboard.new(student: @student, params: params.permit(:semester)).call
+    @competency_page_title = "#{@student.user&.display_name || @student.full_name} Competencies"
+    @competency_page_subtitle = "Detailed competency performance, source context, and trend history for this student."
+    @competency_back_path = admin_competencies_path
+    @competency_form_path = admin_competency_path(@student)
+    @competency_export_path = admin_competency_path(@student, format: :csv, semester: @payload.dig(:filters, :semester))
+
+    respond_to do |format|
+      format.html { render "student_competencies/show" }
+      format.csv do
+        send_data @payload[:csv],
+                  filename: "student-competencies-#{@student.student_id}-#{Time.current.strftime('%Y%m%d-%H%M')}.csv",
+                  type: "text/csv"
+      end
+    end
+  end
+
   def export
     payload = competency_payload
 
@@ -36,6 +55,15 @@ class Admin::CompetenciesController < ApplicationController
 
   def competency_payload
     Admin::CompetencyMatrix.new(params: competency_filter_params, actor_user: current_user).call
+  end
+
+  def accessible_student_scope
+    scope = Student.includes(:user)
+    return scope if current_user&.role_admin?
+
+    return Student.where(advisor_id: current_advisor_profile.advisor_id) if current_user&.role_advisor? && current_advisor_profile.present?
+
+    Student.none
   end
 
   def require_competency_access!

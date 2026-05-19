@@ -1,24 +1,24 @@
 <% tracks = @survey.track_list %>
 <% status_label, status_classes = admin_survey_status_meta(@survey) %>
 
-<div class="survey-container survey-show survey-edit mx-auto w-full space-y-8 px-4 sm:px-6 lg:px-4">
+<div data-survey-scroll-scope class="c-document-shell survey-edit">
 
   <div class="c-toolbar c-toolbar--spaced">
-    <div class="c-toolbar__row justify-between w-full">
-      <%= link_to "← Back", admin_surveys_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row justify-between u-w-full">
+      <%= link_to "← Back", admin_surveys_path, class: button_classes(:secondary) %>
 
       <div class="flex flex-wrap justify-end gap-3">
-        <%= link_to "Preview as student", preview_admin_survey_path(@survey), class: tailwind_button_classes(:subtle) %>
+        <%= link_to "Preview as student", preview_admin_survey_path(@survey), class: button_classes(:subtle) %>
         <% if @survey.is_active? %>
-          <%= button_to "Archive survey", archive_admin_survey_path(@survey), method: :patch, data: { turbo_confirm: "Archive '#{@survey.title}' and remove it from advisors?" }, class: tailwind_button_classes(:subtle) %>
+          <%= button_to "Archive survey", archive_admin_survey_path(@survey), method: :patch, data: { turbo_confirm: "Archive '#{@survey.title}' and remove it from advisors?" }, class: button_classes(:subtle) %>
         <% else %>
-          <%= button_to "Activate survey", activate_admin_survey_path(@survey), method: :patch, data: { turbo_confirm: "Make '#{@survey.title}' active for advisors?" }, class: tailwind_button_classes(:primary) %>
+          <%= button_to "Activate survey", activate_admin_survey_path(@survey), method: :patch, data: { turbo_confirm: "Make '#{@survey.title}' active for advisors?" }, class: button_classes(:primary) %>
         <% end %>
       </div>
     </div>
   </div>
 
-  <div class="c-card survey-header space-y-3">
+  <div class="c-card c-card--brand space-y-3">
     <div class="flex flex-wrap items-center gap-2">
       <span class="<%= status_classes %>"><%= status_label %></span>
       <span class="text-xs text-slate-500">Last updated <%= time_ago_in_words(@survey.updated_at) %> ago</span>

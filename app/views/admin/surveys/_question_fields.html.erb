@@ -3,8 +3,8 @@
 <% supports_sub_questions = question.respond_to?(:parent_question_id) && question.respond_to?(:sub_question_order) %>
 <% is_sub_question = supports_sub_questions && question.parent_question_id.present? %>
 <% can_add_sub_questions = supports_sub_questions && !is_sub_question %>
-<% wrapper_classes = ["question-block", "admin-card", "card-item", "rounded-lg", "border", "border-slate-200", "bg-white", "p-6", "space-y-4", "question-card", "c-builder-question", "q-card"] %>
-<% wrapper_classes << "nested-rail" if is_sub_question %>
+<% wrapper_classes = ["c-question-card", "admin-card", "card-item", "rounded-lg", "border", "border-slate-200", "bg-white", "p-6", "space-y-4", "c-builder-question", "c-builder-question-card"] %>
+<% wrapper_classes << "c-nested-rail" if is_sub_question %>
 <% option_pairs = question.respond_to?(:answer_option_pairs) ? question.answer_option_pairs : [] %>
 <% if option_pairs.blank? && question.respond_to?(:answer_options_list) %>
   <% option_pairs = question.answer_options_list.map { |opt| [opt.to_s, opt.to_s] } %>
@@ -34,7 +34,7 @@
   <%= question_fields.hidden_field :question_order %>
   <%= question_fields.hidden_field :sub_question_order if supports_sub_questions %>
 
-  <div class="question-card__summary c-builder-question__summary flex items-center gap-3">
+  <div class="c-builder-question-card__summary c-builder-question__summary flex items-center gap-3">
     <span class="js-drag-handle select-none rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-500 cursor-grab" aria-label="Drag to reorder">
       ⋮⋮
     </span>
@@ -43,9 +43,9 @@
       <%= question.question_type.to_s.humanize.presence || "Question" %>
     </span>
 
-    <span class="question-target-badge hidden" data-question-preview-target="targetLevelBadge"></span>
+    <span class="c-level-badge c-level-badge--success hidden" data-question-preview-target="targetLevelBadge"></span>
 
-    <p class="question-card__summary-text c-builder-question__summary-text min-w-0 flex-1 truncate text-sm font-semibold text-slate-800" data-question-preview-target="summaryPromptText">
+    <p class="c-builder-question-card__summary-text c-builder-question__summary-text min-w-0 flex-1 truncate text-sm font-semibold text-slate-800" data-question-preview-target="summaryPromptText">
       <%= question.question_text.to_s.strip.presence || "Untitled question" %>
     </p>
 
@@ -59,14 +59,14 @@
         data: { question_preview_target: "targetLevelInput", action: "change->question-preview#update" } %>
     <% end %>
 
-    <details class="chip-type-picker" data-question-preview-target="questionTypeDropdown">
-      <summary class="chip chip-inactive chip-type-picker__summary">
+    <details class="c-chip-picker" data-question-preview-target="questionTypeDropdown">
+      <summary class="c-chip c-chip--inactive c-chip-picker__summary">
         Type: <span data-question-preview-target="questionTypeButtonLabel"><%= question.question_type.to_s.humanize.presence || "Question" %></span>
       </summary>
-      <div class="chip-type-picker__menu">
+      <div class="c-chip-picker__menu">
         <% @question_types.each do |type| %>
           <button type="button"
-                  class="chip-type-picker__item"
+                  class="c-chip-picker__item"
                   data-question-type="<%= type %>"
                   data-action="question-preview#setQuestionType">
             <%= type.humanize %>
@@ -77,7 +77,7 @@
 
     <% if supports_sub_questions %>
       <button type="button"
-              class="<%= tailwind_button_classes(:subtle, extra_classes: 'btn-sm') %>"
+              class="<%= button_classes(:subtle, extra_classes: 'btn-sm') %>"
               title="Re-parent"
               data-action="survey-item#toggleReparent"
               data-survey-item-target="reparentToggle">
@@ -88,14 +88,14 @@
     <% if can_add_sub_questions %>
       <% if question.persisted? %>
         <button type="button"
-                class="<%= tailwind_button_classes(:subtle, extra_classes: 'btn-sm') %>"
+                class="<%= button_classes(:subtle, extra_classes: 'btn-sm') %>"
                 data-action="survey-builder#addSubQuestion"
                 data-parent-question-id="<%= question.id %>">
           <span aria-hidden="true">↳</span>
         </button>
       <% else %>
         <button type="button"
-                class="<%= tailwind_button_classes(:subtle, extra_classes: 'btn-sm') %> opacity-60"
+                class="<%= button_classes(:subtle, extra_classes: 'btn-sm') %> opacity-60"
                 aria-disabled="true"
                 title="Save the survey first to add sub-questions.">
           <span aria-hidden="true">↳</span>
@@ -104,20 +104,20 @@
     <% end %>
 
     <button type="button"
-            class="<%= tailwind_button_classes(:secondary, extra_classes: 'btn-sm') %> text-rose-600"
+            class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %> text-rose-600"
             title="Remove question"
             data-action="question-fields#remove">
       <span aria-hidden="true">🗑️</span>
     </button>
   </div>
 
-  <div class="question-card__expanded c-builder-question__expanded space-y-6" data-survey-item-target="expanded">
+  <div class="c-builder-question-card__expanded c-builder-question__expanded space-y-6" data-survey-item-target="expanded">
     <div class="space-y-6">
       <div class="space-y-6">
         <div class="space-y-2 mb-6">
           <%= question_fields.label :question_text, "Prompt", class: "block text-xs font-bold uppercase text-slate-400" %>
           <%= question_fields.text_area :question_text,
-                class: "#{input_classes} c-input builder-input builder-textarea form-control w-full",
+                class: "#{input_classes} c-input c-builder-input c-builder-textarea form-control u-w-full",
                 rows: 3,
                 data: {
                   question_preview_target: "promptInput"
@@ -128,7 +128,7 @@
         <div class="space-y-2 mb-6">
           <%= question_fields.label :description, "Description (optional)", class: "block text-xs font-bold uppercase text-slate-400" %>
           <%= question_fields.text_area :description,
-                class: "#{input_classes} c-input builder-input builder-textarea form-control w-full",
+                class: "#{input_classes} c-input c-builder-input c-builder-textarea form-control u-w-full",
                 rows: 2,
                 data: {
                   question_preview_target: "descriptionInput"
@@ -147,7 +147,7 @@
       </div>
     </div>
 
-    <div class="chip-tray rounded-lg border border-slate-200 bg-white px-3 py-2">
+    <div class="c-chip-tray rounded-lg border border-slate-200 bg-white px-3 py-2">
       <div class="inline-flex flex-wrap items-center gap-3">
         <%= question_fields.select :question_type,
               options_for_select(@question_types.map { |type| [type.humanize, type] }, question_fields.object.question_type),
@@ -155,29 +155,29 @@
               class: "sr-only",
               data: { question_preview_target: "typeSelect" } %>
 
-        <%= question_fields.check_box :is_required, id: required_input_id, class: "chip-toggle-input sr-only", data: { question_preview_target: "requiredInput" } %>
+        <%= question_fields.check_box :is_required, id: required_input_id, class: "c-chip-toggle__input sr-only", data: { question_preview_target: "requiredInput" } %>
         <%= question_fields.label :is_required,
           "Required",
           for: required_input_id,
-          class: "chip chip-inactive" %>
+          class: "c-chip c-chip--inactive" %>
 
-        <%= question_fields.check_box :has_evidence_field, id: evidence_input_id, class: "chip-toggle-input sr-only", data: { question_preview_target: "evidenceInput" } %>
+        <%= question_fields.check_box :has_evidence_field, id: evidence_input_id, class: "c-chip-toggle__input sr-only", data: { question_preview_target: "evidenceInput" } %>
         <%= question_fields.label :has_evidence_field,
           "Evidence",
           for: evidence_input_id,
-          class: "chip chip-inactive" %>
+          class: "c-chip c-chip--inactive" %>
 
         <% if question.respond_to?(:has_feedback) %>
-          <%= question_fields.check_box :has_feedback, id: feedback_input_id, class: "chip-toggle-input sr-only", data: { question_preview_target: "feedbackInput" } %>
+          <%= question_fields.check_box :has_feedback, id: feedback_input_id, class: "c-chip-toggle__input sr-only", data: { question_preview_target: "feedbackInput" } %>
           <%= question_fields.label :has_feedback,
             "Advisor Feedback Required",
             for: feedback_input_id,
-            class: "chip chip-inactive" %>
+            class: "c-chip c-chip--inactive" %>
         <% end %>
 
         <% if supports_sub_questions %>
           <button type="button"
-                  class="chip chip-inactive"
+                  class="c-chip c-chip--inactive"
                   data-action="survey-item#toggleReparent"
                   data-survey-item-target="reparentToggle">
             Re-parent
@@ -204,7 +204,7 @@
         <%= question_fields.select :parent_question_id,
                                    options_for_select(parent_options, question.parent_question_id),
                                    {},
-                                   class: "#{input_classes} c-select w-full form-select",
+                                   class: "#{input_classes} c-select u-w-full form-select",
                                    disabled: persisted_parent_candidates.empty? %>
         <% if persisted_parent_candidates.empty? %>
           <p class="text-xs text-slate-500">Save first, then re-parent using this selector.</p>
@@ -213,13 +213,13 @@
     <% end %>
   </div>
 
-  <div class="question-options-backdrop hidden" data-question-preview-target="optionsDrawerBackdrop" data-action="click->question-preview#closeOptionsDrawer"></div>
-  <aside class="question-options-drawer hidden" data-question-preview-target="optionsDrawerPanel" aria-hidden="true" role="dialog" aria-modal="true" tabindex="-1">
-    <div class="question-options-drawer__header c-drawer__header side-panel__header">
+  <div class="c-drawer-backdrop hidden" data-question-preview-target="optionsDrawerBackdrop" data-action="click->question-preview#closeOptionsDrawer"></div>
+  <aside class="c-drawer hidden" data-question-preview-target="optionsDrawerPanel" aria-hidden="true" role="dialog" aria-modal="true" tabindex="-1">
+    <div class="c-drawer__header">
       <h4 class="text-sm font-semibold text-slate-900">Edit options</h4>
       <button type="button" class="btn btn-secondary btn-sm" data-action="question-preview#closeOptionsDrawer">Close</button>
     </div>
-    <div class="question-options-drawer__body c-drawer__body side-panel__body">
+    <div class="c-drawer__body">
       <%= question_fields.hidden_field :answer_options, data: { question_preview_target: "answerOptionsInput" } %>
       <div class="space-y-3" data-question-preview-target="optionsEditorSection">
         <div class="flex items-center justify-between gap-3">
@@ -243,7 +243,7 @@
           <%= question_fields.select :prompt_format,
             options_for_select([["Plain text", "plain_text"], ["Rich text", "rich_text"]], question.prompt_format.presence || "plain_text"),
             {},
-            class: "#{input_classes} c-select w-full form-select",
+            class: "#{input_classes} c-select u-w-full form-select",
             data: { question_preview_target: "promptFormatSelect" } %>
         </div>
 

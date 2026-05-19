@@ -67,6 +67,61 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "new with prefill seeds advisor scores from student competency responses" do
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Prefill Competencies", section: section)
+    question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 1,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    StudentQuestion.find_or_create_by!(student_id: @student.student_id, question_id: question.id) do |response|
+      response.response_value = "3"
+    end
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id, prefill: true }
+
+    assert_response :success
+    assert_select "select[name='ratings[#{question.id}][average_score]'] option[selected='selected'][value='3']", text: /3/
+  end
+
+  test "new with prefill remaps submitted version answers to current survey questions" do
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Versioned Prefill Competencies", section: section)
+    first_question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 1,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    second_question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.second,
+      question_order: 2,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    StudentQuestion.where(student_id: @student.student_id, question_id: [ first_question.id, second_question.id ]).delete_all
+    SurveyResponseVersion.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      event: "submitted",
+      answers: {
+        (first_question.id + 50).to_s => "4",
+        (second_question.id + 50).to_s => "2"
+      }
+    )
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id, prefill: true }
+
+    assert_response :success
+    assert_select "select[name='ratings[#{first_question.id}][average_score]'] option[selected='selected'][value='4']", text: /4/
+    assert_select "select[name='ratings[#{second_question.id}][average_score]'] option[selected='selected'][value='2']", text: /2/
+  end
+
   test "new redirects when survey is archived" do
     @survey.update!(is_active: false)
 
@@ -472,10 +527,6 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert_equal "No category or ratings provided", json["error"]
   end
 
-  # === Create Action - Single Feedback (Edge Cases) ===
-  # Note: The single feedback path has a bug - question_id is not in permitted params
-  # so feedback_params[:question_id] is nil, making category_id nil too
-
   test "create with feedback param but no question_id shows error" do
     params = {
       survey_id: @survey.id,
@@ -533,7 +584,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to student_records_path
   end
 
-  test "create with feedback question_id enters per-question branch" do
+  test "create with feedback question_id saves per-question feedback" do
     q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
 
     params = {
@@ -546,10 +597,39 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       }
     }
 
-    post feedbacks_path, params: params
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path, params: params
+    end
 
-    # This path is currently limited because question_id is not permitted; it should still be handled.
-    assert_response :unprocessable_entity
+    assert_redirected_to student_records_path
+    feedback = Feedback.order(:created_at).last
+    assert_equal q1.id, feedback.question_id
+    assert_equal q1.category_id, feedback.category_id
+    assert_equal 4.0, feedback.average_score
+    assert_equal "Single", feedback.comments
+  end
+
+  test "admin create with feedback question_id saves under assigned advisor" do
+    sign_in @admin_user
+    @student.update!(advisor_id: @advisor.advisor_id)
+    q1 = @cat1.questions.first || @cat1.questions.create!(question_text: "Auto Q1", question_order: 1, question_type: "short_answer")
+
+    assert_difference "Feedback.count", 1 do
+      post feedbacks_path, params: {
+        feedback: {
+          survey_id: @survey.id,
+          student_id: @student.student_id,
+          question_id: q1.id,
+          average_score: "3",
+          comments: "Admin entered"
+        }
+      }
+    end
+
+    feedback = Feedback.order(:created_at).last
+    assert_equal @advisor.advisor_id, feedback.advisor_id
+    assert_equal q1.id, feedback.question_id
+    assert_equal 3.0, feedback.average_score
   end
 
   test "batch create returns JSON error when confidential note lock is stale" do

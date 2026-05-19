@@ -1,8 +1,8 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
+    <div class="c-toolbar__row items-center u-w-full gap-3">
       <div class="shrink-0">
-        <%= link_to "Back", admin_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+        <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
       </div>
     </div>
   </div>
@@ -40,7 +40,7 @@
             ) %>
 
             <div class="u-actions u-actions--start">
-              <%= submit_tag "View as student", class: tailwind_button_classes(:primary) %>
+              <%= submit_tag "View as student", class: button_classes(:primary) %>
             </div>
           <% end %>
         <% else %>
@@ -67,7 +67,7 @@
             ) %>
 
             <div class="u-actions u-actions--start">
-              <%= submit_tag "View as advisor", class: tailwind_button_classes(:primary) %>
+              <%= submit_tag "View as advisor", class: button_classes(:primary) %>
             </div>
           <% end %>
         <% else %>

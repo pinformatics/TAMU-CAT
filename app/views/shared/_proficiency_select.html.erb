@@ -12,7 +12,7 @@
   selected_value = local_assigns[:selected]
   question = local_assigns[:question]
   select_id = local_assigns[:id]
-  class_name = local_assigns[:class_name].presence || "c-select w-full"
+  class_name = local_assigns[:class_name].presence || "c-select u-w-full"
   data_attributes = local_assigns[:data].presence || {}
 
   option_pairs = advisor_proficiency_option_pairs_for(question)

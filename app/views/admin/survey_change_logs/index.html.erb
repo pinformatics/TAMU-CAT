@@ -1,12 +1,12 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <%= link_to "Back to Surveys", admin_surveys_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
+      <%= link_to "Back to Surveys", admin_surveys_path, class: button_classes(:secondary) %>
     </div>
   </div>
 
-  <div class="c-container c-container--dashboard c-page">
-    <section class="c-card p-8 md:p-10 u-stack u-stack--xl">
+  <div class="c-page">
+    <section class="c-card u-stack u-stack--xl">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Survey admin</p>
@@ -18,23 +18,23 @@
       <section class="u-stack u-stack--md">
         <div>
           <h2 class="c-section-title c-heading-inline">Recent activity</h2>
-          <p class="text-sm text-slate-600">Use the action filter to focus on one type of survey update at a time.</p>
+          <p class="c-lede">Use the action filter to focus on one type of survey update at a time.</p>
         </div>
 
         <div class="c-card c-card--flush">
           <div class="c-panel-header c-panel-header--with-border">
             <div class="c-callout">
-              <%= form_with url: admin_survey_change_logs_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy w-full md:flex-nowrap" do %>
-                <div class="c-toolbar__item flex items-center gap-2">
-                  <label for="action_type" class="text-sm font-medium text-slate-700">Filter by action</label>
+              <%= form_with url: admin_survey_change_logs_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" do %>
+                <div class="c-toolbar__item u-flex u-items-center u-gap-sm">
+                  <label for="action_type" class="c-label">Filter by action</label>
                   <%= select_tag :action_type,
                                  options_for_select([["All actions", ""]] + @available_actions.map { |action| [action.titleize, action] }, @action_filter),
-                                 class: "c-select w-full" %>
+                                 class: "c-select u-w-full" %>
                 </div>
-                <div class="c-toolbar__item flex items-center gap-2">
-                  <%= submit_tag "Apply", class: tailwind_button_classes(:primary) %>
+                <div class="c-toolbar__item u-flex u-items-center u-gap-sm">
+                  <%= submit_tag "Apply", class: button_classes(:primary) %>
                   <% if @action_filter.present? %>
-                    <%= link_to "Reset", admin_survey_change_logs_path, class: tailwind_button_classes(:subtle) %>
+                    <%= link_to "Reset", admin_survey_change_logs_path, class: button_classes(:subtle) %>
                   <% end %>
                 </div>
               <% end %>
@@ -42,36 +42,36 @@
           </div>
 
           <% if @logs.blank? %>
-            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-600">
-              No survey activity has been recorded yet.
+            <div class="c-empty-state">
+              <p class="c-empty-state__body">No survey activity has been recorded yet.</p>
             </div>
           <% else %>
-            <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-slate-600">
+            <div class="c-table-wrapper">
+              <table class="c-table">
+                <thead>
                   <tr>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Timestamp</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Action</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Admin</th>
-                    <th scope="col" class="whitespace-nowrap px-4 py-3 text-left font-semibold">Survey</th>
-                    <th scope="col" class="px-4 py-3 text-left font-semibold">Description</th>
+                    <th scope="col">Timestamp</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">Admin</th>
+                    <th scope="col">Survey</th>
+                    <th scope="col">Description</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100 text-slate-600">
+                <tbody>
                   <% @logs.each do |log| %>
-                    <tr class="hover:bg-slate-50">
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-500"><%= l(log.created_at, format: :long) %></td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top font-semibold text-slate-900"><%= log.action.titleize %></td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-slate-700"><%= log.admin&.display_name || "Unknown" %></td>
-                      <td class="whitespace-nowrap px-4 py-3 align-top text-indigo-600">
+                    <tr>
+                      <td class="u-whitespace-nowrap"><%= l(log.created_at, format: :long) %></td>
+                      <td class="u-whitespace-nowrap c-table__title"><%= log.action.titleize %></td>
+                      <td class="u-whitespace-nowrap"><%= log.admin&.display_name || "Unknown" %></td>
+                      <td class="u-whitespace-nowrap">
                         <% display_title = log.survey_title_snapshot.presence || log.survey&.title.presence || "Survey ##{log.survey_id}" %>
                         <% if log.survey.present? %>
-                          <%= link_to display_title, edit_admin_survey_path(log.survey), class: "underline hover:text-indigo-700" %>
+                          <%= link_to display_title, edit_admin_survey_path(log.survey), class: "u-link" %>
                         <% else %>
-                          <span class="text-slate-500"><%= display_title %></span>
+                          <span class="c-muted"><%= display_title %></span>
                         <% end %>
                       </td>
-                      <td class="px-4 py-3 align-top text-sm text-slate-600">
+                      <td>
                         <%= log.description.presence || "No additional details recorded." %>
                       </td>
                     </tr>

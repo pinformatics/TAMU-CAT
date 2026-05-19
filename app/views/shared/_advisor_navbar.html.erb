@@ -1,5 +1,5 @@
 <!-- Advisor Navigation Header -->
-<header class="app-header" role="banner">
+<header class="c-app-header" role="banner">
   <% if impersonating? %>
     <div class="flash flash__warning impersonation-banner" role="status">
       <div class="flex items-center justify-between gap-3">
@@ -17,30 +17,30 @@
     </div>
   <% end %>
 
-  <div class="header-content">
-    <div class="header-left">
-      <%= link_to advisor_dashboard_path, class: "logo", aria: { label: "Texas A&M University home" } do %>
-        <div class="logo-icon" aria-hidden="true"></div>
+  <div class="c-app-header__content">
+    <div class="c-app-header__left">
+      <%= link_to advisor_dashboard_path, class: "c-brand-link", aria: { label: "Texas A&M University home" } do %>
+        <div class="c-brand-logo" aria-hidden="true"></div>
         <span class="sr-only">Texas A&amp;M University</span>
       <% end %>
       
-      <nav class="nav-links" aria-label="Primary">
+      <nav class="c-nav-links" aria-label="Primary">
         <a href="<%= advisor_dashboard_path %>"
-           class="nav-link <%= 'active' if local_assigns[:active_page] == 'home' %>">
+           class="c-nav-link <%= 'active' if local_assigns[:active_page] == 'home' %>">
           Home
         </a>
 
         <%= link_to "Reports",
                     reports_path,
-                    class: "nav-link #{'active' if local_assigns[:active_page] == 'reports'}" %>
+                    class: "c-nav-link #{'active' if local_assigns[:active_page] == 'reports'}" %>
                     
         <%= link_to "Student Records",
                     student_records_path,
-                    class: "nav-link #{'active' if local_assigns[:active_page] == 'students'}" %>
+                    class: "c-nav-link #{'active' if local_assigns[:active_page] == 'students'}" %>
       </nav>
     </div>
 
-    <div class="user-section">
+    <div class="c-user-section">
       <%= render ToggleSwitchComponent.new(
         id: "high-contrast-toggle",
         checked: false,
@@ -57,15 +57,15 @@
 
       <%= render "shared/translate_toggle" %>
 
-      <span class="role-badge advisor">ADVISOR</span>
+      <span class="c-role-badge c-role-badge--advisor">ADVISOR</span>
 
       <div>
         <%= render "shared/notification_menu" %>
       </div>
 
       <% avatar_url = current_user&.avatar_url.presence %>
-      <div class="user-profile">
-        <div class="user-avatar" title="<%= current_user&.full_name %>">
+      <div class="c-user-profile">
+        <div class="c-user-avatar" title="<%= current_user&.full_name %>">
           <% if avatar_url %>
             <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(current_user) %>" loading="lazy">
           <% else %>
@@ -74,9 +74,9 @@
           <% end %>
         </div>
 
-        <div class="profile-dropdown">
-          <div class="profile-header">
-            <div class="user-avatar">
+        <div class="c-profile-popover">
+          <div class="c-profile-summary">
+            <div class="c-user-avatar">
               <% if avatar_url %>
                 <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(current_user) %>" loading="lazy">
               <% else %>
@@ -84,26 +84,26 @@
                 <span class="sr-only"><%= avatar_aria_label(current_user) %></span>
               <% end %>
             </div>
-            <div class="profile-info">
+            <div class="c-profile-info">
               <h3><%= current_user&.full_name || "Advisor" %></h3>
               <p><%= current_user&.email %></p>
             </div>
           </div>
 
-          <div class="profile-menu">
-            <%= link_to edit_account_path, class: "profile-menu-item" do %>
-            <div class="profile-menu-icon" aria-hidden="true">👤</div>
+          <div class="c-profile-actions">
+            <%= link_to edit_account_path, class: "c-profile-action" do %>
+            <div class="c-profile-action__icon" aria-hidden="true">👤</div>
             <span>Account Information</span>
           <% end %>
             
-            <%= link_to settings_path, class: "profile-menu-item" do %>
-              <div class="profile-menu-icon" aria-hidden="true">⚙️</div>
+            <%= link_to settings_path, class: "c-profile-action" do %>
+              <div class="c-profile-action__icon" aria-hidden="true">⚙️</div>
               <span>Settings</span>
             <% end %>
             <%= link_to destroy_user_session_path,
                         method: :delete,
-                        class: "profile-menu-item danger" do %>
-              <div class="profile-menu-icon" aria-hidden="true">🚪</div>
+                        class: "c-profile-action danger" do %>
+              <div class="c-profile-action__icon" aria-hidden="true">🚪</div>
               <span>Sign Out</span>
             <% end %>
           </div>

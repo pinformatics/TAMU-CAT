@@ -445,8 +445,8 @@ function initSurveyQuestionKeyboardShortcuts() {
 
     // Find the nearest question container for both survey render paths:
     // - surveys/show: <article data-question-id ...>
-    // - survey_responses/_survey_response: <article class="question-block" ...>
-    const container = target.closest('[data-question-id], .question-block, article[id^="question-block-"]')
+    // - survey_responses/_survey_response: <article class="c-question-card" ...>
+    const container = target.closest('[data-question-id], .c-question-card, article[id^="question-block-"]')
     if (!container) return
 
     const raw = e.key === "0" ? 10 : parseInt(e.key, 10)
@@ -866,7 +866,7 @@ function initServerMarkdownPreviews() {
     const input = container.querySelector("[data-preview-input='true']")
     const output = container.querySelector("[data-preview-output='true']")
     const previewUrl = container.dataset.previewUrl
-    const wrapperClass = container.dataset.previewWrapperClass || "guidance-text"
+    const wrapperClass = container.dataset.previewWrapperClass || "c-rich-text"
     const minHeadingLevel = Number(container.dataset.previewMinHeadingLevel || "3")
     const emptyHtml = container.dataset.previewEmptyHtml || ""
 

@@ -1,117 +1,181 @@
 <!-- Main Content for Admin Dashboard - layout provides html/head/body and navbar -->
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard c-main--viewport u-stack u-stack--md">
   <%= render "shared/role_switcher" %>
 
-  <section class="c-card c-card--hover p-8 md:p-10">
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <h1 class="c-section-title c-heading-inline">Admin Dashboard</h1>
-      <p class="mt-1 text-sm leading-relaxed text-slate-600">System management for the MHA Program</p>
-    </div>
-    
-    <div class="dashboard-grid dashboard-grid-4">
-      <!-- Surveys -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+  <svg width="0" height="0" class="u-hidden" aria-hidden="true" focusable="false">
+    <symbol id="icon-survey-builder" viewBox="0 0 24 24">
+      <path d="M6 3h9l3 3v15H6z" />
+      <path d="M14 3v4h4" />
+      <path d="M9 11h6" />
+      <path d="M9 15h4" />
+    </symbol>
+    <symbol id="icon-assign-surveys" viewBox="0 0 24 24">
+      <path d="M8 4h8" />
+      <path d="M9 2h6v4H9z" />
+      <path d="M6 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1" />
+      <path d="m9 14 2 2 4-5" />
+    </symbol>
+    <symbol id="icon-program-setup" viewBox="0 0 24 24">
+      <path d="M4 7h6v6H4z" />
+      <path d="M14 7h6v6h-6z" />
+      <path d="M9 16h6v5H9z" />
+      <path d="M10 10h4" />
+      <path d="M12 13v3" />
+    </symbol>
+    <symbol id="icon-reports" viewBox="0 0 24 24">
+      <path d="M4 19h16" />
+      <path d="M7 16V9" />
+      <path d="M12 16V5" />
+      <path d="M17 16v-4" />
+    </symbol>
+    <symbol id="icon-portfolio" viewBox="0 0 24 24">
+      <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
+      <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
+    </symbol>
+    <symbol id="icon-competencies" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v4" />
+      <path d="M12 18v4" />
+      <path d="M2 12h4" />
+      <path d="M18 12h4" />
+    </symbol>
+    <symbol id="icon-student-records" viewBox="0 0 24 24">
+      <path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3" />
+      <path d="M9 3h6v4H9z" />
+      <path d="M8 13h8" />
+      <path d="M8 17h5" />
+    </symbol>
+    <symbol id="icon-people" viewBox="0 0 24 24">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+      <circle cx="9.5" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </symbol>
+    <symbol id="icon-activity" viewBox="0 0 24 24">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z" />
+      <path d="M8 7h8" />
+      <path d="M8 11h6" />
+    </symbol>
+    <symbol id="icon-imports" viewBox="0 0 24 24">
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </symbol>
+    <symbol id="icon-impersonation" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+      <path d="M18 6h4" />
+      <path d="M20 4v4" />
+    </symbol>
+    <symbol id="icon-maintenance" viewBox="0 0 24 24">
+      <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 0 0 5.4-5.4l-3 3-3-3z" />
+    </symbol>
+  </svg>
+
+  <section class="c-card c-card--compact c-card--brand">
+    <header class="c-page-header c-page-header--compact">
+      <div>
+        <p class="c-eyebrow">Admin workspace</p>
+        <h1 class="c-page-title c-page-title--brand">Admin Dashboard</h1>
+        <p class="c-page-subtitle">System management for the MHA Program.</p>
+      </div>
+    </header>
+  </section>
+
+  <section class="c-card c-card--compact u-stack u-stack--md">
+    <header class="c-page-header c-page-header--compact">
+      <div>
+        <p class="c-eyebrow">Navigation</p>
+        <h2 class="c-section-title">Admin Tools</h2>
+      </div>
+    </header>
+
+    <div class="c-dashboard-grid c-dashboard-grid--dense">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to admin_surveys_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">📄</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-survey-builder"></use></svg></div>
           <div class="c-tile__title">Survey Builder</div>
-          <div class="c-tile__description">Create & manage surveys</div>
+          <div class="c-tile__description">Create, assign, and manage surveys</div>
         <% end %>
       </div>
 
-      <!-- Survey Assignment -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
-        <%= link_to assignments_surveys_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">🧾</div>
-          <div class="c-tile__title">Assign Surveys</div>
-          <div class="c-tile__description">Assign/unassign surveys to students</div>
-        <% end %>
-      </div>
-
-      <!-- Program Configuration -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to admin_program_setup_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">🧩</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-program-setup"></use></svg></div>
           <div class="c-tile__title">Program Configuration</div>
           <div class="c-tile__description">Tracks, majors, semesters, and competency targets</div>
         <% end %>
       </div>
 
-      <!-- Reports -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to reports_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">📊</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-reports"></use></svg></div>
           <div class="c-tile__title">Reports</div>
           <div class="c-tile__description"><%= @total_reports || 0 %> generated</div>
         <% end %>
       </div>
 
-      <!-- Portfolio Export -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to student_portfolio_export_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">🔗</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-portfolio"></use></svg></div>
           <div class="c-tile__title">Portfolio Export</div>
           <div class="c-tile__description">Export student Google Sites portfolio URLs</div>
         <% end %>
       </div>
 
-      <!-- Competencies -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to admin_competencies_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">🧠</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-competencies"></use></svg></div>
           <div class="c-tile__title">Competencies</div>
           <div class="c-tile__description">Compare self, advisor, and course ratings</div>
         <% end %>
       </div>
 
-      <!-- Students Records -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to student_records_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">👨‍🎓</div>
-          <div class="c-tile__title">Students Records</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-student-records"></use></svg></div>
+          <div class="c-tile__title">Student Records</div>
           <div class="c-tile__description"><%= @role_counts[:student] || 0 %> registered</div>
         <% end %>
       </div>
 
-      <!-- People Management -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to people_management_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">🧑‍🤝‍🧑</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-people"></use></svg></div>
           <div class="c-tile__title">People Management</div>
           <div class="c-tile__description">Members, students, advisors, and assignments</div>
         <% end %>
       </div>
 
-      <!-- Recent Activities -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to admin_activities_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">📚</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-activity"></use></svg></div>
           <div class="c-tile__title">Recent Activities</div>
           <div class="c-tile__description">Survey and submission logs</div>
         <% end %>
       </div>
 
-      <!-- Grade Imports -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to admin_grade_import_batches_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon">📥</div>
+          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-imports"></use></svg></div>
           <div class="c-tile__title">Grade Imports</div>
           <div class="c-tile__description">Upload faculty workbooks</div>
         <% end %>
       </div>
 
-      <!-- View as Student/Advisor -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to new_impersonation_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon c-tile__icon--warning">🕵️</div>
+          <div class="c-tile__icon c-tile__icon--warning" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-impersonation"></use></svg></div>
           <div class="c-tile__title c-tile__title--warning">View as Student/Advisor</div>
           <div class="c-tile__description">Read-only preview</div>
         <% end %>
       </div>
 
-      <!-- Maintenance Mode -->
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile">
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to admin_maintenance_path, class: "c-tile__link" do %>
-          <div class="c-tile__icon c-tile__icon--warning">🛠️</div>
+          <div class="c-tile__icon c-tile__icon--warning" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-maintenance"></use></svg></div>
           <div class="c-tile__title c-tile__title--warning">Maintenance Mode</div>
           <div class="c-tile__description"><%= @maintenance_enabled ? "Enabled" : "Disabled" %></div>
         <% end %>

@@ -4,7 +4,7 @@
 
 <div>
   <%= link_to "Edit this question", edit_question_path(@question) %> |
-  <%= link_to "Back to questions", questions_path, class: tailwind_button_classes(:secondary) %>
+  <%= link_to "Back to questions", questions_path, class: button_classes(:secondary) %>
 
   <%= button_to "Destroy this question", @question, method: :delete %>
 </div>

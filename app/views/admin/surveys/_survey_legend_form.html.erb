@@ -4,7 +4,7 @@
 <% preview_url = api_markdown_preview_path %>
 
 <% empty_preview = capture do %>
-  <div class="guidance-text">
+  <div class="c-rich-text">
     <p class="text-slate-400">Legend preview will appear here.</p>
   </div>
 <% end %>
@@ -16,8 +16,8 @@
     <p class="text-sm text-slate-600">Edit the long-form legend content and preview how it will appear in the survey.</p>
   </header>
 
-  <div class="w-full">
-    <div class="w-full">
+  <div class="u-w-full">
+    <div class="u-w-full">
       <div class="c-card c-card--tight space-y-5 border border-slate-200">
       <%= form.fields_for :legend, (survey.legend || survey.build_legend(title: "", body: "")) do |legend_fields| %>
         <div class="c-field">
@@ -91,7 +91,7 @@
           },
           body: JSON.stringify({
             text,
-            wrapper_class: "guidance-text",
+            wrapper_class: "c-rich-text",
             min_heading_level: 3
           }),
           signal: abortController.signal

@@ -54,6 +54,46 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "\"label\":\"Advisor\""
   end
 
+  test "student dashboard shows advisor column from submitted advisor review survey values" do
+    survey = Survey.new(
+      title: "Submitted Advisor Review Student Dashboard Survey",
+      program_semester: @survey.program_semester,
+      is_active: true
+    )
+    survey.save!(validate: false)
+    section = SurveySection.create!(survey: survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = Category.create!(survey: survey, section: section, name: "Health Care Environment and Community")
+    question = category.questions.create!(
+      question_text: @competency_title,
+      question_type: "dropdown",
+      question_order: 1,
+      answer_options: %w[1 2 3 4 5],
+      has_feedback: true
+    )
+    SurveyResponseVersion.create!(
+      student_id: @student.student_id,
+      survey_id: survey.id,
+      event: "submitted",
+      answers: { question.id.to_s => "3" }
+    )
+    AdvisorFeedbackSubmission.create!(
+      student_id: @student.student_id,
+      survey_id: survey.id,
+      advisor_id: advisors(:advisor).advisor_id,
+      last_saved_at: Time.current,
+      submitted_at: Time.current
+    )
+
+    sign_in @student_user
+
+    get student_competencies_path(semester: @survey.semester)
+
+    assert_response :success
+    assert_select "th", text: "Advisor"
+    assert_includes response.body, "\"label\":\"Advisor\""
+    assert_includes response.body, "\"Advisor\",\"data\":[3.0"
+  end
+
   test "student can export competencies as csv" do
     sign_in @student_user
 

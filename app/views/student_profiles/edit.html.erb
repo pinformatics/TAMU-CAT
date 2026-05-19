@@ -12,18 +12,18 @@
 <% initials = full_name.split.first(2).map { |part| part.first&.upcase }.join.presence || "ST" %>
 <% avatar_url = @student.avatar_url.presence %>
 
-<div class="py-6 sm:py-8">
+<main class="c-main c-page">
   <div class="u-stack u-stack--lg">
     <section class="c-hero c-hero--maroon c-hero--compact">
-      <div class="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-8">
-          <div class="space-y-4">
+      <div class="u-responsive-split">
+        <div class="u-stack u-stack--xl">
+          <div class="u-stack u-stack--md">
             <p class="c-eyebrow c-eyebrow--inverse">Edit student profile</p>
             <h1 class="c-h1 c-h1--inverse"><%= full_name %></h1>
-            <p class="c-lede c-lede--inverse max-w-2xl">Update your identity and program details to keep surveys and advisor assignments accurate.</p>
+            <p class="c-lede c-lede--inverse u-max-w-xl">Update your identity and program details to keep surveys and advisor assignments accurate.</p>
           </div>
 
-          <div class="flex flex-wrap gap-3">
+          <div class="u-actions u-actions--start">
             <span class="c-pill c-pill--inverse">
               <span class="c-pill__dot c-pill__dot--inverse"></span>
               Track · <%= track %>
@@ -37,8 +37,8 @@
           </div>
         </div>
 
-        <div class="flex flex-col gap-8 sm:flex-row sm:items-start lg:flex-col lg:items-end">
-          <div class="space-y-5">
+        <div class="u-responsive-row">
+          <div class="u-stack u-stack--md">
             <div>
               <p class="c-eyebrow c-eyebrow--inverse">Primary email</p>
               <p class="c-value c-value--xl c-value--inverse"><%= email %></p>
@@ -49,7 +49,7 @@
             </div>
           </div>
 
-          <div class="c-avatar-tile c-avatar-tile--inverse h-24 w-24 text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@student.user)}\"" unless avatar_url %>>
+          <div class="c-avatar-tile c-avatar-tile--inverse u-size-2xl text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@student.user)}\"" unless avatar_url %>>
             <% if avatar_url %>
               <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(@student.user) %>" loading="lazy">
             <% else %>
@@ -60,7 +60,7 @@
         </div>
       </div>
 
-      <div class="mt-6 grid gap-4 md:grid-cols-3">
+      <div class="u-grid u-grid--stats mt-xl">
         <article class="c-kv c-kv--inverse c-kv--compact">
           <p class="c-eyebrow c-eyebrow--inverse">Major / Program</p>
           <p class="c-value c-value--xl c-value--inverse"><%= major %></p>
@@ -77,7 +77,7 @@
     </section>
 
     <div>
-      <section class="c-card c-card--tight space-y-8">
+      <section class="c-card c-card--tight u-stack u-stack--xl">
         <header>
           <p class="c-eyebrow">Overview</p>
           <h2 class="c-h2">Profile details</h2>
@@ -85,11 +85,11 @@
 
         <%= form_with model: @student, url: student_profile_path, method: :patch, local: true, class: "u-stack u-stack--lg" do |form| %>
           <% if @student.errors.any? %>
-            <div class="c-card c-card--tight border border-rose-200 bg-rose-50 text-rose-800 shadow-none">
-              <h3 class="font-semibold text-rose-900">
+            <div class="c-card c-card--tight c-card--danger u-shadow-none">
+              <h3 class="c-h3">
                 <%= pluralize(@student.errors.count, "error") %> need your attention before saving
               </h3>
-              <ul class="mt-2 list-disc pl-5">
+              <ul class="c-rich-text">
                 <% @student.errors.full_messages.each do |message| %>
                   <li><%= message %></li>
                 <% end %>
@@ -97,10 +97,10 @@
             </div>
           <% end %>
 
-          <div class="space-y-8">
-            <div class="space-y-4">
+          <div class="u-stack u-stack--xl">
+            <div class="u-stack u-stack--md">
               <p class="c-h3">Personal</p>
-              <div class="u-grid" style="--u-grid-min: 260px">
+              <div class="u-grid u-grid--form">
                 <div class="c-kv c-kv--compact">
                   <div class="c-field">
                     <%= form.label :uin, "UIN", class: "c-label" %>
@@ -118,9 +118,9 @@
               </div>
             </div>
 
-            <div class="space-y-4 border-t border-slate-100 pt-6">
+            <div class="u-stack u-stack--md u-section-divider">
               <p class="c-h3">Academic</p>
-              <div class="u-grid" style="--u-grid-min: 260px">
+              <div class="u-grid u-grid--form">
                 <div class="c-kv c-kv--compact">
                   <div class="c-field">
                     <%= form.label :program_year, "Program year", class: "c-label" %>
@@ -128,7 +128,7 @@
                     <%= form.select :program_year,
                         options_for_select(program_year_options, @student.program_year.to_i.presence),
                         { prompt: "Select your graduation year" },
-                        { required: true, class: "c-select w-full" } %>
+                        { required: true, class: "c-select u-w-full" } %>
                     <small class="c-help">Select your graduation year (e.g., 2026). Used to determine which surveys to assign.</small>
                   </div>
                 </div>
@@ -142,7 +142,7 @@
                           @student.major.to_s
                         ),
                         { prompt: "Select your major" },
-                        { required: true, class: "c-select w-full" } %>
+                        { required: true, class: "c-select u-w-full" } %>
                   </div>
                 </div>
 
@@ -153,32 +153,32 @@
                     <%= form.select :track,
                       options_for_select(track_options, @student.track_key.to_s),
                         { prompt: "Select your track" },
-                        { required: true, class: "c-select w-full" } %>
+                        { required: true, class: "c-select u-w-full" } %>
                     <small class="c-help">Pick the cohort you belong to</small>
                   </div>
                 </div>
 
-                <div class="c-kv c-kv--compact" style="grid-column: 1 / -1;">
+                <div class="c-kv c-kv--compact u-col-span-all">
                   <div class="c-field">
                     <%= form.label :advisor_id, "Advisor", class: "c-label" %>
                     <%= form.select :advisor_id,
                         options_from_collection_for_select(@advisors, :advisor_id, :name, @student.advisor_id),
                         { prompt: "Select your advisor (optional)" },
-                        { class: "c-select w-full" } %>
+                        { class: "c-select u-w-full" } %>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="c-form-actions u-actions u-actions--split border-t border-slate-100 pt-6">
-            <%= link_to student_dashboard_path, class: tailwind_button_classes(:secondary) do %>
+          <div class="c-form-actions u-actions u-actions--split u-section-divider">
+            <%= link_to student_dashboard_path, class: button_classes(:secondary) do %>
               Cancel
             <% end %>
-            <%= form.submit "Save profile", class: tailwind_button_classes(:primary) %>
+            <%= form.submit "Save profile", class: button_classes(:primary) %>
           </div>
         <% end %>
       </section>
     </div>
   </div>
-</div>
+</main>

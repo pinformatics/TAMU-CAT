@@ -1,7 +1,7 @@
 <details class="notifications-menu c-popover-anchor u-hover-dropdown">
   <summary class="c-icon-button c-icon-button--nav" aria-label="Notifications">
     <span class="c-icon-button__icon">
-      <%= image_tag "notification-icon.png", alt: "", class: "notification-icon-img", aria: { hidden: true } %>
+      <%= image_tag "notification-icon.png", alt: "", class: "c-notification-icon", aria: { hidden: true } %>
       <% if @unread_notification_count.to_i.positive? %>
         <span class="c-badge c-badge--count" aria-label="<%= @unread_notification_count %> unread notifications">
           <%= @unread_notification_count %>
@@ -14,7 +14,7 @@
   <div class="c-popover c-popover--menu u-popover-down-right u-hover-dropdown__panel" role="menu">
     <div class="c-menu__header">
       <span class="c-menu__title">Recent Notifications</span>
-      <%= link_to "View all", notifications_path, class: tailwind_button_classes(:ghost, extra_classes: "btn-sm") %>
+      <%= link_to "View all", notifications_path, class: button_classes(:ghost, extra_classes: "btn-sm") %>
     </div>
 
     <% if @recent_notifications.blank? %>
@@ -30,7 +30,7 @@
               </div>
               <p class="c-menu__message"><%= truncate(notification.message, length: 80) %></p>
               <% unless notification.read? %>
-                <span class="pill pill--primary">Unread</span>
+                <span class="c-pill c-pill--primary">Unread</span>
               <% end %>
             <% end %>
           </li>
@@ -43,7 +43,7 @@
         <%= button_to "Mark all as read",
                     mark_all_read_notifications_path,
                     method: :patch,
-                    class: tailwind_button_classes(:secondary, extra_classes: "btn-sm") %>
+                    class: button_classes(:secondary, extra_classes: "btn-sm") %>
       </div>
     <% end %>
   </div>

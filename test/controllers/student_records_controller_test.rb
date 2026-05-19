@@ -12,6 +12,8 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     get student_records_path
     assert_response :success
     assert_includes response.body, "Student Records"
+    assert_match(/Completion.*Feedback.*Advisor Feedback.*Actions/m, response.body)
+    assert_not_includes response.body, "Course Competencies"
     assert_includes response.body, users(:student).name
     assert_includes response.body, users(:other_student).name
     assert_includes response.body, students(:student).program_year.to_s

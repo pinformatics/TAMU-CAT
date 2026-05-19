@@ -1,4 +1,4 @@
-<%= form_with url: url, method: :get, local: true, class: "flex w-full items-center gap-2" do %>
+<%= form_with url: url, method: :get, local: true, class: "u-flex u-w-full u-items-center u-gap-sm" do %>
   <% hidden_params.to_h.each do |key, value| %>
     <% next if value.blank? %>
     <%= hidden_field_tag key, value %>
@@ -7,6 +7,6 @@
   <%= text_field_tag param_name,
                      query,
                      placeholder: placeholder,
-                     class: "c-input c-search-input flex-1" %>
-  <%= button_tag "Search", type: :submit, class: helpers.tailwind_button_classes(:secondary) %>
+                     class: "c-input c-search-input u-flex-1" %>
+  <%= button_tag "Search", type: :submit, class: helpers.button_classes(:secondary) %>
 <% end %>

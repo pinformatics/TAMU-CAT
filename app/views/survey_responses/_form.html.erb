@@ -1,74 +1,74 @@
-<%= form_with(model: survey_response, local: true) do |form| %>
+<%= form_with(model: survey_response, local: true, class: "u-stack u-stack--lg") do |form| %>
 
   <!-- Survey meta fields -->
-  <div>
-    <%= form.label :student_id, style: "display: block" %>
-    <%= form.number_field :student_id %>
+  <div class="c-field">
+    <%= form.label :student_id, class: "c-label" %>
+    <%= form.number_field :student_id, class: "c-input" %>
   </div>
-  <div>
-    <%= form.label :advisor_id, style: "display: block" %>
-    <%= form.number_field :advisor_id %>
+  <div class="c-field">
+    <%= form.label :advisor_id, class: "c-label" %>
+    <%= form.number_field :advisor_id, class: "c-input" %>
   </div>
-  <div>
-    <%= form.label :survey_id, style: "display: block" %>
-    <%= form.number_field :survey_id %>
+  <div class="c-field">
+    <%= form.label :survey_id, class: "c-label" %>
+    <%= form.number_field :survey_id, class: "c-input" %>
   </div>
-  <div>
-    <%= form.label :completion_date, style: "display: block" %>
-    <%= form.date_field :completion_date %>
+  <div class="c-field">
+    <%= form.label :completion_date, class: "c-label" %>
+    <%= form.date_field :completion_date, class: "c-input" %>
   </div>
-  <div>
-    <%= form.label :approval_date, style: "display: block" %>
-    <%= form.date_field :approval_date %>
+  <div class="c-field">
+    <%= form.label :approval_date, class: "c-label" %>
+    <%= form.date_field :approval_date, class: "c-input" %>
   </div>
-  <div>
-    <%= form.label :status, style: "display: block" %>
-    <%= form.select :status, SurveyResponse.statuses.values.map { |value| [value, value] }, { include_blank: true }, { class: "c-select w-full" } %>
+  <div class="c-field">
+    <%= form.label :status, class: "c-label" %>
+    <%= form.select :status, SurveyResponse.statuses.values.map { |value| [value, value] }, { include_blank: true }, { class: "c-select u-w-full" } %>
   </div>
 
   <!-- Survey questions -->
   <% if survey_response.survey && survey_response.survey.categories.any? %>
     <% survey_response.survey.categories.includes(:questions).order(:id).each do |category| %>
-      <section class="mb-6 p-4 border rounded">
-        <h3 class="font-semibold mb-2"><%= category.name %></h3>
+      <section class="c-card c-card--tight u-stack u-stack--md">
+        <h3 class="c-h3"><%= category.name %></h3>
         <% category.questions.ordered.each_with_index do |question, idx| %>
           <% qr = survey_response.question_responses.find { |r| r.question_id == question.id } || survey_response.question_responses.build(question: question) %>
-          <div class="mb-4">
-            <label class="block font-medium">
+          <div class="c-field">
+            <label class="c-label">
               <span><%= "Q#{idx + 1}." %></span>
               <span class="block"><%= render_question_prompt(question) %></span>
               <% if question.is_required? %>
-                <span class="text-rose-600">*</span>
+                <span class="u-danger">*</span>
               <% end %>
             </label>
             <% case question.question_type %>
             <% when "short_answer" %>
               <%= form.fields_for :question_responses, qr do |qr_form| %>
-                <%= qr_form.text_area :response_value, rows: 2, maxlength: StudentQuestion::TEXT_MAX_LENGTH, class: "w-full border rounded px-2 py-1" %>
+                <%= qr_form.text_area :response_value, rows: 2, maxlength: StudentQuestion::TEXT_MAX_LENGTH, class: "c-input u-w-full" %>
               <% end %>
             <% when "multiple_choice" %>
               <%= form.fields_for :question_responses, qr do |qr_form| %>
                 <%= qr_form.select :response_value,
                                   options_for_select(question.answer_option_pairs, qr.response_value.to_s),
                                   { include_blank: true },
-                                  class: "c-select w-full" %>
+                                  class: "c-select u-w-full" %>
               <% end %>
             <% when "evidence" %>
               <%= form.fields_for :question_responses, qr do |qr_form| %>
-                <%= qr_form.text_field :response_value, maxlength: StudentQuestion::TEXT_MAX_LENGTH, class: "w-full border rounded px-2 py-1" %>
+                <%= qr_form.text_field :response_value, maxlength: StudentQuestion::TEXT_MAX_LENGTH, class: "c-input u-w-full" %>
               <% end %>
               <% if question.is_required? %>
-                <span class="text-rose-600">*</span>
+                <span class="u-danger">*</span>
               <% end %>
               <%# Evidence error message, same style as required %>
               <% if qr.errors[:response_value].any? %>
-                <div class="text-xs text-rose-600 mt-1">Invalid Google link</div>
+                <div class="c-help u-danger">Invalid Google link</div>
               <% end %>
             <% else %>
               <%= form.fields_for :question_responses, qr do |qr_form| %>
-                <%= qr_form.text_field :response_value, maxlength: StudentQuestion::TEXT_MAX_LENGTH, class: "w-full border rounded px-2 py-1" %>
+                <%= qr_form.text_field :response_value, maxlength: StudentQuestion::TEXT_MAX_LENGTH, class: "c-input u-w-full" %>
                 <% if qr.errors[:response_value].any? %>
-                  <div class="text-xs text-rose-600 mt-1">
+                  <div class="c-help u-danger">
                     <%= qr.errors[:response_value].join(', ') %>
                   </div>
                 <% end %>
@@ -76,7 +76,7 @@
             <% end %>
             <%# 必填题未填写时提示 %>
             <% if question.is_required? && (qr.response_value.blank? || qr.response_value.nil?) && survey_response.errors.any? %>
-              <div class="text-xs text-rose-600 mt-1">此题为必填</div>
+              <div class="c-help u-danger">This question is required</div>
             <% end %>
           </div>
         <% end %>
@@ -84,7 +84,7 @@
     <% end %>
   <% end %>
 
-  <div>
+  <div class="u-actions">
     <%= form.submit %>
   </div>
 <% end %>

@@ -1,12 +1,12 @@
-<main class="main-content main-content--dashboard">
+<main class="c-main c-main--dashboard">
   <div class="c-toolbar">
-    <div class="c-toolbar__row items-center w-full gap-3">
-      <%= link_to "Back to batches", admin_grade_import_batches_path, class: tailwind_button_classes(:secondary) %>
+    <div class="c-toolbar__row u-items-center u-w-full u-gap-md">
+      <%= link_to "Back to batches", admin_grade_import_batches_path, class: button_classes(:secondary) %>
     </div>
   </div>
 
-  <div class="c-container c-container--wide c-page">
-    <section class="c-card p-8 md:p-10 u-stack u-stack--xl">
+  <div class="c-page">
+    <section class="c-card u-stack u-stack--xl">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Faculty imports</p>
@@ -22,27 +22,50 @@
 
         <div class="u-actions">
           <% if @batch.committable_dry_run? %>
-            <%= button_to "Commit preview", commit_admin_grade_import_batch_path(@batch), method: :post, class: tailwind_button_classes(:primary), form: { data: { turbo_confirm: "Publish this preview so its course competency ratings appear in the app?" } } %>
+            <%= button_to "Commit preview", commit_admin_grade_import_batch_path(@batch), method: :post, class: button_classes(:primary), form: { data: { turbo_confirm: "Publish this preview so its course competency ratings appear in the app?" } } %>
           <% end %>
           <% if @batch.recommittable_rollback? %>
-            <%= button_to "Recommit batch", recommit_admin_grade_import_batch_path(@batch), method: :post, class: tailwind_button_classes(:primary), form: { data: { turbo_confirm: "Make this rolled-back batch visible in the app again?" } } %>
+            <%= button_to "Recommit batch", recommit_admin_grade_import_batch_path(@batch), method: :post, class: button_classes(:primary), form: { data: { turbo_confirm: "Make this rolled-back batch visible in the app again?" } } %>
           <% end %>
-          <%= link_to "Export CSV", export_ratings_admin_grade_import_batch_path(@batch, format: :csv), class: tailwind_button_classes(:secondary) %>
-          <%= link_to "Error report", error_report_admin_grade_import_batch_path(@batch), class: tailwind_button_classes(:secondary) %>
+          <%= link_to "Export CSV", export_ratings_admin_grade_import_batch_path(@batch, format: :csv), class: button_classes(:secondary) %>
+          <%= link_to "Error report", error_report_admin_grade_import_batch_path(@batch), class: button_classes(:secondary) %>
           <% unless @batch.rolled_back? || @batch.dry_run? %>
-            <%= button_to "Rollback batch", rollback_admin_grade_import_batch_path(@batch), method: :post, class: tailwind_button_classes(:danger), form: { data: { turbo_confirm: "Hide this committed batch from competencies, reports, and other downstream views?" } } %>
+            <%= button_to "Rollback batch", rollback_admin_grade_import_batch_path(@batch), method: :post, class: button_classes(:danger), form: { data: { turbo_confirm: "Hide this committed batch from competencies, reports, and other downstream views?" } } %>
           <% end %>
-          <%= button_to "Delete batch", admin_grade_import_batch_path(@batch), method: :delete, class: tailwind_button_classes(:danger), form: { data: { turbo_confirm: "Permanently delete this batch and all imported rows? This removes duplicate fingerprints so the same files can be uploaded again." } } %>
+          <%= button_to "Delete batch", admin_grade_import_batch_path(@batch), method: :delete, class: button_classes(:danger), form: { data: { turbo_confirm: "Permanently delete this batch and all imported rows? This removes duplicate fingerprints so the same files can be uploaded again." } } %>
         </div>
       </header>
 
       <% if @batch.summary["rolled_back_at"].present? %>
-        <div class="alert">
+        <div class="c-callout">
           Rolled back at <%= @batch.summary["rolled_back_at"] %>.
         </div>
       <% end %>
 
-      <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div class="c-callout c-callout--info">
+        <% if @batch.program_semester.present? %>
+          Course-derived ratings from this batch are reportable for <strong><%= @batch.program_semester.name %></strong>.
+        <% else %>
+          This batch has no semester assigned, so semester-filtered competency views will not include its course-derived ratings.
+        <% end %>
+        Pending rows need student identifier reconciliation before they contribute to derived ratings. Duplicate rows are suppressed by import fingerprint and remain available in the file diagnostics.
+      </div>
+
+      <section class="c-card c-card--tight">
+        <%= form_with url: semester_admin_grade_import_batch_path(@batch), method: :patch, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
+          <div class="c-filter-bar__field">
+            <label class="c-label" for="program_semester_id">Batch semester</label>
+            <%= select_tag :program_semester_id,
+                  options_from_collection_for_select(ProgramSemester.ordered, :id, :name, @batch.program_semester_id),
+                  include_blank: "No semester",
+                  class: "c-select" %>
+          </div>
+          <%= submit_tag "Update semester", class: button_classes(:secondary) %>
+          <span class="c-help">Use this to repair legacy imports so semester-filtered competency views include the batch.</span>
+        <% end %>
+      </section>
+
+      <section class="c-stats-grid">
         <div class="c-card c-card--tight c-stat">
           <span class="c-eyebrow">Status</span>
           <strong class="c-value c-value--xl"><%= @batch.status.humanize %></strong>
@@ -80,6 +103,7 @@
             <thead>
               <tr>
                 <th>File</th>
+                <th>Detected Format</th>
                 <th>Status</th>
                 <th>Rows</th>
                 <th>Pending</th>
@@ -93,6 +117,7 @@
                 <% debug = file.parsed_content["grade_sheet_debug"] || {} %>
                 <tr>
                   <td class="c-table__title"><%= file.file_name %></td>
+                  <td><%= (file.parsed_content["mode"] || debug["mode"] || "unknown").to_s.humanize %></td>
                   <td><%= file.status %></td>
                   <td><%= "#{file.imported_rows}/#{file.total_rows}" %></td>
                   <td><%= file.pending_rows %></td>
@@ -102,7 +127,7 @@
                     <% if file.parse_errors.present? %>
                       <details class="c-cell-details">
                         <summary class="c-cell-details__summary"><%= pluralize(file.parse_errors.size, "issue") %></summary>
-                        <ul class="mt-sm">
+                        <ul class="u-mt-sm">
                           <% file.parse_errors.first(20).each do |err| %>
                             <li>Row <%= err["row"] || "—" %>: <%= err["message"] || err %></li>
                           <% end %>
@@ -126,8 +151,8 @@
         </summary>
         <% pending_students = @pending_rows.map { |row| [row.student_name.presence || row.student_identifier.presence || "Unknown Student", row.student_uin.presence || "No UIN"] }.uniq %>
         <% if pending_students.empty? %>
-          <div class="empty-state">
-            <p class="empty-state__body">No pending student matches were created for this batch.</p>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No pending student matches were created for this batch.</p>
           </div>
         <% else %>
           <div class="c-table-wrapper">
@@ -158,11 +183,11 @@
         </summary>
         <% grouped_evidences = @evidences.group_by { |evidence| [evidence.student&.user&.name || "Unknown Student", evidence.student&.uin.presence || "No UIN"] } %>
         <% if grouped_evidences.empty? %>
-          <div class="empty-state">
-            <p class="empty-state__body">No evidence rows were created for this batch.</p>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No evidence rows were created for this batch.</p>
           </div>
         <% else %>
-          <div class="u-stack u-stack--sm p-4">
+          <div class="u-stack u-stack--sm u-p-md">
             <% grouped_evidences.each do |(student_name, student_uin), evidences| %>
               <details class="c-accordion">
                 <summary class="c-accordion__summary">
@@ -212,8 +237,8 @@
       </details>
 
       <div class="u-actions u-actions--start">
-        <%= link_to "Back to batches", admin_grade_import_batches_path, class: tailwind_button_classes(:secondary) %>
-        <%= link_to "New batch", new_admin_grade_import_batch_path, class: tailwind_button_classes(:primary) %>
+        <%= link_to "Back to batches", admin_grade_import_batches_path, class: button_classes(:secondary) %>
+        <%= link_to "New batch", new_admin_grade_import_batch_path, class: button_classes(:primary) %>
       </div>
     </section>
   </div>

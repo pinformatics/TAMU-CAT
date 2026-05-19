@@ -209,7 +209,7 @@ class FeedbacksController < ApplicationController
       @feedback = Feedback.new(
         survey_id: @survey.id,
         student_id: @student.student_id,
-        advisor_id: @advisor&.advisor_id,
+        advisor_id: resolved_advisor_id,
         question_id: feedback_params[:question_id],
         category_id: Question.find_by(id: feedback_params[:question_id])&.category_id,
         average_score: feedback_params[:average_score],
@@ -303,14 +303,20 @@ class FeedbacksController < ApplicationController
   #
   # @return [ActionController::Parameters]
   def feedback_params
-    params.require(:feedback).permit(:advisor_id, :category_id, :survey_id, :student_id, :comments, :average_score, :lock_version)
+    params.require(:feedback).permit(:advisor_id, :category_id, :survey_id, :student_id, :question_id, :comments, :average_score, :lock_version)
   end
 
   def load_feedback_new_context
     # Build PORO and related data the `new` view expects so re-rendering `new`
     # preserves student responses and existing feedback state.
     @return_to = safe_return_to_param
-    @survey_response = SurveyResponse.build(student: @student, survey: @survey)
+    version = latest_survey_response_version
+    @survey_response = SurveyResponse.build(
+      student: @student,
+      survey: @survey,
+      answers_override: version ? remapped_version_answers(version) : nil,
+      as_of: version&.created_at
+    )
     question_ids = @survey.questions.select(:id)
     @responses = StudentQuestion.where(student_id: @student.student_id, question_id: question_ids).includes(question: :category)
     @existing_feedbacks = Feedback.where(student_id: @student.student_id, survey_id: @survey.id).includes(:category, :advisor, :question)
@@ -328,6 +334,8 @@ class FeedbacksController < ApplicationController
       .select { |fb| fb.question_id.present? }
       .group_by(&:question_id)
       .transform_values { |items| pick_latest.call(items) }
+
+    apply_feedback_prefill! if params[:prefill].to_s == "true"
 
     load_confidential_note_context
   end
@@ -526,6 +534,88 @@ class FeedbacksController < ApplicationController
     submission.last_saved_at = now
     submission.submitted_at = now if submit_intent?
     submission.save!
+  end
+
+  def latest_survey_response_version
+    @latest_survey_response_version ||= SurveyResponseVersion
+      .where(student_id: @student.student_id, survey_id: @survey.id)
+      .order(created_at: :desc, id: :desc)
+      .first
+  end
+
+  def remapped_version_answers(version)
+    current_questions = @survey.questions.order(:id).to_a
+    raw_answers = version.answers.to_h.transform_keys(&:to_s)
+    id_offset = legacy_answer_id_offset(current_questions, raw_answers)
+
+    current_questions.each_with_object({}) do |question, memo|
+      value = raw_answers[question.id.to_s] || raw_answers[(question.id - id_offset).to_s]
+      memo[question.id] = value if value.present?
+    end
+  end
+
+  def legacy_answer_id_offset(current_questions, answers)
+    numeric_answer_ids = answers.keys.filter_map { |key| key.match?(/\A\d+\z/) ? key.to_i : nil }
+    return 0 if current_questions.empty? || numeric_answer_ids.empty?
+    return 0 if current_questions.any? { |question| answers.key?(question.id.to_s) }
+
+    current_question_ids = current_questions.map(&:id)
+    numeric_answer_ids
+      .flat_map { |answer_id| current_question_ids.map { |question_id| question_id - answer_id } }
+      .tally
+      .max_by { |offset, count| [ count, -offset.abs ] }
+      &.first || 0
+  end
+
+  def apply_feedback_prefill!
+    survey_answers = @survey_response.answers
+
+    feedback_questions.each do |question|
+      next if @existing_feedbacks_by_question[question.id].present?
+
+      score = normalize_feedback_prefill_score(survey_answers[question.id] || survey_answers[question.id.to_s])
+      next if score.blank?
+
+      @existing_feedbacks_by_question[question.id] = Feedback.new(
+        student_id: @student.student_id,
+        survey_id: @survey.id,
+        advisor_id: confidential_note_owner_advisor_id_for_current_user || @student.advisor_id,
+        question_id: question.id,
+        category_id: question.category_id,
+        average_score: score
+      )
+    end
+  end
+
+  def feedback_questions
+    @feedback_questions ||= @survey
+      .questions
+      .includes(category: :section)
+      .select do |question|
+        !question.sub_question? &&
+          question.question_type == "dropdown" &&
+          question.category&.section&.mha_competency? &&
+          (!question.respond_to?(:has_feedback?) || question.has_feedback?)
+      end
+  end
+
+  def normalize_feedback_prefill_score(value)
+    raw = case value
+    when Hash
+      value["answer"] || value[:answer] || value["value"] || value[:value] || value["rating"] || value[:rating]
+    else
+      value
+    end
+
+    numeric = begin
+      Float(raw)
+    rescue ArgumentError, TypeError
+      raw.to_s[/([0-5])(?:\D*)\z/, 1]&.to_f
+    end
+
+    return nil unless numeric&.between?(0, 5)
+
+    numeric.round.to_s
   end
 
   def safe_return_to_param

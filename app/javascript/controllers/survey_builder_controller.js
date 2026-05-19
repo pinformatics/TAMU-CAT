@@ -670,7 +670,7 @@ export default class extends Controller {
 
       const btn = document.createElement("button")
       btn.type = "button"
-      btn.className = "w-full rounded-lg px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-50"
+      btn.className = "u-w-full rounded-lg px-2 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-50"
       btn.dataset.builderNavLabel = label.toLowerCase()
       const icon = document.createElement("span")
       icon.setAttribute("aria-hidden", "true")
@@ -702,7 +702,7 @@ export default class extends Controller {
 
       const catBtn = document.createElement("button")
       catBtn.type = "button"
-      catBtn.className = "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+      catBtn.className = "flex u-w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
       catBtn.dataset.builderNavKind = "category"
       catBtn.dataset.builderNavTargetId = categoryId
       catBtn.dataset.builderNavLabel = categoryLabel.toLowerCase()
@@ -735,7 +735,7 @@ export default class extends Controller {
 
         const qBtn = document.createElement("button")
         qBtn.type = "button"
-        qBtn.className = "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50"
+        qBtn.className = "flex u-w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50"
         qBtn.dataset.builderNavKind = "question"
         qBtn.dataset.builderNavTargetId = qId
         qBtn.dataset.builderNavLabel = qLabel.toLowerCase()
@@ -804,7 +804,7 @@ export default class extends Controller {
 
       const a = document.createElement("button")
       a.type = "button"
-      a.className = "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+      a.className = "flex u-w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
       a.dataset.builderNavKind = kind
       a.dataset.builderNavTargetId = id
       a.dataset.builderNavLabel = label.toLowerCase()
@@ -1009,12 +1009,12 @@ export default class extends Controller {
 
     categoryNodes.forEach((node) => {
       if (!targetId) {
-        node.classList.remove("builder-hidden-category")
+        node.classList.remove("is-builder-hidden")
         return
       }
 
       const shouldShow = node.id === targetId
-      node.classList.toggle("builder-hidden-category", !shouldShow)
+      node.classList.toggle("is-builder-hidden", !shouldShow)
     })
   }
 

@@ -2,7 +2,7 @@
 <% form_uid = section.respond_to?(:form_uid) && section.form_uid.present? ? section.form_uid : "section-temp-#{SecureRandom.hex(4)}" %>
 <% section.form_uid = form_uid if section.respond_to?(:form_uid=) %>
 <article id="<%= form_uid %>"
-         class="c-card survey-section-card c-builder-node c-builder-collapsible space-y-5 text-left"
+         class="c-card c-card--student c-builder-node c-builder-collapsible space-y-5 text-left"
          data-builder-kind="section"
          data-builder-label="<%= section.title.to_s.strip.presence || 'Untitled section' %>"
          data-section-entry
@@ -37,14 +37,14 @@
     </div>
 
     <button type="button"
-            class="<%= tailwind_button_classes(:secondary, extra_classes: 'btn-sm') %> text-rose-600"
+            class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %> text-rose-600"
             data-action="section-fields#remove">
       <span aria-hidden="true">🗑️</span>
       <span>Remove</span>
     </button>
   </div>
 
-  <div class="survey-builder-section-body c-builder-collapsible__body space-y-5" data-builder-section-body>
+  <div class="c-builder-collapsible__body space-y-5" data-builder-section-body>
     <div class="space-y-2">
       <%= section_fields.label :description, "Description (optional)", class: "block text-sm font-medium text-slate-700" %>
       <%= section_fields.text_area :description,

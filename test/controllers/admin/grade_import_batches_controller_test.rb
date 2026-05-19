@@ -70,6 +70,22 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal @admin.email, batch.summary["recommitted_by"]
   end
 
+  test "semester action assigns legacy batch to a program semester" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+
+    patch semester_admin_grade_import_batch_path(batch), params: {
+      program_semester_id: program_semesters(:fall_2025).id
+    }
+
+    assert_redirected_to admin_grade_import_batch_path(batch)
+    assert_equal program_semesters(:fall_2025), batch.reload.program_semester
+    assert_match "Batch semester updated", flash[:notice]
+  end
+
   test "export ratings returns formatted csv only" do
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,
@@ -171,11 +187,38 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     get admin_grade_import_batch_path(batch)
 
     assert_response :success
+    assert_includes response.body, "Detected Format"
     assert_includes response.body, "Course Target"
     assert_includes response.body, "PHPM-701-001"
     assert_includes response.body, "UIN #{@student.uin}"
     refute_includes response.body, "ID #{@student.student_id}"
     assert_select ".c-score-pill--program", text: "4"
+  end
+
+  test "show explains semester scope and duplicate diagnostics" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    batch.grade_import_files.create!(
+      file_name: "direct.xlsx",
+      file_checksum: "checksum-guidance",
+      status: "processed",
+      parsed_content: {
+        "mode" => "direct_competency",
+        "grade_sheet_debug" => { "duplicate_warning_count" => 2 }
+      }
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "reportable for"
+    assert_includes response.body, "Fall 2025"
+    assert_includes response.body, "Direct competency"
+    assert_includes response.body, "Duplicate rows are suppressed"
   end
 
   test "show renders pending student matches as compact student list" do

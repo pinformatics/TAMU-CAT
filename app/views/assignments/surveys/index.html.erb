@@ -1,10 +1,10 @@
-<main class="main-content">
+<main class="c-main">
     <div class="c-toolbar c-toolbar--spaced">
         <div class="c-toolbar__row">
             <% if current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
-                <%= link_to "← Back", admin_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+                <%= link_to "← Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
             <% else %>
-                <%= link_to "← Back", advisor_dashboard_path, class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+                <%= link_to "← Back", advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
             <% end %>
         </div>
     </div>
@@ -89,7 +89,7 @@
 
               <td class="px-4 py-3 text-sm">
                 <% if survey.is_active? %>
-                  <%= link_to "Assign to Students", assignments_survey_path(survey), class: tailwind_button_classes(:secondary), data: { turbo: false } %>
+                  <%= link_to "Assign to Students", assignments_survey_path(survey), class: button_classes(:secondary), data: { turbo: false } %>
                 <% else %>
                   <span class="text-xs text-slate-500">Archived</span>
                 <% end %>
