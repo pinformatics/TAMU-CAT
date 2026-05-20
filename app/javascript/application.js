@@ -610,6 +610,7 @@ function initComboboxes() {
 
     const setOpen = (open) => {
       menu.classList.toggle("hidden", !open)
+      menu.classList.toggle("u-hidden", !open)
       input.setAttribute("aria-expanded", open ? "true" : "false")
     }
 

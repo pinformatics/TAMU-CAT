@@ -112,6 +112,104 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.course_target_level
   end
 
+  test "faculty direct competency csv imports primary format and ignores hpmc columns" do
+    path = build_primary_direct_competency_csv(
+      rows: [
+        [ @student.user.name, @student.student_id, @student.uin, 5, 3, nil, 3, 4, 3, nil, 3, nil, 3, nil, 3, nil, 3 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 2 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_csv_file(path, "Outcomes-26_SPRING_PHPM_633_700__HEALTH_LAW__ETHICS.csv") ],
+        dry_run: true
+      ).call
+    end
+
+    evidences = batch.reload.grade_competency_evidences.order(:competency_title)
+
+    assert_equal "completed", batch.status
+    assert_equal [ "PHPM-633-700" ], evidences.map(&:course_code).uniq
+    assert_equal [ "Legal & Ethical Bases for Health Services and Health Systems", "Policy Analysis" ], evidences.map(&:competency_title)
+    assert_equal 5, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.mapped_level
+    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.course_target_level
+    assert_equal 4, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.mapped_level
+    assert_equal 0, evidences.count { |evidence| evidence.competency_title.include?("HPMC") }
+  end
+
+  test "direct competency csv flags invalid mastery values as typed review issues" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student ID",
+        "Student SIS ID",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis result",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis mastery points"
+      ],
+      rows: [
+        [ @student.user.name, @student.student_id, @student.uin, 4, "five" ],
+        [ @student.user.name, @student.student_id, @student.uin, 3, 3 ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_csv_file(path, "invalid_mastery.csv") ],
+      dry_run: true
+    ).call
+
+    file = batch.reload.grade_import_files.first
+    invalid_issue = file.parse_errors.find { |error| error["message"].include?("mastery points") }
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal 1, file.imported_rows
+    assert_equal 1, file.error_rows
+    assert_equal "invalid_value", invalid_issue["type"]
+    assert_equal "five", invalid_issue["value"]
+    assert batch.needs_admin_approval?
+  end
+
+  test "direct competency csv flags unknown competency columns as mapping issues" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student ID",
+        "Student SIS ID",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis result",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis mastery points",
+        "EMHA Competencies > Health Care Environment and Community > Polciy Analysis result",
+        "EMHA Competencies > Health Care Environment and Community > Polciy Analysis mastery points"
+      ],
+      rows: [
+        [ @student.user.name, @student.student_id, @student.uin, 4, 3, 5, 3 ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_csv_file(path, "unknown_competency.csv") ],
+      dry_run: true
+    ).call
+
+    file = batch.reload.grade_import_files.first
+    mapping_issue = file.parse_errors.find { |error| error["message"].include?("Unknown direct competency column") }
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal 1, file.imported_rows
+    assert_equal 1, file.error_rows
+    assert_equal "mapping", mapping_issue["type"]
+    assert_equal "Polciy Analysis", mapping_issue["value"]
+    assert_equal 1, file.parsed_content["direct_mapping_issue_count"]
+    assert batch.needs_admin_approval?
+  end
+
   test "direct competency rows without numeric identifiers are staged for name-based reconciliation" do
     path = build_direct_competency_workbook(
       sheet_name: "PHPM_790_001",
@@ -395,6 +493,73 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_includes file.parse_errors.first["message"], "result must be an integer between 1 and 5"
   end
 
+  test "replace existing files reprocesses corrected upload without duplicating evidence" do
+    original_path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student ID",
+        "Student SIS ID",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis result",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis mastery points",
+        "EMHA Competencies > Management Skills > Communication result",
+        "EMHA Competencies > Management Skills > Communication mastery points"
+      ],
+      rows: [
+        [ @student.user.name, @student.student_id, @student.uin, 4, 3, 9, 4 ]
+      ]
+    )
+    corrected_path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student ID",
+        "Student SIS ID",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis result",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis mastery points",
+        "EMHA Competencies > Management Skills > Communication result",
+        "EMHA Competencies > Management Skills > Communication mastery points"
+      ],
+      rows: [
+        [ @student.user.name, @student.student_id, @student.uin, 4, 3, 5, 4 ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_csv_file(original_path, "corrected_outcomes.csv") ],
+      dry_run: true
+    ).call
+
+    original_file = batch.reload.grade_import_files.first
+    original_evidence_id = batch.grade_competency_evidences.first.id
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal 1, original_file.imported_rows
+    assert_equal 1, original_file.error_rows
+    assert_equal 1, batch.grade_competency_evidences.count
+
+    assert_no_difference -> { GradeImportFile.count } do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_csv_file(corrected_path, "corrected_outcomes.csv") ],
+        dry_run: true,
+        replace_existing_files: true
+      ).call
+    end
+
+    file = batch.reload.grade_import_files.first
+
+    assert_equal "completed", batch.status
+    assert_equal 1, batch.grade_import_files.count
+    refute GradeImportFile.exists?(original_file.id)
+    refute GradeCompetencyEvidence.exists?(original_evidence_id)
+    assert_equal 2, batch.grade_competency_evidences.count
+    assert_equal 2, batch.grade_competency_ratings.count
+    assert_equal 0, file.error_rows
+    assert_equal 2, file.imported_rows
+  end
+
   private
 
   def create_batch
@@ -408,6 +573,28 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
       true,
       original_filename: filename
     )
+  end
+
+  def uploaded_csv_file(path, filename)
+    Rack::Test::UploadedFile.new(
+      path,
+      "text/csv",
+      true,
+      original_filename: filename
+    )
+  end
+
+  def build_direct_competency_csv(headers:, rows:)
+    file = Tempfile.new([ "direct_competency", ".csv" ])
+    path = file.path
+    file.close!
+    @temp_paths << path
+
+    CSV.open(path, "w", write_headers: true, headers: headers) do |csv|
+      rows.each { |row| csv << row }
+    end
+
+    path
   end
 
   def build_direct_competency_workbook(sheet_name:, rows:)
@@ -460,6 +647,31 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     end
     package.serialize(path)
     path
+  end
+
+  def build_primary_direct_competency_csv(rows:)
+    build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student ID",
+        "Student SIS ID",
+        "EMHA Competencies > Health Care Environment and Community > Legal and Ethical Bases for Health Services and Health Systems result",
+        "EMHA Competencies > Health Care Environment and Community > Legal and Ethical Bases for Health Services and Health Systems mastery points",
+        "EMHA Competencies > Health Care Environment and Community > Delivery, Organization, and Financing of Health Services and Health Systems result",
+        "EMHA Competencies > Health Care Environment and Community > Delivery, Organization, and Financing of Health Services and Health Systems mastery points",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis result",
+        "EMHA Competencies > Health Care Environment and Community > Policy Analysis mastery points",
+        "EMHA Competencies > Leadership skills > Ethics, Accountability, and Self-Assessment result",
+        "EMHA Competencies > Leadership skills > Ethics, Accountability, and Self-Assessment mastery points",
+        "EMHA Competencies > Leadership skills > Problem Solving, Decision Making, and Critical Thinking result",
+        "EMHA Competencies > Leadership skills > Problem Solving, Decision Making, and Critical Thinking mastery points",
+        "HPMC > HPMC 1 result",
+        "HPMC > HPMC 1 mastery points",
+        "HPMC > HPMC 5 result",
+        "HPMC > HPMC 5 mastery points"
+      ],
+      rows: rows
+    )
   end
 
   def build_canvas_workbook(grade_sheet_name:, course_code:, rows:)

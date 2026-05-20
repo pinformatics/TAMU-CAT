@@ -25,7 +25,7 @@ module GradeImports
           )
 
           if evidence.new_record?
-            evidence.assign_attributes(
+            attrs = {
               grade_import_file: pending_row.grade_import_file,
               student_id: student.student_id,
               competency_title: pending_row.competency_title,
@@ -45,7 +45,11 @@ module GradeImports
                 "pending_row_id" => pending_row.id,
                 "reconciled_at" => Time.current.iso8601
               )
-            )
+            }
+            attrs[:competency] = pending_row.competency if GradeCompetencyEvidence.column_names.include?("competency_id")
+            attrs[:course_offering] = pending_row.course_offering if GradeCompetencyEvidence.column_names.include?("course_offering_id")
+
+            evidence.assign_attributes(attrs)
             evidence.save!
           end
 

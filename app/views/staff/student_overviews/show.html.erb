@@ -1,0 +1,172 @@
+<% student_name = @student.user&.display_name || @student.full_name || @student.student_id %>
+
+<main class="c-main c-main--dashboard">
+  <div class="c-container c-container--wide">
+    <div class="c-page u-stack u-stack--lg">
+      <section class="c-card c-card--brand">
+        <header class="c-page-header">
+          <div>
+            <p class="c-eyebrow">Student overview</p>
+            <h1 class="c-page-title c-page-title--brand"><%= student_name %></h1>
+            <p class="c-page-subtitle">All-in-one view of profile data, survey history, competency evidence, and domain-level heatmap.</p>
+          </div>
+
+          <div class="u-actions">
+            <%= link_to "Detailed competencies", admin_competency_path(@student), class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "Back to overviews", student_overviews_path, class: button_classes(:secondary), data: { turbo: false } %>
+          </div>
+        </header>
+      </section>
+
+      <div class="c-student-overview-layout">
+        <aside class="c-student-overview-sidebar u-stack u-stack--md">
+          <section class="c-card c-card--compact u-stack u-stack--md">
+            <header class="c-panel-header">
+              <div>
+                <p class="c-eyebrow">Basic information</p>
+                <h2 class="c-section-title c-heading-inline">Student Record</h2>
+              </div>
+            </header>
+
+            <dl class="c-key-value-list">
+              <div>
+                <dt>Student</dt>
+                <dd><%= student_name %></dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd><%= @student.user&.email.presence || "No email" %></dd>
+              </div>
+              <div>
+                <dt>UIN</dt>
+                <dd><%= @student.uin.presence || "Missing" %></dd>
+              </div>
+              <div>
+                <dt>Track</dt>
+                <dd><%= @student.track.presence || "Unknown" %></dd>
+              </div>
+              <div>
+                <dt>Class year</dt>
+                <dd><%= @student.program_year.presence || "Missing" %></dd>
+              </div>
+              <div>
+                <dt>Advisor</dt>
+                <dd><%= @student.advisor&.display_name || "Unassigned" %></dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="c-card c-card--compact u-stack u-stack--md">
+            <header class="c-panel-header">
+              <div>
+                <p class="c-eyebrow">Advisor assignment</p>
+                <h2 class="c-section-title c-heading-inline">Advisor History</h2>
+              </div>
+            </header>
+
+            <% if @advisor_assignment_rows.present? %>
+              <div class="c-record-list">
+                <% @advisor_assignment_rows.each do |row| %>
+                  <article class="c-record-list__item">
+                    <div>
+                      <h3><%= row[:advisor_name] %></h3>
+                      <p>
+                        <%= row[:starts_on].present? ? l(row[:starts_on], format: :long) : "Unknown start" %>
+                        -
+                        <%= row[:current] ? "Current" : (row[:ends_on].present? ? l(row[:ends_on], format: :long) : "Ended") %>
+                      </p>
+                      <% if row[:assigned_by_name].present? %>
+                        <p>Updated by <%= row[:assigned_by_name] %></p>
+                      <% end %>
+                    </div>
+                  </article>
+                <% end %>
+              </div>
+            <% else %>
+              <div class="c-empty-state c-empty-state--compact">
+                <p class="c-empty-state__body">No advisor assignment history recorded yet.</p>
+              </div>
+            <% end %>
+          </section>
+
+          <section class="c-card c-card--compact u-stack u-stack--md">
+            <header class="c-panel-header">
+              <div>
+                <p class="c-eyebrow">Competency heatmap</p>
+                <h2 class="c-section-title c-heading-inline">Domain Snapshot</h2>
+              </div>
+            </header>
+
+            <% if @domain_heatmap.present? %>
+              <div class="c-domain-snapshot-list">
+                <% @domain_heatmap.each do |domain| %>
+                  <div class="c-domain-snapshot-list__item">
+                    <span><%= domain[:name] %></span>
+                    <strong class="c-heatmap-cell c-heatmap-cell--<%= domain[:status] %>"><%= domain[:average].presence || "-" %></strong>
+                    <small><%= domain[:average].present? ? domain[:source] : "No data" %></small>
+                  </div>
+                <% end %>
+              </div>
+            <% else %>
+              <div class="c-empty-state c-empty-state--compact">
+                <p class="c-empty-state__body">No heatmap data yet.</p>
+              </div>
+            <% end %>
+
+            <% if @below_target_competencies.present? %>
+              <div class="c-callout c-callout--warning c-callout--compact">
+                <p class="c-callout__title">Below target</p>
+                <p><%= @below_target_competencies.first(4).map { |item| item[:title] }.join(", ") %></p>
+              </div>
+            <% end %>
+          </section>
+        </aside>
+
+        <div class="c-student-overview-main u-stack u-stack--md">
+          <section class="c-card c-card--compact u-stack u-stack--md">
+            <header class="c-panel-header">
+              <div>
+                <p class="c-eyebrow">Completed surveys</p>
+                <h2 class="c-section-title c-heading-inline">Survey Responses</h2>
+              </div>
+            </header>
+
+            <% if @survey_rows.present? %>
+              <div class="c-record-list c-record-list--grid">
+                <% @survey_rows.each do |row| %>
+                  <article class="c-record-list__item">
+                    <div>
+                      <h3><%= row[:survey].title %></h3>
+                      <p><%= row[:semester] %></p>
+                      <p>
+                        Completed <%= row[:completed_at].present? ? l(row[:completed_at], format: :short) : "-" %>
+                        <span><%= pluralize(row[:feedback_count], "feedback entry") %></span>
+                      </p>
+                    </div>
+                    <div class="u-actions u-actions--start">
+                      <%= link_to "View response",
+                            survey_response_path(row[:survey_response], return_to: request.fullpath),
+                            class: button_classes(:primary),
+                            data: { turbo: false } %>
+                      <%= link_to "PDF",
+                            download_survey_response_path(row[:survey_response], token: row[:download_token]),
+                            class: button_classes(:secondary),
+                            target: "_blank",
+                            rel: "noopener noreferrer" %>
+                    </div>
+                  </article>
+                <% end %>
+              </div>
+            <% else %>
+              <div class="c-empty-state c-empty-state--compact">
+                <p class="c-empty-state__body">No completed surveys recorded.</p>
+              </div>
+            <% end %>
+          </section>
+
+          <%= render "staff/competencies/comparison", domains: @competency_payload[:domains] %>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

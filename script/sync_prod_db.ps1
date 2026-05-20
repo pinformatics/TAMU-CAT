@@ -1,13 +1,15 @@
 param(
   [string]$App = "mha501",
   [string]$HerokuDatabase = "DATABASE_URL",
-  [string]$LocalDatabase = "health_development",
+  [string]$LocalDatabase = "tamu_cat_development",
   [string]$DbService = "db",
   [string]$DbUser = "dev_user",
   [string]$DbPassword = "dev_pass",
+  [string]$AppService = "web",
   [string]$RestoreClientImage = "postgres:17",
   [string]$BackupFile = (Join-Path $env:TEMP "mha501-prod-latest.dump"),
   [switch]$SkipConfirm,
+  [switch]$SkipMigrate,
   [switch]$PersistApiKey,
   [switch]$UseLatestBackup
 )
@@ -87,6 +89,17 @@ function Wait-ForPostgres {
   throw "Local Postgres did not become ready."
 }
 
+function Get-ComposeContainerId {
+  param([string]$Service)
+
+  $containerId = (& docker compose ps -q $Service 2>$null | Select-Object -First 1)
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerId)) {
+    throw "Could not resolve a running Docker Compose container for service '$Service'."
+  }
+
+  return $containerId.ToString().Trim()
+}
+
 Require-Command "docker"
 Require-Command "heroku"
 
@@ -141,9 +154,10 @@ Write-Host "Restoring production backup into local database '$LocalDatabase'..."
 & docker compose exec -T $DbService pg_restore -U $DbUser -d $LocalDatabase --no-owner --no-acl --clean --if-exists /tmp/prod.dump
 if ($LASTEXITCODE -ne 0) {
   Write-Host "Container pg_restore could not read the backup. Retrying with $RestoreClientImage pg_restore..." -ForegroundColor Yellow
+  $DbContainerId = Get-ComposeContainerId -Service $DbService
   $restoreArgs = @(
     "run", "--rm",
-    "--network", "container:$DbService",
+    "--network", "container:$DbContainerId",
     "-e", "PGPASSWORD=$DbPassword",
     "-v", "${BackupFile}:/tmp/prod.dump:ro",
     $RestoreClientImage,
@@ -175,6 +189,11 @@ if ($LASTEXITCODE -ne 0) {
   }
 }
 Invoke-Checked docker @("compose", "exec", "-T", $DbService, "rm", "-f", "/tmp/prod.dump")
+
+if (-not $SkipMigrate) {
+  Write-Host "Running local Rails migrations on '$LocalDatabase'..."
+  Invoke-Checked docker @("compose", "run", "--rm", "-e", "DATABASE=$LocalDatabase", $AppService, "bin/rails", "db:migrate")
+}
 
 Write-Host ""
 Write-Host "Local database '$LocalDatabase' now contains a copy of Heroku app '$App'." -ForegroundColor Green

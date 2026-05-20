@@ -86,7 +86,7 @@ module CompetencyTargetLevelsHelper
     end
 
     chips = []
-    chips << content_tag(:span, "Course level #{format_competency_context_value(context[:course_rating])}", class: "c-context-panel__chip") if context[:course_rating].present?
+    chips << content_tag(:span, "Course result #{format_competency_context_value(context[:course_rating])}", class: "c-context-panel__chip") if context[:course_rating].present?
     if context[:course_target_levels].present?
       target_label = context[:course_target_levels].join(", ")
       chips << content_tag(:span, "Course target #{target_label}", class: "c-context-panel__chip")

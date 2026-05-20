@@ -1,0 +1,223 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-container c-container--wide">
+    <div class="c-page u-stack u-stack--xl">
+      <section class="c-card c-card--brand">
+        <header class="c-page-header">
+          <div>
+            <p class="c-eyebrow">Student overview</p>
+            <h1 class="c-page-title c-page-title--brand">Student Overview</h1>
+            <p class="c-page-subtitle">
+              <%= current_user&.role_admin? ? "Browse all students with survey, competency, and record context." : "Browse your advisees with survey, competency, and record context." %>
+            </p>
+          </div>
+
+          <div class="u-actions">
+            <%= link_to "Survey Records", student_records_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "Back", current_user&.role_admin? ? admin_dashboard_path : advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+          </div>
+        </header>
+      </section>
+
+      <section class="c-card c-card--spacious">
+        <%= form_with url: student_overviews_path, method: :get, local: true, class: "u-stack u-stack--md" do %>
+          <div class="c-filter-bar">
+            <div class="c-filter-bar__field c-filter-bar__field--wide">
+              <%= label_tag :q, "Search students", class: "c-label c-label--eyebrow" %>
+              <%= text_field_tag :q, @filters[:q], placeholder: "Name, email, UIN, or student ID", class: "c-input c-search-input u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :track, "Track", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :track,
+                    options_for_select([["All tracks", ""]] + @track_options.map { |track| [track, track] }, @filters[:track]),
+                    class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :program_year, "Program year", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :program_year,
+                    options_for_select([["All years", ""]] + @program_year_options.map { |year| [year, year] }, @filters[:program_year]),
+                    class: "c-select u-w-full" %>
+            </div>
+
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :student_status, "Student status", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :student_status,
+                    options_for_select(@student_lifecycle_filter_options, @filters[:student_status]),
+                    class: "c-select u-w-full" %>
+            </div>
+
+            <div class="u-actions u-actions--start">
+              <%= button_tag "Apply", type: :submit, class: button_classes(:primary) %>
+              <%= link_to "Clear", student_overviews_path, class: button_classes(:ghost), data: { turbo: false } %>
+            </div>
+          </div>
+        <% end %>
+      </section>
+
+      <section class="c-card c-card--spacious u-stack u-stack--lg" data-controller="tabs" data-tabs-default-id-value="student-overview-students">
+        <header class="c-panel-header">
+          <div>
+            <p class="c-eyebrow">Overview workspace</p>
+            <h2 class="c-section-title c-heading-inline">Student Records and Stats</h2>
+          </div>
+          <div class="c-tabs" role="tablist" aria-label="Student overview sections">
+            <button type="button"
+                    id="student-overview-students-tab"
+                    class="c-tab is-active"
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="student-overview-students-panel"
+                    data-tabs-target="button"
+                    data-tab-id="student-overview-students"
+                    data-action="tabs#activate">
+              Students
+            </button>
+            <button type="button"
+                    id="student-overview-stats-tab"
+                    class="c-tab"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="student-overview-stats-panel"
+                    data-tabs-target="button"
+                    data-tab-id="student-overview-stats"
+                    data-action="tabs#activate">
+              Stats
+            </button>
+          </div>
+        </header>
+
+        <div id="student-overview-students-panel"
+             class="c-tab-panel u-stack u-stack--lg"
+             role="tabpanel"
+             aria-labelledby="student-overview-students-tab"
+             data-tabs-target="panel"
+             data-tab-id="student-overview-students">
+          <header class="c-panel-header">
+            <div>
+              <p class="c-eyebrow">Student list</p>
+              <h3 class="c-section-title c-heading-inline"><%= pluralize(@student_rows.size, "student") %></h3>
+            </div>
+          </header>
+
+          <% if @student_rows.present? %>
+            <div class="c-table-wrapper">
+              <table class="c-table">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Track</th>
+                    <th>Advisor</th>
+                    <th>Surveys</th>
+                    <th>Competencies</th>
+                    <th>Log on</th>
+                    <th class="u-text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @student_rows.each do |row| %>
+                    <% student = row[:student] %>
+                    <tr>
+                      <td>
+                        <span class="c-table__title"><%= student.user&.display_name || student.student_id %></span>
+                        <span class="c-table__meta"><%= [student.user&.email, student.uin.presence].compact.join(" / ") %></span>
+                        <% unless student.current_record? %>
+                          <span class="c-pill c-pill--muted"><%= student.lifecycle_label %></span>
+                        <% end %>
+                      </td>
+                      <td>
+                        <span><%= student.track.presence || "Unknown" %></span>
+                        <span class="c-table__meta"><%= student.program_year.present? ? "Class of #{student.program_year}" : "No class year" %></span>
+                      </td>
+                      <td><%= student.advisor&.display_name || "Unassigned" %></td>
+                      <td>
+                        <span class="c-table__title"><%= row[:completed_count] %> / <%= row[:assigned_count] %></span>
+                        <span class="c-table__meta"><%= row[:completion_rate].present? ? "#{row[:completion_rate]}% complete" : "No assigned surveys" %></span>
+                      </td>
+                      <td>
+                        <% attainment = row[:competency_attainment] %>
+                        <span class="c-table__title"><%= attainment[:met_count] %> / <%= attainment[:total_count] %></span>
+                        <span class="c-table__meta">meeting target</span>
+                      </td>
+                      <td>
+                        <% if current_user&.role_admin? %>
+                          <%= button_to "Log on",
+                                impersonation_path,
+                                method: :post,
+                                params: { impersonation: { user_id: student.student_id } },
+                                class: button_classes(:secondary),
+                                form: { data: { turbo: false } } %>
+                        <% else %>
+                          <span class="c-muted">Admin only</span>
+                        <% end %>
+                      </td>
+                      <td class="u-text-right">
+                        <%= link_to "Open overview", student_overview_path(student), class: button_classes(:primary), data: { turbo: false } %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <div class="c-empty-state">
+              <p class="c-empty-state__body">No students match the current filters.</p>
+            </div>
+          <% end %>
+        </div>
+
+        <div id="student-overview-stats-panel"
+             class="c-tab-panel u-stack u-stack--lg hidden"
+             role="tabpanel"
+             aria-labelledby="student-overview-stats-tab"
+             data-tabs-target="panel"
+             data-tab-id="student-overview-stats"
+             hidden>
+          <header class="c-panel-header">
+            <div>
+              <p class="c-eyebrow">Competency heatmap</p>
+              <h3 class="c-section-title c-heading-inline">Students by Domain</h3>
+              <p class="c-help">Each cell uses the best available domain average, preferring course-derived scores and falling back to self-assessment.</p>
+            </div>
+          </header>
+
+          <% if @heatmap_rows.present? %>
+            <div class="c-table-wrapper">
+              <table class="c-table c-table--sm">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <% @heatmap_rows.first[:domains].each do |domain| %>
+                      <th><%= domain[:name] %></th>
+                    <% end %>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @heatmap_rows.each do |row| %>
+                    <tr>
+                      <td>
+                        <%= link_to row[:student_name], student_overview_path(row[:student_id]), class: "c-table__title" %>
+                        <span class="c-table__meta"><%= [row[:track], row[:program_year].present? ? "Class of #{row[:program_year]}" : nil].compact.join(" / ") %></span>
+                      </td>
+                      <% row[:domains].each do |domain| %>
+                        <td>
+                          <span class="c-heatmap-cell c-heatmap-cell--<%= domain[:status] %>">
+                            <%= domain[:average].presence || "-" %>
+                          </span>
+                        </td>
+                      <% end %>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <div class="c-empty-state">
+              <p class="c-empty-state__body">No heatmap data is available for these students yet.</p>
+            </div>
+          <% end %>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>

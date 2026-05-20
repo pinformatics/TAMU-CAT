@@ -43,9 +43,26 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Competencies"
     assert_includes response.body, "Course competency rule"
     assert_includes response.body, "Global setting applied to course-derived competency values for all users."
-    assert_includes response.body, "Detailed competencies"
+    assert_includes response.body, "c-disclosure-summary--compact"
+    assert_includes response.body, "Details"
     assert_includes response.body, admin_competency_path(students(:student))
     assert_includes response.body, "Health Care Environment and Community"
+  end
+
+  test "competencies matrix defaults to current students and can include archived students" do
+    students(:other_student).archive!(archived_by: @admin, reason: "Historical competency review")
+    sign_in @admin
+
+    get admin_competencies_path
+
+    assert_response :success
+    refute_includes response.body, @other_student.email
+
+    get admin_competencies_path(student_status: "all")
+
+    assert_response :success
+    assert_includes response.body, @other_student.email
+    assert_includes response.body, "Archived"
   end
 
   test "competency overview compares ratings against program targets" do
@@ -70,13 +87,14 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
     get admin_competencies_path
 
     assert_response :success
-    assert_includes response.body, "Detailed competencies"
+    assert_includes response.body, "Details"
     assert_includes response.body, "c-score-pill--met"
     assert_includes response.body, "c-score-pill--below"
     assert_includes response.body, "c-table--sm"
     assert_includes response.body, "c-score-pill--self"
     assert_includes response.body, "c-score-pill--advisor"
-    assert_includes response.body, "Course score from imported course competency data. Program target for #{met_title}: 3"
+    assert_includes response.body, "Course 4 vs target 3: meets target"
+    refute_includes response.body, "Course score from imported course competency data"
   end
 
   test "competency overview uses submitted survey response versions when student question rows are absent" do
@@ -205,8 +223,17 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "#{@student.display_name} Competencies"
+    assert_includes response.body, "Student-facing competency modules"
+    assert_includes response.body, "c-competency-guide-tips"
+    assert_includes response.body, "The student's survey rating"
+    assert_includes response.body, "Advisor legacy rating"
     assert_includes response.body, "Competency Snapshot"
     assert_includes response.body, "Semester Trend"
+    assert_includes response.body, "c-staff-competency-workspace"
+    assert_includes response.body, "Competency Comparison"
+    assert_includes response.body, "<th>Goal</th>"
+    refute_includes response.body, "c-interpretation-guide"
+    refute_includes response.body, "c-section-group"
     assert_includes response.body, "Export CSV"
     assert_includes response.body, admin_competencies_path
   end

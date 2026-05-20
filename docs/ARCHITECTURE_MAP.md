@@ -107,6 +107,26 @@ Purpose:
 - manage tracks, majors, cohorts, semesters
 - manage competency target levels
 
+### Course catalog foundations
+
+Important models:
+
+- `Department`
+- `Course`
+- `CourseOffering`
+
+Purpose:
+
+- normalize imported course codes such as `PHPM-633-700`
+- separate department/course identity from semester section offerings
+- provide future attachment points for faculty, Canvas identifiers, release rules, reports, and archive behavior
+
+Current note:
+
+- existing import/reporting code still keeps `course_code` for compatibility
+- Phase 2 adds nullable `course_offering_id` references and backfills parseable imports
+- Phase 3 course competency reads prefer `competency_id` where available and fall back to source titles
+
 ### People management
 
 Important code:
@@ -115,11 +135,32 @@ Important code:
 - `app/views/dashboards/people_management.html.erb`
 - `app/views/dashboards/_people_members_tab.html.erb`
 - `app/views/dashboards/_people_students_tab.html.erb`
+- `app/models/student_advisor_assignment.rb`
 
 Purpose:
 
 - manage role assignments
 - manage student track / group / advisor assignments
+- manage student lifecycle status for graduation, archive, inactive, and withdrawal workflows
+- bulk-update lifecycle status for selected students
+- current operational views default to active/current students
+- explicit status filters can include graduated, archived, inactive, withdrawn, or all students where historical review is needed
+- advisor assignment changes are stored in `student_advisor_assignments` while `students.advisor_id` remains the current pointer
+
+### Data model health checks
+
+Important code:
+
+- `app/services/data_model_health_check.rb`
+- `lib/tasks/data_model_health.rake`
+- admin dashboard Data Model Health panel
+
+Purpose:
+
+- surface missing student profile basics
+- catch advisor assignment history drift
+- validate canonical competency references after imports/backfills
+- flag parseable course codes that did not attach to course offerings
 
 ## Data flow for competency ratings
 

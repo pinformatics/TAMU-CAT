@@ -40,6 +40,7 @@ class StudentRecordsController < ApplicationController
     @semester_filter = params[:semester].to_s.strip.presence
     @track_filter = normalize_track_filter(params[:track])
     @program_year_filter = normalize_program_year_filter(params[:program_year])
+    @student_lifecycle_filter = Student.normalize_lifecycle_filter(params[:student_status])
     @status_filter = normalize_status_filter(params[:status])
     @sort_key = normalize_sort_key(params[:sort])
 
@@ -51,6 +52,7 @@ class StudentRecordsController < ApplicationController
 
     @semester_filter_options = ProgramSemester.ordered.pluck(:name).compact
     @track_filter_options = ProgramTrack.names
+    @student_lifecycle_filter_options = Student.lifecycle_filter_options
     @program_year_options = available_program_years
 
     @students = load_students
@@ -70,7 +72,7 @@ class StudentRecordsController < ApplicationController
   #
   # @return [ActiveRecord::Relation<Student>]
   def load_students
-    scope = base_student_scope
+    scope = base_student_scope.with_lifecycle_filter(@student_lifecycle_filter)
 
     scope = scope
             .left_joins(:user)
@@ -392,6 +394,7 @@ class StudentRecordsController < ApplicationController
 
   def available_program_years
     base_student_scope
+      .with_lifecycle_filter(@student_lifecycle_filter)
       .where.not(program_year: nil)
       .distinct
       .order(program_year: :desc)

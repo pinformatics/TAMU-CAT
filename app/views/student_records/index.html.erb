@@ -96,6 +96,13 @@
                              class: "c-select u-w-full" %>
             </div>
 
+            <div class="c-filter-bar__field c-filter-bar__field--sm">
+              <%= label_tag :student_status, "Student status", class: "c-label c-label--eyebrow" %>
+              <%= select_tag :student_status,
+                             options_for_select(Array(@student_lifecycle_filter_options), @student_lifecycle_filter),
+                             class: "c-select u-w-full" %>
+            </div>
+
             <div class="c-filter-bar__field">
               <%= label_tag :sort, "Sort", class: "c-label c-label--eyebrow" %>
               <%= select_tag :sort,

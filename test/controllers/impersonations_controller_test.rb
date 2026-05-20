@@ -15,6 +15,18 @@ class ImpersonationsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/admin privileges/i, flash[:alert].to_s)
   end
 
+  test "admin can open impersonation page with searchable selects" do
+    sign_in @admin
+
+    get new_impersonation_path
+
+    assert_response :success
+    assert_select "[data-combobox='true']", count: 2
+    assert_select "[data-combobox-menu='true'].hidden", count: 2
+    assert_select "[data-combobox-menu='true'].u-hidden", count: 0
+    assert_select "[data-combobox-option-value='#{@student.id}']"
+  end
+
   test "admin can impersonate a student by numeric id" do
     sign_in @admin
 

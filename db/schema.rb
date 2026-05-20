@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
+ActiveRecord::Schema[8.0].define(version: 2026_05_20_160000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -81,6 +81,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.integer "target_level", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "competency_id"
+    t.index ["competency_id"], name: "index_competency_target_levels_on_competency_id"
     t.index ["program_semester_id", "track", "program_year", "class_of", "competency_title"], name: "index_competency_targets_unique", unique: true
     t.index ["program_semester_id"], name: "index_competency_target_levels_on_program_semester_id"
   end
@@ -107,6 +109,46 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.index ["program_semester_id"], name: "index_course_grade_release_dates_on_program_semester_id"
     t.index ["program_semester_id"], name: "index_course_release_dates_on_program_semester_unique", unique: true
     t.index ["release_date"], name: "index_course_grade_release_dates_on_release_date"
+  end
+
+  create_table "course_offerings", force: :cascade do |t|
+    t.bigint "course_id", null: false
+    t.bigint "program_semester_id"
+    t.string "section_number"
+    t.string "source_code"
+    t.boolean "active", default: true, null: false
+    t.datetime "archived_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active"], name: "index_course_offerings_on_active"
+    t.index ["archived_at"], name: "index_course_offerings_on_archived_at"
+    t.index ["course_id", "program_semester_id", "section_number"], name: "index_course_offerings_unique_by_semester", unique: true, where: "(program_semester_id IS NOT NULL)"
+    t.index ["course_id", "section_number"], name: "index_course_offerings_on_course_and_section"
+    t.index ["course_id"], name: "index_course_offerings_on_course_id"
+    t.index ["program_semester_id"], name: "index_course_offerings_on_program_semester_id"
+    t.index ["source_code"], name: "index_course_offerings_on_source_code"
+  end
+
+  create_table "courses", force: :cascade do |t|
+    t.bigint "department_id", null: false
+    t.string "number", null: false
+    t.string "title"
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active"], name: "index_courses_on_active"
+    t.index ["department_id", "number"], name: "index_courses_on_department_id_and_number", unique: true
+    t.index ["department_id"], name: "index_courses_on_department_id"
+  end
+
+  create_table "departments", force: :cascade do |t|
+    t.string "code", null: false
+    t.string "name", null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active"], name: "index_departments_on_active"
+    t.index ["code"], name: "index_departments_on_code", unique: true
   end
 
   create_table "domains", force: :cascade do |t|
@@ -152,6 +194,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "course_target_level"
+    t.bigint "competency_id"
+    t.bigint "course_offering_id"
+    t.index ["competency_id"], name: "index_grade_competency_evidences_on_competency_id"
+    t.index ["course_offering_id"], name: "index_grade_competency_evidences_on_course_offering_id"
     t.index ["grade_import_batch_id", "competency_title"], name: "index_grade_evidence_on_batch_competency"
     t.index ["grade_import_batch_id", "source_key"], name: "index_grade_evidence_on_batch_source_key", unique: true
     t.index ["grade_import_batch_id", "student_id"], name: "index_grade_evidence_on_batch_student"
@@ -169,6 +215,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.integer "evidence_count", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "competency_id"
+    t.index ["competency_id"], name: "index_grade_competency_ratings_on_competency_id"
     t.index ["grade_import_batch_id", "student_id", "competency_title"], name: "index_grade_ratings_on_batch_student_competency", unique: true
     t.index ["grade_import_batch_id"], name: "index_grade_competency_ratings_on_grade_import_batch_id"
   end
@@ -207,6 +255,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.jsonb "parsed_content", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "course_offering_id"
+    t.index ["course_offering_id"], name: "index_grade_import_files_on_course_offering_id"
     t.index ["file_checksum"], name: "index_grade_import_files_on_file_checksum"
     t.index ["grade_import_batch_id"], name: "index_grade_import_files_on_grade_import_batch_id"
     t.index ["status"], name: "index_grade_import_files_on_status"
@@ -235,6 +285,10 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "course_target_level"
+    t.bigint "competency_id"
+    t.bigint "course_offering_id"
+    t.index ["competency_id"], name: "index_grade_import_pending_rows_on_competency_id"
+    t.index ["course_offering_id"], name: "index_grade_import_pending_rows_on_course_offering_id"
     t.index ["grade_import_batch_id", "source_key"], name: "index_grade_pending_rows_on_batch_source_key", unique: true
     t.index ["grade_import_batch_id", "status"], name: "index_grade_pending_rows_on_batch_status"
     t.index ["grade_import_batch_id", "student_email"], name: "index_grade_pending_rows_on_batch_email"
@@ -272,8 +326,15 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.boolean "current", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "status", default: "planned", null: false
+    t.date "starts_on"
+    t.date "ends_on"
+    t.datetime "closed_at"
+    t.datetime "archived_at"
+    t.index ["archived_at"], name: "index_program_semesters_on_archived_at"
     t.index ["current"], name: "index_program_semesters_on_current", where: "(current = true)"
     t.index ["name"], name: "index_program_semesters_on_name", unique: true
+    t.index ["status"], name: "index_program_semesters_on_status"
   end
 
   create_table "program_tracks", force: :cascade do |t|
@@ -329,6 +390,22 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.index ["key"], name: "index_site_settings_on_key", unique: true
   end
 
+  create_table "student_advisor_assignments", force: :cascade do |t|
+    t.bigint "student_id", null: false
+    t.bigint "advisor_id"
+    t.date "starts_on", null: false
+    t.date "ends_on"
+    t.boolean "primary_assignment", default: true, null: false
+    t.bigint "assigned_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["advisor_id"], name: "index_student_advisor_assignments_on_advisor_id"
+    t.index ["assigned_by_id"], name: "index_student_advisor_assignments_on_assigned_by_id"
+    t.index ["student_id", "starts_on"], name: "index_student_advisor_assignments_on_student_id_and_starts_on"
+    t.index ["student_id"], name: "idx_student_advisor_assignments_current_primary", unique: true, where: "((primary_assignment = true) AND (ends_on IS NULL))"
+    t.index ["student_id"], name: "index_student_advisor_assignments_on_student_id"
+  end
+
   create_table "student_questions", force: :cascade do |t|
     t.bigint "student_id", null: false
     t.bigint "advisor_id"
@@ -351,9 +428,18 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
     t.string "major"
     t.integer "program_year"
     t.string "assignment_group"
+    t.string "status", default: "active", null: false
+    t.datetime "graduated_at"
+    t.datetime "archived_at"
+    t.text "archive_reason"
+    t.bigint "archived_by_id"
     t.index ["advisor_id"], name: "index_students_on_advisor_id"
+    t.index ["archived_at"], name: "index_students_on_archived_at"
+    t.index ["archived_by_id"], name: "index_students_on_archived_by_id"
     t.index ["assignment_group"], name: "index_students_on_assignment_group"
+    t.index ["graduated_at"], name: "index_students_on_graduated_at"
     t.index ["program_year"], name: "index_students_on_program_year"
+    t.index ["status"], name: "index_students_on_status"
     t.index ["uin"], name: "index_students_on_uin", unique: true, where: "(uin IS NOT NULL)"
   end
 
@@ -498,34 +584,48 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_19_194500) do
   add_foreign_key "categories", "survey_sections", on_delete: :nullify
   add_foreign_key "categories", "surveys"
   add_foreign_key "competencies", "domains"
+  add_foreign_key "competency_target_levels", "competencies"
   add_foreign_key "competency_target_levels", "program_semesters"
   add_foreign_key "confidential_advisor_notes", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "confidential_advisor_notes", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "confidential_advisor_notes", "surveys", on_delete: :cascade
   add_foreign_key "course_grade_release_dates", "program_semesters"
+  add_foreign_key "course_offerings", "courses", on_delete: :cascade
+  add_foreign_key "course_offerings", "program_semesters"
+  add_foreign_key "courses", "departments"
   add_foreign_key "feedback", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "feedback", "categories", on_delete: :cascade
   add_foreign_key "feedback", "questions"
   add_foreign_key "feedback", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "feedback", "surveys", on_delete: :cascade
+  add_foreign_key "grade_competency_evidences", "competencies"
+  add_foreign_key "grade_competency_evidences", "course_offerings"
   add_foreign_key "grade_competency_evidences", "grade_import_batches", on_delete: :cascade
   add_foreign_key "grade_competency_evidences", "grade_import_files", on_delete: :cascade
   add_foreign_key "grade_competency_evidences", "students", primary_key: "student_id", on_delete: :cascade
+  add_foreign_key "grade_competency_ratings", "competencies"
   add_foreign_key "grade_competency_ratings", "grade_import_batches", on_delete: :cascade
   add_foreign_key "grade_competency_ratings", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "grade_import_batches", "program_semesters"
   add_foreign_key "grade_import_batches", "users", column: "uploaded_by_id", on_delete: :cascade
+  add_foreign_key "grade_import_files", "course_offerings"
   add_foreign_key "grade_import_files", "grade_import_batches", on_delete: :cascade
+  add_foreign_key "grade_import_pending_rows", "competencies"
+  add_foreign_key "grade_import_pending_rows", "course_offerings"
   add_foreign_key "grade_import_pending_rows", "grade_import_batches", on_delete: :cascade
   add_foreign_key "grade_import_pending_rows", "grade_import_files", on_delete: :cascade
   add_foreign_key "grade_import_pending_rows", "students", column: "matched_student_id", primary_key: "student_id", on_delete: :nullify
   add_foreign_key "notifications", "users", on_delete: :cascade
   add_foreign_key "questions", "categories"
   add_foreign_key "questions", "questions", column: "parent_question_id"
+  add_foreign_key "student_advisor_assignments", "advisors", primary_key: "advisor_id", on_delete: :nullify
+  add_foreign_key "student_advisor_assignments", "students", primary_key: "student_id", on_delete: :cascade
+  add_foreign_key "student_advisor_assignments", "users", column: "assigned_by_id", on_delete: :nullify
   add_foreign_key "student_questions", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "student_questions", "questions", on_delete: :cascade
   add_foreign_key "student_questions", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "students", "advisors", primary_key: "advisor_id", on_delete: :cascade
+  add_foreign_key "students", "users", column: "archived_by_id", on_delete: :nullify
   add_foreign_key "students", "users", column: "student_id", on_delete: :cascade
   add_foreign_key "survey_assignments", "advisors", primary_key: "advisor_id", on_delete: :nullify
   add_foreign_key "survey_assignments", "students", primary_key: "student_id", on_delete: :cascade

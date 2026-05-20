@@ -14,19 +14,23 @@ module Admin::CompetenciesHelper
     value.to_f >= target.to_f ? "c-score-pill--met" : "c-score-pill--below"
   end
 
-  def competency_rating_target_title(competency_title, target, source: nil)
-    target_text = target.present? ? competency_matrix_rating(target) : "not configured"
+  def competency_rating_target_title(value, target, source: nil)
     source_text = case source&.to_sym
     when :self
-      "Self score from student survey responses"
+      "Self"
     when :advisor
-      "Advisor score from advisor feedback on surveys"
+      "Advisor"
     when :course
-      "Course score from imported course competency data"
+      "Course"
     else
       "Score"
     end
 
-    "#{source_text}. Program target for #{competency_title}: #{target_text}"
+    return "#{source_text}: no score; target #{competency_matrix_rating(target)}" if value.nil? && target.present?
+    return "#{source_text}: no score; target not set" if value.nil?
+    return "#{source_text} #{competency_matrix_rating(value)}; target not set" if target.blank?
+
+    status = value.to_f >= target.to_f ? "meets target" : "below target"
+    "#{source_text} #{competency_matrix_rating(value)} vs target #{competency_matrix_rating(target)}: #{status}"
   end
 end

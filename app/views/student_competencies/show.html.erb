@@ -13,13 +13,44 @@
 <% export_path = @competency_export_path.presence || student_competencies_path(filter_params.merge(format: :csv)) %>
 <% pdf_path = @competency_pdf_path.presence || student_competencies_path(filter_params.merge(format: :pdf)) %>
 <% staff_export_confirm = (current_user&.role_admin? || current_user&.role_advisor?) ? "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." : nil %>
+<% staff_competency_view = current_user&.role_admin? || current_user&.role_advisor? %>
 <% semester_options = [["All semesters", @payload[:all_semesters_value]]] + @payload[:semesters].map { |semester| [semester, semester] } %>
+<% change_summary = @payload[:change_summary] || {} %>
 <% status_labels = {
   "present" => "Updated",
   "missing" => "Missing data",
   "embargoed" => "Not yet released",
   "no_evidence" => "No course evidence"
 } %>
+<% guide_items = [
+  {
+    title: "Self-assessment",
+    short_title: "Self",
+    body: staff_competency_view ? "The student's survey rating for how confident they feel in a competency." : "Your own survey rating for how confident you feel in a competency."
+  },
+  {
+    title: "Course result",
+    short_title: "Course",
+    body: "A course-derived rating from released course evidence. It may be missing when no course has contributed evidence yet, or hidden until the release date."
+  },
+  {
+    title: "Course target",
+    short_title: "Course target",
+    body: "The expected level for a specific course evidence item. It appears inside course source details and answers, \"What was this course aiming for?\""
+  },
+  {
+    title: "End-of-program target",
+    short_title: "Program target",
+    body: staff_competency_view ? "The program benchmark for the student's track and cohort. Below-target highlighting compares self and course scores against this program-level expectation." : "The program benchmark for your track and cohort. Below-target highlighting compares self and course scores against this program-level expectation."
+  }
+] %>
+<% if staff_competency_view || show_advisor %>
+  <% guide_items << {
+    title: "Advisor legacy rating",
+    short_title: "Advisor",
+    body: "Historical advisor-entered competency evidence. Keep it visible for context, but use course-derived evidence as the primary input going forward."
+  } %>
+<% end %>
 
 <main class="c-main c-page c-competency-page">
   <header class="c-card c-page-header">
@@ -73,6 +104,95 @@
         Course results: <%= @payload[:release_label] %>
       </span>
     <% end %>
+
+    <% if staff_competency_view %>
+      <div class="c-competency-guide-tips" aria-label="Competency source guide">
+        <span class="c-competency-guide-tips__label">Guide</span>
+        <% guide_items.each do |guide| %>
+          <span class="c-guide-tip">
+            <span><%= guide[:short_title] %></span>
+            <%= render "shared/question_tooltip",
+                  label: "#{guide[:title]} guide",
+                  panel_label: guide[:title],
+                  text: guide[:body],
+                  width: "20rem",
+                  panel_classes: "standard-tooltip-panel--compact" %>
+          </span>
+        <% end %>
+      </div>
+    <% end %>
+  </section>
+
+  <% if staff_competency_view %>
+    <div class="c-staff-competency-workspace">
+  <% end %>
+
+  <% unless staff_competency_view %>
+    <section class="c-card c-card--tight c-interpretation-guide">
+      <div class="c-panel-header">
+        <h2 class="c-section-title c-heading-inline">How To Read This Page</h2>
+        <span class="c-muted">Plain-language guide</span>
+      </div>
+
+      <p class="c-guide-intro">
+        Competency scores are meant to show patterns over time. One score is a signal, while repeated scores across semesters and sources give the clearest picture.
+      </p>
+
+      <div class="c-guide-grid">
+        <% guide_items.each do |guide| %>
+          <article class="c-guide-item">
+            <h3><%= guide[:title] %></h3>
+            <p><%= guide[:body] %></p>
+          </article>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
+
+  <section class="c-card c-card--tight c-change-summary">
+    <div class="c-panel-header">
+      <h2 class="c-section-title c-heading-inline">What Changed Since Last Semester?</h2>
+      <span class="c-muted"><%= change_summary[:current_semester] %></span>
+    </div>
+
+    <p class="c-change-headline"><%= change_summary[:headline] %></p>
+
+    <div class="c-change-grid">
+      <article class="c-change-panel">
+        <h3>Source Averages</h3>
+        <% if change_summary[:source_changes].present? %>
+          <ul class="c-change-list">
+            <% change_summary[:source_changes].each do |change| %>
+              <li class="c-change-list__item c-change-list__item--<%= change[:direction].to_s.parameterize %>">
+                <span><%= change[:sentence] %></span>
+                <strong><%= number_with_precision(change[:delta], precision: 2, strip_insignificant_zeros: true) %></strong>
+              </li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p class="c-muted">No source-level comparison is available yet.</p>
+        <% end %>
+      </article>
+
+      <article class="c-change-panel">
+        <h3>Largest Competency Moves</h3>
+        <% if change_summary[:competency_changes].present? %>
+          <ul class="c-change-list">
+            <% change_summary[:competency_changes].each do |change| %>
+              <li class="c-change-list__item c-change-list__item--<%= change[:direction].to_s.parameterize %>">
+                <span><%= change[:label] %>: <%= change[:title] %></span>
+                <strong>
+                  <%= change[:direction].capitalize %>
+                  <%= number_with_precision(change[:delta].abs, precision: 2, strip_insignificant_zeros: true) %>
+                </strong>
+              </li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p class="c-muted">No competency-level changes were found for the selected sources.</p>
+        <% end %>
+      </article>
+    </div>
   </section>
 
   <section class="c-card c-card--tight c-competency-summary">
@@ -137,7 +257,7 @@
     </div>
   </section>
 
-  <section class="c-card c-card--tight no-print">
+  <section class="c-card c-card--tight c-competency-graphs no-print">
     <div class="c-panel-header">
       <h2 class="c-section-title c-heading-inline">Graphs</h2>
       <div class="c-tabs" role="tablist" aria-label="Competency graph views">
@@ -165,152 +285,162 @@
     </div>
   </section>
 
-  <section class="u-stack u-stack--lg c-print-section">
-    <% @payload[:domains].each do |domain| %>
-      <section class="c-card c-card--flush c-section-group">
-        <header class="c-section-group__header c-domain-header">
-          <div>
-            <h2><%= domain[:name] %></h2>
-            <span><%= pluralize(domain[:competencies].size, "competency") %></span>
-          </div>
-          <div class="c-domain-averages" aria-label="<%= domain[:name] %> averages">
-            <% if show_self %>
-              <span>Self avg <strong><%= domain[:averages][:self].presence || "—" %></strong></span>
-            <% end %>
-            <% if show_advisor %>
-              <span>Advisor avg <strong><%= domain[:averages][:advisor].presence || "—" %></strong></span>
-            <% end %>
-            <% if show_course %>
-              <span>Course avg <strong><%= domain[:averages][:course].presence || "—" %></strong></span>
-            <% end %>
-            <% if show_target %>
-              <span>Target avg <strong><%= domain[:averages][:target].presence || "—" %></strong></span>
-            <% end %>
-          </div>
-        </header>
+  <% if staff_competency_view %>
+    <section class="c-print-section">
+      <%= render "staff/competencies/comparison", domains: @payload[:domains] %>
+    </section>
+  <% else %>
+    <section class="u-stack u-stack--lg c-print-section">
+      <% @payload[:domains].each do |domain| %>
+        <section class="c-card c-card--flush c-section-group">
+          <header class="c-section-group__header c-domain-header">
+            <div>
+              <h2><%= domain[:name] %></h2>
+              <span><%= pluralize(domain[:competencies].size, "competency") %></span>
+            </div>
+            <div class="c-domain-averages" aria-label="<%= domain[:name] %> averages">
+              <% if show_self %>
+                <span>Self avg <strong><%= domain[:averages][:self].presence || "—" %></strong></span>
+              <% end %>
+              <% if show_advisor %>
+                <span>Advisor avg <strong><%= domain[:averages][:advisor].presence || "—" %></strong></span>
+              <% end %>
+              <% if show_course %>
+                <span>Course avg <strong><%= domain[:averages][:course].presence || "—" %></strong></span>
+              <% end %>
+              <% if show_target %>
+                <span>Target avg <strong><%= domain[:averages][:target].presence || "—" %></strong></span>
+              <% end %>
+            </div>
+          </header>
 
-        <div class="c-table-wrapper">
-          <table class="c-table c-matrix-table">
-            <thead>
-              <tr>
-                <th>Competency</th>
-                <% if show_self %>
-                  <th>Self</th>
-                <% end %>
-                <% if show_advisor %>
-                  <th>Advisor</th>
-                <% end %>
-                <% if show_course %>
-                  <th>Course</th>
-                <% end %>
-                <% if show_target %>
-                  <th>End of Program Target</th>
-                <% end %>
-              </tr>
-            </thead>
-            <tbody>
-              <% domain[:competencies].each do |competency| %>
-                <tr class="<%= 'is-below-target' if competency[:self_below_target] || competency[:course_below_target] %>">
-                  <td class="c-table__title"><%= competency[:title] %></td>
-
+          <div class="c-table-wrapper">
+            <table class="c-table c-matrix-table">
+              <thead>
+                <tr>
+                  <th>Competency</th>
                   <% if show_self %>
-                    <td>
-                      <% self_classes = ["c-score-pill", "c-score-pill--self"] %>
-                      <% self_classes << "c-score-pill--below" if competency[:self_below_target] %>
-                      <% self_classes << "c-score-pill--empty" if competency[:self_rating].blank? %>
-                      <span class="<%= self_classes.join(' ') %>">
-                        <%= competency[:self_rating].presence || "—" %>
-                      </span>
-                      <span class="c-data-status c-data-status--<%= competency[:self_status] %>">
-                        <%= status_labels[competency[:self_status]] %>
-                      </span>
-                      <% if competency[:self_updated_at].present? %>
-                        <span class="c-last-updated">Updated <%= l(competency[:self_updated_at], format: :short) %></span>
-                      <% end %>
-                    </td>
+                    <th>Self</th>
                   <% end %>
-
                   <% if show_advisor %>
-                    <td>
-                      <% advisor_classes = ["c-score-pill", "c-score-pill--advisor"] %>
-                      <% advisor_classes << "c-score-pill--empty" if competency[:advisor_rating].blank? %>
-                      <span class="<%= advisor_classes.join(' ') %>">
-                        <%= competency[:advisor_rating].presence || "—" %>
-                      </span>
-                      <span class="c-data-status c-data-status--<%= competency[:advisor_status] %>">
-                        <%= status_labels[competency[:advisor_status]] %>
-                      </span>
-                      <% if competency[:advisor_updated_at].present? %>
-                        <span class="c-last-updated">Updated <%= l(competency[:advisor_updated_at], format: :short) %></span>
-                      <% end %>
-                    </td>
+                    <th>Advisor</th>
                   <% end %>
-
                   <% if show_course %>
-                    <td>
-                      <% course_value = competency[:course_status] == "embargoed" ? "Embargoed" : competency[:course_rating].presence %>
-                      <% if competency[:course_sources].present? %>
-                        <details class="c-cell-details">
-                          <summary class="c-cell-details__summary">
-                            <% course_classes = ["c-score-pill", "c-score-pill--course"] %>
-                            <% course_classes << "c-score-pill--below" if competency[:course_below_target] %>
-                            <% course_classes << "c-score-pill--empty" if course_value.blank? %>
-                            <span class="<%= course_classes.join(' ') %>">
-                              <%= course_value.presence || "—" %>
-                            </span>
-                          </summary>
-                          <div class="c-source-list">
-                            <span class="c-source-count"><%= pluralize(competency[:course_sources].size, "source") %></span>
-                            <% competency[:course_sources].each do |source| %>
-                              <div class="c-source-chip">
-                                <strong><%= source[:course_code] %></strong>
-                                <% if source[:semester].present? %>
-                                  <span><%= source[:semester] %></span>
-                                <% end %>
-                                <span>Competency level <%= source[:mapped_level].presence || "—" %></span>
-                                <span>Target level <%= source[:course_target_level].presence || "—" %></span>
-                              </div>
-                            <% end %>
-                          </div>
-                        </details>
-                      <% else %>
-                        <% course_classes = ["c-score-pill"] %>
-                        <% course_classes << (competency[:course_status] == "embargoed" ? "c-score-pill--empty" : "c-score-pill--course") %>
-                        <% course_classes << "c-score-pill--empty" if course_value.blank? %>
-                        <span class="<%= course_classes.join(' ') %>"><%= course_value.presence || "—" %></span>
-                      <% end %>
-                      <span class="c-data-status c-data-status--<%= competency[:course_status] %>">
-                        <%= status_labels[competency[:course_status]] %>
-                      </span>
-                      <% if competency[:course_updated_at].present? %>
-                        <span class="c-last-updated">Updated <%= l(competency[:course_updated_at], format: :short) %></span>
-                      <% end %>
-                    </td>
+                    <th>Course</th>
                   <% end %>
-
                   <% if show_target %>
-                    <td>
-                      <% target_classes = ["c-score-pill", "c-score-pill--program"] %>
-                      <% target_classes << "c-score-pill--empty" if competency[:end_program_target].blank? %>
-                      <span class="<%= target_classes.join(' ') %>">
-                        <%= competency[:end_program_target].presence || "—" %>
-                      </span>
-                      <span class="c-data-status c-data-status--<%= competency[:target_status] %>">
-                        <%= competency[:target_status] == "present" ? "Expected target" : "Missing target" %>
-                      </span>
-                      <% if competency[:target_updated_at].present? %>
-                        <span class="c-last-updated">Updated <%= l(competency[:target_updated_at], format: :short) %></span>
-                      <% end %>
-                    </td>
+                    <th>End-of-Program Target</th>
                   <% end %>
                 </tr>
-              <% end %>
-            </tbody>
-          </table>
-        </div>
-      </section>
-    <% end %>
-  </section>
+              </thead>
+              <tbody>
+                <% domain[:competencies].each do |competency| %>
+                  <tr class="<%= 'is-below-target' if competency[:self_below_target] || competency[:course_below_target] %>">
+                    <td class="c-table__title"><%= competency[:title] %></td>
+
+                    <% if show_self %>
+                      <td>
+                        <% self_classes = ["c-score-pill", "c-score-pill--self"] %>
+                        <% self_classes << "c-score-pill--below" if competency[:self_below_target] %>
+                        <% self_classes << "c-score-pill--empty" if competency[:self_rating].blank? %>
+                        <span class="<%= self_classes.join(' ') %>">
+                          <%= competency[:self_rating].presence || "—" %>
+                        </span>
+                        <span class="c-data-status c-data-status--<%= competency[:self_status] %>">
+                          <%= status_labels[competency[:self_status]] %>
+                        </span>
+                        <% if competency[:self_updated_at].present? %>
+                          <span class="c-last-updated">Updated <%= l(competency[:self_updated_at], format: :short) %></span>
+                        <% end %>
+                      </td>
+                    <% end %>
+
+                    <% if show_advisor %>
+                      <td>
+                        <% advisor_classes = ["c-score-pill", "c-score-pill--advisor"] %>
+                        <% advisor_classes << "c-score-pill--empty" if competency[:advisor_rating].blank? %>
+                        <span class="<%= advisor_classes.join(' ') %>">
+                          <%= competency[:advisor_rating].presence || "—" %>
+                        </span>
+                        <span class="c-data-status c-data-status--<%= competency[:advisor_status] %>">
+                          <%= status_labels[competency[:advisor_status]] %>
+                        </span>
+                        <% if competency[:advisor_updated_at].present? %>
+                          <span class="c-last-updated">Updated <%= l(competency[:advisor_updated_at], format: :short) %></span>
+                        <% end %>
+                      </td>
+                    <% end %>
+
+                    <% if show_course %>
+                      <td>
+                        <% course_value = competency[:course_status] == "embargoed" ? "Embargoed" : competency[:course_rating].presence %>
+                        <% if competency[:course_sources].present? %>
+                          <details class="c-cell-details">
+                            <summary class="c-cell-details__summary">
+                              <% course_classes = ["c-score-pill", "c-score-pill--course"] %>
+                              <% course_classes << "c-score-pill--below" if competency[:course_below_target] %>
+                              <% course_classes << "c-score-pill--empty" if course_value.blank? %>
+                              <span class="<%= course_classes.join(' ') %>">
+                                <%= course_value.presence || "—" %>
+                              </span>
+                            </summary>
+                            <div class="c-source-list">
+                              <span class="c-source-count"><%= pluralize(competency[:course_sources].size, "source") %></span>
+                              <% competency[:course_sources].each do |source| %>
+                                <div class="c-source-chip">
+                                  <strong><%= source[:course_code] %></strong>
+                                  <% if source[:semester].present? %>
+                                    <span><%= source[:semester] %></span>
+                                  <% end %>
+                                  <span>Competency level <%= source[:mapped_level].presence || "—" %></span>
+                                  <span>Course target level <%= source[:course_target_level].presence || "—" %></span>
+                                </div>
+                              <% end %>
+                            </div>
+                          </details>
+                        <% else %>
+                          <% course_classes = ["c-score-pill"] %>
+                          <% course_classes << (competency[:course_status] == "embargoed" ? "c-score-pill--empty" : "c-score-pill--course") %>
+                          <% course_classes << "c-score-pill--empty" if course_value.blank? %>
+                          <span class="<%= course_classes.join(' ') %>"><%= course_value.presence || "—" %></span>
+                        <% end %>
+                        <span class="c-data-status c-data-status--<%= competency[:course_status] %>">
+                          <%= status_labels[competency[:course_status]] %>
+                        </span>
+                        <% if competency[:course_updated_at].present? %>
+                          <span class="c-last-updated">Updated <%= l(competency[:course_updated_at], format: :short) %></span>
+                        <% end %>
+                      </td>
+                    <% end %>
+
+                    <% if show_target %>
+                      <td>
+                        <% target_classes = ["c-score-pill", "c-score-pill--program"] %>
+                        <% target_classes << "c-score-pill--empty" if competency[:end_program_target].blank? %>
+                        <span class="<%= target_classes.join(' ') %>">
+                          <%= competency[:end_program_target].presence || "—" %>
+                        </span>
+                        <span class="c-data-status c-data-status--<%= competency[:target_status] %>">
+                          <%= competency[:target_status] == "present" ? "End-of-program expectation" : "Missing end-of-program target" %>
+                        </span>
+                        <% if competency[:target_updated_at].present? %>
+                          <span class="c-last-updated">Updated <%= l(competency[:target_updated_at], format: :short) %></span>
+                        <% end %>
+                      </td>
+                    <% end %>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      <% end %>
+    </section>
+  <% end %>
+
+  <% if staff_competency_view %>
+    </div>
+  <% end %>
 </main>
 
 <script type="module">

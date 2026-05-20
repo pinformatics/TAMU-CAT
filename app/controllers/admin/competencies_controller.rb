@@ -22,7 +22,7 @@ class Admin::CompetenciesController < ApplicationController
     @student = accessible_student_scope.includes(:user, advisor: :user).find(params[:id])
     @payload = StudentCompetencyDashboard.new(student: @student, params: student_competency_params).call
     @competency_page_title = "#{@student.user&.display_name || @student.full_name} Competencies"
-    @competency_page_subtitle = "Detailed competency performance, source context, and trend history for this student."
+    @competency_page_subtitle = "Student-facing competency modules for advising review: source guide, changes, summary, graphs, and target comparison."
     @competency_back_path = admin_competencies_path
     @competency_form_path = admin_competency_path(@student)
     @competency_export_path = admin_competency_path(@student, format: :csv, semester: export_semester_param, sources: @payload.dig(:filters, :sources))
@@ -101,7 +101,7 @@ class Admin::CompetenciesController < ApplicationController
   end
 
   def competency_filter_params
-    params.permit(:q, :track, :program_year, :advisor_id, :semester, :domain, competencies: [])
+    params.permit(:q, :track, :program_year, :advisor_id, :semester, :domain, :student_status, competencies: [])
   end
 
   def student_competency_params

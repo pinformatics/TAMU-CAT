@@ -33,6 +33,7 @@ Rails.application.routes.draw do
 
   get "student_records", to: "student_records#index", as: :student_records
   get "student_records/export_excel", to: "student_records#export_excel", as: :export_student_records_excel
+  resources :student_overviews, only: %i[index show]
   resource :student_competencies, only: :show
   get "student_portfolio_export", to: "student_portfolio_exports#index", as: :student_portfolio_export
   get "student_portfolio_export/download", to: "student_portfolio_exports#show", as: :download_student_portfolio_export
@@ -76,15 +77,23 @@ Rails.application.routes.draw do
       end
     end
     resources :grade_import_batches, only: %i[index new create show destroy] do
+      collection do
+        get "samples/:kind", to: "grade_import_batches#sample", as: :sample
+      end
       member do
         post :approve
         post :commit
+        post :reupload
         post :rollback
         post :recommit
+        post :rebuild_ratings
+        post :finalize
         patch :semester
         get :export_ratings
         get :error_report
         get :correction_file
+        patch "pending_rows/:pending_row_id", to: "grade_import_batches#update_pending_row", as: :pending_row
+        patch "evidence/:evidence_id", to: "grade_import_batches#update_evidence", as: :evidence
       end
     end
     resources :program_tracks, only: %i[create update destroy]

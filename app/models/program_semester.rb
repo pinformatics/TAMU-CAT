@@ -1,17 +1,26 @@
 # Tracks program semesters (e.g., "Fall 2025") and identifies which one is current.
 class ProgramSemester < ApplicationRecord
+  STATUSES = %w[planned current closed archived].freeze
   DEFAULT_CURRENT_NAME = "Fall 2025".freeze
 
   has_many :surveys, dependent: :destroy
+  has_many :grade_import_batches, dependent: :nullify
+  has_many :competency_target_levels, dependent: :destroy
+  has_many :course_offerings, dependent: :nullify
   has_one :course_grade_release_date, dependent: :destroy
 
   before_validation :normalize_name
+  before_validation :sync_status_from_current_flag
   after_commit :ensure_single_current!, if: -> { saved_change_to_current? && current? }
+  after_commit :ensure_single_status_current!, if: -> { saved_change_to_status? && status == "current" }
   after_destroy :assign_fallback_current!
 
   validates :name, presence: true, uniqueness: { case_sensitive: false }
+  validates :status, inclusion: { in: STATUSES }
 
   scope :ordered, -> { order(created_at: :asc) }
+  scope :operational, -> { where.not(status: "archived").where(archived_at: nil) }
+  scope :archived_records, -> { where(status: "archived").or(where.not(archived_at: nil)) }
 
   # @return [ProgramSemester, nil]
   def self.current
@@ -33,6 +42,18 @@ class ProgramSemester < ApplicationRecord
     current?
   end
 
+  def archived?
+    status == "archived" || archived_at.present?
+  end
+
+  def closed?
+    status == "closed" || closed_at.present?
+  end
+
+  def active_for_operations?
+    !archived?
+  end
+
   private
 
   def normalize_name
@@ -51,8 +72,18 @@ class ProgramSemester < ApplicationRecord
     end.join(" ")
   end
 
+  def sync_status_from_current_flag
+    self.status = "current" if current? && (status.blank? || will_save_change_to_current?)
+    self.current = true if status == "current"
+  end
+
   def ensure_single_current!
     ProgramSemester.where.not(id: id).update_all(current: false)
+  end
+
+  def ensure_single_status_current!
+    ProgramSemester.where.not(id: id).where(current: true).update_all(current: false, status: "closed")
+    ProgramSemester.where.not(id: id).where(status: "current").update_all(status: "closed")
   end
 
   def assign_fallback_current!

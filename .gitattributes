@@ -9,4 +9,5 @@ config/credentials/*.yml.enc diff=rails_credentials
 config/credentials.yml.enc diff=rails_credentials
 
 *.rb text eol=lf
+*.sh text eol=lf
 bin/* text eol=lf

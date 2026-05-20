@@ -1,9 +1,14 @@
 require "csv"
+require "axlsx"
 
 class Admin::GradeImportBatchesController < Admin::BaseController
   IMPORT_EXTENSIONS = GradeImports::FileUploadRouter::SUPPORTED_EXTENSIONS
+  SAMPLE_IMPORT_KINDS = %w[success duplicate pending_match bad_mapping].freeze
 
-  before_action :set_batch, only: %i[show approve commit rollback recommit semester destroy export_ratings error_report correction_file]
+  before_action :set_batch, only: %i[
+    show approve commit reupload rollback recommit rebuild_ratings finalize semester destroy
+    export_ratings error_report correction_file update_pending_row update_evidence
+  ]
 
   def index
     @batches = GradeImportBatch.includes(:uploaded_by, :grade_import_files).order(created_at: :desc).limit(100)
@@ -12,9 +17,25 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   def new
   end
 
+  def sample
+    kind = params[:kind].to_s
+    unless SAMPLE_IMPORT_KINDS.include?(kind)
+      redirect_to new_admin_grade_import_batch_path, alert: "Unknown sample import file." and return
+    end
+
+    if kind == "bad_mapping"
+      send_data sample_bad_mapping_workbook,
+                filename: "sample-grade-import-bad-mapping.xlsx",
+                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else
+      send_data sample_direct_competency_csv(kind),
+                filename: "sample-grade-import-#{kind.tr('_', '-')}-PHPM_631_600.csv",
+                type: "text/csv"
+    end
+  end
+
   def create
-    files = Array(params[:files]).compact_blank + Array(params[:folder_files]).compact_blank
-    files = files.select { |file| IMPORT_EXTENSIONS.include?(File.extname(file.original_filename.to_s).downcase) }
+    files = selected_import_files
 
     if files.blank?
       redirect_to new_admin_grade_import_batch_path, alert: "Please choose at least one .xlsx, .xlsm, or .csv file." and return
@@ -31,7 +52,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
     GradeImports::BatchProcessor.new(batch: @batch, files: files, dry_run: dry_run_requested?).call
 
-    notice = dry_run_requested? ? "Preview completed. Review the results and re-upload to commit." : "Grade import batch processed."
+    notice = dry_run_requested? ? "Preview completed. Review the results before committing." : "Grade import batch processed."
     redirect_to admin_grade_import_batch_path(@batch), notice: notice
   rescue StandardError => e
     Rails.logger.error("[Admin::GradeImportBatchesController#create] #{e.class}: #{e.message}")
@@ -58,15 +79,21 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @match_rate = match_rate_for(@files)
     @failed_row_count = @files.sum(&:error_rows)
     @processed_row_count = @files.sum(&:imported_rows)
-    @pending_row_count = @files.sum(&:pending_rows)
+    @pending_row_count = @batch.grade_import_pending_rows.pending_student_match.count
     @duplicate_warnings = @files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
     @duplicate_upload_warnings = @files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i }
     @validation_summary = validation_summary_for(@files)
+    @target_warning_summary = target_warning_summary
+    @student_match_options = student_match_options
   end
 
   def approve
-    unless @batch.needs_admin_approval?
-      redirect_to admin_grade_import_batch_path(@batch), alert: "Only previews with failed or pending rows need admin approval." and return
+    unless @batch.dry_run?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Only previews can be approved for commit." and return
+    end
+
+    unless @batch.needs_admin_approval? || target_warning_summary[:requires_review]
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Only previews with failed, pending, or target-warning rows need admin approval." and return
     end
 
     approved_summary = @batch.summary.merge(
@@ -81,9 +108,9 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   end
 
   def commit
-    if @batch.needs_admin_approval? && !@batch.admin_approved?
+    if (@batch.needs_admin_approval? || target_warning_summary[:requires_review]) && !@batch.admin_approved?
       redirect_to admin_grade_import_batch_path(@batch),
-                  alert: "Review and approve this preview before committing because it has failed or pending rows." and return
+                  alert: "Review and approve this preview before committing because it has failed, pending, or target-warning rows." and return
     end
 
     unless @batch.committable_dry_run?
@@ -101,7 +128,47 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     redirect_to admin_grade_import_batch_path(@batch), notice: "Preview committed. This batch now appears in reportable course competency views."
   end
 
+  def reupload
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. Files cannot be re-uploaded." and return
+    end
+
+    unless @batch.dry_run?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Only preview batches can be re-uploaded before commit." and return
+    end
+
+    files = selected_import_files
+    if files.blank?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Please choose at least one corrected .xlsx, .xlsm, or .csv file to re-upload." and return
+    end
+
+    @batch.update!(summary: reupload_review_reset_summary)
+    GradeImports::BatchProcessor.new(
+      batch: @batch,
+      files: files,
+      dry_run: true,
+      replace_existing_files: true
+    ).call
+
+    @batch.update!(
+      summary: @batch.summary.merge(
+        "last_reuploaded_at" => Time.current.iso8601,
+        "last_reuploaded_by" => current_user.email,
+        "last_reuploaded_file_names" => files.map { |file| file.original_filename.to_s }
+      )
+    )
+
+    redirect_to admin_grade_import_batch_path(@batch), notice: "Corrected file re-uploaded. Matching filenames replaced previous rows in this batch."
+  rescue StandardError => e
+    Rails.logger.error("[Admin::GradeImportBatchesController#reupload] #{e.class}: #{e.message}")
+    redirect_to admin_grade_import_batch_path(@batch), alert: "Re-upload failed: #{e.message}"
+  end
+
   def rollback
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. It cannot be rolled back." and return
+    end
+
     if @batch.rolled_back?
       redirect_to admin_grade_import_batch_path(@batch), alert: "This batch has already been rolled back." and return
     end
@@ -136,7 +203,36 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     redirect_to admin_grade_import_batch_path(@batch), notice: "Batch recommitted. Its course competency data is visible in the app again."
   end
 
+  def rebuild_ratings
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. Ratings cannot be rebuilt." and return
+    end
+
+    rebuild_batch_ratings!
+
+    redirect_to admin_grade_import_batch_path(@batch), notice: "Derived competency ratings were rebuilt from the current evidence rows."
+  end
+
+  def finalize
+    unless @batch.finalizable?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Only committed reportable batches can be finalized." and return
+    end
+
+    @batch.update!(
+      summary: @batch.summary.merge(
+        "finalized_at" => Time.current.iso8601,
+        "finalized_by" => current_user.email
+      )
+    )
+
+    redirect_to admin_grade_import_batch_path(@batch), notice: "Batch finalized and locked after review."
+  end
+
   def semester
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. Semester cannot be changed." and return
+    end
+
     @batch.update!(program_semester_id: grade_import_batch_params[:program_semester_id].presence)
 
     message = if @batch.program_semester.present?
@@ -149,6 +245,10 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   end
 
   def destroy
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. It cannot be deleted." and return
+    end
+
     batch_id = @batch.id
     @batch.destroy!
 
@@ -196,6 +296,40 @@ class Admin::GradeImportBatchesController < Admin::BaseController
               type: "text/csv"
   end
 
+  def update_pending_row
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. Pending rows cannot be changed." and return
+    end
+
+    row = @batch.grade_import_pending_rows.find(params[:pending_row_id])
+    row.update!(pending_row_params)
+
+    if params.dig(:grade_import_pending_row, :matched_student_id).present?
+      student = Student.includes(:user).find(params.dig(:grade_import_pending_row, :matched_student_id))
+      reconcile_pending_row!(row, student)
+      rebuild_batch_ratings!
+      redirect_to admin_grade_import_batch_path(@batch), notice: "Pending row matched to #{student.user&.display_name || student.student_id} and ratings rebuilt."
+    else
+      redirect_to admin_grade_import_batch_path(@batch), notice: "Pending row correction saved."
+    end
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
+    redirect_to admin_grade_import_batch_path(@batch), alert: "Could not update pending row: #{e.message}"
+  end
+
+  def update_evidence
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. Evidence rows cannot be changed." and return
+    end
+
+    evidence = @batch.grade_competency_evidences.find(params[:evidence_id])
+    evidence.update!(evidence_params)
+    rebuild_batch_ratings!
+
+    redirect_to admin_grade_import_batch_path(@batch), notice: "Evidence row corrected and derived ratings rebuilt."
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
+    redirect_to admin_grade_import_batch_path(@batch), alert: "Could not update evidence row: #{e.message}"
+  end
+
   private
 
   def set_batch
@@ -208,6 +342,57 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   def grade_import_batch_params
     params.permit(:program_semester_id, :import_notes)
+  end
+
+  def selected_import_files
+    files = Array(params[:files]).compact_blank + Array(params[:folder_files]).compact_blank
+    files.select { |file| IMPORT_EXTENSIONS.include?(File.extname(file.original_filename.to_s).downcase) }
+  end
+
+  def reupload_review_reset_summary
+    @batch.summary.except(
+      "admin_approved_at",
+      "admin_approved_by",
+      "committed_at",
+      "committed_by",
+      "error"
+    ).merge("dry_run" => true)
+  end
+
+  def pending_row_params
+    raw = params.require(:grade_import_pending_row).permit(
+      :student_identifier,
+      :student_identifier_type,
+      :student_name,
+      :student_uin,
+      :student_email,
+      :course_code,
+      :assignment_name,
+      :competency_title,
+      :raw_grade,
+      :mapped_level,
+      :course_target_level
+    )
+
+    normalize_blank_level_params(raw)
+  end
+
+  def evidence_params
+    raw = params.require(:grade_competency_evidence).permit(
+      :course_code,
+      :assignment_name,
+      :competency_title,
+      :raw_grade,
+      :mapped_level,
+      :course_target_level
+    )
+
+    normalize_blank_level_params(raw)
+  end
+
+  def normalize_blank_level_params(attrs)
+    attrs[:course_target_level] = nil if attrs.key?(:course_target_level) && attrs[:course_target_level].blank?
+    attrs
   end
 
   def match_rate_for(files)
@@ -298,10 +483,10 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   def error_report_csv
     CSV.generate(headers: true) do |csv|
-      csv << %w[file_name status row message]
+      csv << %w[file_name status type row message]
       @batch.grade_import_files.find_each do |file|
         Array(file.parse_errors).each do |error|
-          csv << [ file.file_name, file.status, error["row"], error["message"] || error.to_s ]
+          csv << [ file.file_name, file.status, error["type"].presence || "error", error["row"], error["message"] || error.to_s ]
         end
       end
     end
@@ -311,6 +496,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     CSV.generate(headers: true) do |csv|
       csv << [
         "Row Type",
+        "Issue Type",
         "File Name",
         "Status",
         "Row Number",
@@ -333,6 +519,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
         Array(file.parse_errors).each do |error|
           csv << [
             "failed",
+            error["type"].presence || "error",
             file.file_name,
             file.status,
             error["row"],
@@ -356,6 +543,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       @batch.grade_import_pending_rows.pending_student_match.includes(:grade_import_file).order(:grade_import_file_id, :row_number, :id).find_each do |row|
         csv << [
           "pending_student_match",
+          "student_identifier",
           row.grade_import_file&.file_name,
           row.status,
           row.row_number,
@@ -387,5 +575,132 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       duplicate_file_uploads: files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i },
       duplicate_rows: files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
     }
+  end
+
+  def target_warning_summary
+    @target_warning_summary ||= GradeImports::TargetWarningAnalyzer.call(batch: @batch)
+  end
+
+  def student_match_options
+    Student
+      .includes(:user)
+      .left_outer_joins(:user)
+      .order(Arel.sql("LOWER(COALESCE(users.name, users.email, '')) ASC"), :student_id)
+      .limit(1_000)
+  end
+
+  def rebuild_batch_ratings!
+    GradeImports::BatchRatingRebuilder.call(batch: @batch)
+    @batch.update!(
+      evidence_count: @batch.grade_competency_evidences.count,
+      rating_count: @batch.grade_competency_ratings.count,
+      pending_count: @batch.grade_import_pending_rows.pending_student_match.count,
+      summary: @batch.summary.merge(
+        "ratings_rebuilt_at" => Time.current.iso8601,
+        "ratings_rebuilt_by" => current_user.email
+      )
+    )
+  end
+
+  def reconcile_pending_row!(row, student)
+    row.with_lock do
+      evidence = @batch.grade_competency_evidences.find_or_initialize_by(source_key: row.source_key)
+      attrs = {
+        grade_import_file: row.grade_import_file,
+        student_id: student.student_id,
+        competency_title: row.competency_title,
+        course_code: row.course_code,
+        assignment_name: row.assignment_name,
+        raw_grade: row.raw_grade,
+        mapped_level: row.mapped_level,
+        course_target_level: row.course_target_level,
+        row_number: row.row_number,
+        import_fingerprint: row.import_fingerprint,
+        metadata: row.metadata.merge(
+          "student_uin" => row.student_uin,
+          "student_email" => row.student_email,
+          "student_name" => row.student_name,
+          "student_identifier" => row.student_identifier,
+          "student_identifier_type" => row.student_identifier_type,
+          "pending_row_id" => row.id,
+          "manual_reconciled_at" => Time.current.iso8601,
+          "manual_reconciled_by" => current_user.email
+        )
+      }
+      attrs[:competency] = row.competency if GradeCompetencyEvidence.column_names.include?("competency_id")
+      attrs[:course_offering] = row.course_offering if GradeCompetencyEvidence.column_names.include?("course_offering_id")
+
+      evidence.assign_attributes(attrs)
+      evidence.save!
+
+      row.update!(
+        status: "reconciled",
+        matched_student_id: student.student_id,
+        reconciled_at: Time.current
+      )
+
+      row.grade_import_file.update!(
+        imported_rows: row.grade_import_file.grade_competency_evidences.count,
+        pending_rows: row.grade_import_file.grade_import_pending_rows.pending_student_match.count
+      )
+    end
+  end
+
+  def sample_direct_competency_csv(kind)
+    student = Student.includes(:user).order(:student_id).first
+    student_name = student&.user&.name.presence || "Sample Student"
+    student_id = student&.student_id || 1001
+    student_uin = student&.uin.presence || "123456789"
+
+    rows = case kind
+    when "pending_match"
+      [
+        [ "Unmatched Canvas Student", nil, "999999999", 4, 3, 2, 3 ]
+      ]
+    when "duplicate"
+      [
+        [ student_name, student_id, student_uin, 4, 3, 3, 3 ],
+        [ student_name, student_id, student_uin, 4, 3, 3, 3 ]
+      ]
+    else
+      [
+        [ student_name, student_id, student_uin, 4, 3, 3, 4 ],
+        [ "Unmatched Canvas Student", nil, "999999999", 2, 3, 1, 4 ]
+      ]
+    end
+
+    CSV.generate(headers: true) do |csv|
+      csv << direct_competency_sample_headers
+      rows.each { |row| csv << row }
+    end
+  end
+
+  def direct_competency_sample_headers
+    [
+      "Student name",
+      "Student ID",
+      "Student SIS ID",
+      "EMHA Competencies > Health Care Environment and Community > Policy Analysis result",
+      "EMHA Competencies > Health Care Environment and Community > Policy Analysis mastery points",
+      "EMHA Competencies > Management Skills > Communication result",
+      "EMHA Competencies > Management Skills > Communication mastery points"
+    ]
+  end
+
+  def sample_bad_mapping_workbook
+    package = Axlsx::Package.new
+    package.workbook.add_worksheet(name: "PHPM_631_600") do |sheet|
+      sheet.add_row [ "Student", "ID", "SIS User ID", "SIS Login ID", "Section", "Final Project" ]
+      sheet.add_row [ "Points Possible", nil, nil, nil, nil, 100 ]
+      sheet.add_row [ "Sample Student", 1001, "123456789", "sample@example.edu", "PHPM-631-600", 94 ]
+    end
+
+    package.workbook.add_worksheet(name: "mapping") do |sheet|
+      sheet.add_row [ "assignment_match_type", "assignment_match_value", "course_code", "competency_title", "score_basis", "min_score", "max_score", "competency_level", "active" ]
+      sheet.add_row [ "exact", "Final Project", "PHPM-631-600", "Bad Competency Name", "points", 90, 100, 5, true ]
+      sheet.add_row [ "exact", "Final Project", "PHPM-631-600", "Policy Analysis", "points", 80, 89.99, 4, true ]
+    end
+
+    package.to_stream.read
   end
 end

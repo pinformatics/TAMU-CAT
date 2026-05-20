@@ -6,6 +6,7 @@ class AdminActivityLog < ApplicationRecord
     advisor_assignment
     bulk_advisor_assignment
     track_update
+    student_lifecycle_update
     course_release_date_update
     student_data_export
     member_removal

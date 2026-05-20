@@ -43,6 +43,22 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "Delete this student's survey responses?"
   end
 
+  test "student records hide archived students by default and allow historical filter" do
+    archived_student = students(:other_student)
+    archived_student.archive!(archived_by: @admin, reason: "Historical records test")
+    sign_in @admin
+
+    get student_records_path
+
+    assert_response :success
+    assert_not_includes response.body, archived_student.user.name
+
+    get student_records_path(student_status: "all")
+
+    assert_response :success
+    assert_includes response.body, archived_student.user.name
+  end
+
   test "admin can filter students by search query" do
     sign_in @admin
 

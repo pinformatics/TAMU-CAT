@@ -5,6 +5,7 @@
 <% show_advisor = @payload[:show_advisor] %>
 <% selected_semester = @payload.dig(:filters, :semester).presence || "All semesters" %>
 <% student_name = @payload[:student].user&.display_name || @payload[:student].full_name %>
+<% change_summary = @payload[:change_summary] || {} %>
 <% content_for :pdf_brand, "TAMU Competency Assessment Tool - Competencies" %>
 <% content_for :pdf_meta, "#{student_name} | #{selected_semester} | Generated: #{Time.current.strftime('%Y-%m-%d %H:%M')}" %>
 
@@ -19,6 +20,64 @@
     <div class="label">Semester View</div>
     <div class="value"><%= selected_semester %></div>
   </div>
+</div>
+
+<div class="pdf-section">
+  <h2 class="c-section-title">How To Read This Page</h2>
+  <table class="competency-table">
+    <thead>
+      <tr>
+        <th>Self-assessment</th>
+        <th>Course result</th>
+        <th>Course target</th>
+        <th>End-of-program target</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Your survey rating for how confident you feel in a competency.</td>
+        <td>A released course-derived rating from imported course evidence.</td>
+        <td>The expected level for a specific course evidence item.</td>
+        <td>The program benchmark for your track and cohort.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="pdf-section">
+  <h2 class="c-section-title">What Changed Since Last Semester?</h2>
+  <p class="c-muted"><%= change_summary[:headline] %></p>
+
+  <table class="competency-table">
+    <thead>
+      <tr>
+        <th>Source Averages</th>
+        <th>Largest Competency Moves</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <% if change_summary[:source_changes].present? %>
+            <% change_summary[:source_changes].each do |change| %>
+              <div><%= change[:sentence] %></div>
+            <% end %>
+          <% else %>
+            <span class="c-muted">No source-level comparison is available yet.</span>
+          <% end %>
+        </td>
+        <td>
+          <% if change_summary[:competency_changes].present? %>
+            <% change_summary[:competency_changes].each do |change| %>
+              <div><strong><%= change[:label] %></strong>: <%= change[:title] %> (<%= change[:direction] %> <%= number_with_precision(change[:delta].abs, precision: 2, strip_insignificant_zeros: true) %>)</div>
+            <% end %>
+          <% else %>
+            <span class="c-muted">No competency-level changes were found for the selected sources.</span>
+          <% end %>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 
 <div class="pdf-section">
@@ -102,7 +161,7 @@
             <th>Course</th>
           <% end %>
           <% if show_target %>
-            <th>Target</th>
+            <th>End-of-Program Target</th>
           <% end %>
         </tr>
       </thead>
@@ -135,6 +194,10 @@
                 <% if competency[:course_updated_at].present? %><br><span class="c-muted"><%= l(competency[:course_updated_at], format: :short) %></span><% end %>
                 <% if competency[:course_sources].present? %>
                   <br><span class="c-muted"><%= pluralize(competency[:course_sources].size, "source") %></span>
+                  <% course_targets = competency[:course_sources].filter_map { |source| source[:course_target_level].presence }.uniq %>
+                  <% if course_targets.present? %>
+                    <br><span class="c-muted">Course targets: <%= course_targets.join(", ") %></span>
+                  <% end %>
                 <% end %>
               </td>
             <% end %>

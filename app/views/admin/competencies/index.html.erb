@@ -142,6 +142,15 @@
                   </div>
                 </div>
 
+                <div class="c-filter-bar__field">
+                  <label class="c-label">Student status</label>
+                  <div class="c-select-wrapper">
+                    <%= select_tag :student_status,
+                      options_for_select(@filter_options[:student_statuses], @filters[:student_status]),
+                      class: "c-select u-w-full" %>
+                  </div>
+                </div>
+
                 <div class="u-actions u-actions--start">
                   <%= submit_tag "Apply", class: button_classes(:secondary) %>
                   <%= link_to "Clear", admin_competencies_path, class: button_classes(:ghost), data: { turbo: false } %>
@@ -182,16 +191,23 @@
         <p class="c-empty-state__body">No competencies match the current domain or competency filters.</p>
       </div>
     <% else %>
-      <div class="u-stack u-stack--md">
+      <div class="u-stack u-stack--sm">
         <% @students.each do |student| %>
-          <details class="c-card c-card--tight u-overflow-hidden">
-            <summary class="c-disclosure-summary u-items-start u-gap-sm">
-              <span class="u-flex-column u-min-w-0 u-flex-1">
-                <span class="c-table__title"><%= student[:name] %></span>
-                <% if student[:email].present? %>
-                  <span class="c-table__meta"><%= student[:email] %></span>
-                <% end %>
-                <span class="u-actions u-actions--start u-gap-sm u-mt-sm">
+          <details class="c-card c-card--compact u-overflow-hidden">
+            <summary class="c-disclosure-summary c-disclosure-summary--compact u-items-center u-gap-sm">
+              <span class="u-flex u-flex-wrap u-min-w-0 u-flex-1 u-items-center u-gap-sm">
+                <span class="u-flex-column u-min-w-0 u-flex-1">
+                  <span class="c-table__title"><%= student[:name] %></span>
+
+                  <% if student[:email].present? %>
+                  <span class="c-table__meta u-overflow-hidden u-text-ellipsis u-whitespace-nowrap"><%= student[:email] %></span>
+                  <% end %>
+                </span>
+
+                <span class="u-actions u-actions--start u-gap-sm">
+                  <% unless student[:current_record] %>
+                    <span class="c-pill c-pill--muted"><%= student[:lifecycle_label] %></span>
+                  <% end %>
                   <span class="c-pill c-pill--muted"><%= student[:track].presence || "No track" %></span>
                   <span class="c-pill c-pill--muted"><%= student[:program_year].present? ? "Class of #{student[:program_year]}" : "No class" %></span>
                   <span class="c-pill c-pill--muted"><%= student[:advisor_name].presence || "Unassigned advisor" %></span>
@@ -199,9 +215,9 @@
               </span>
 
               <span class="u-flex u-shrink-0 u-items-center">
-                <%= link_to "Detailed competencies",
+                <%= link_to "Details",
                             admin_competency_path(student[:id], semester: @filters[:semester].presence),
-                            class: button_classes(:secondary),
+                            class: button_classes(:secondary, extra_classes: "btn-sm"),
                             data: { turbo: false } %>
               </span>
             </summary>
@@ -250,7 +266,7 @@
                               <span class="c-popover c-popover--tooltip u-popover-down-right u-hover-dropdown__panel">
                                 <span class="c-popover__title"><%= competency[:title] %></span>
                                 <span class="c-popover__body">
-                                  <%= competency_rating_target_title(competency[:title], program_target, source: source) %>
+                                  <%= competency_rating_target_title(value, program_target, source: source) %>
                                 </span>
                               </span>
                             </span>

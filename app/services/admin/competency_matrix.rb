@@ -45,6 +45,8 @@ class Admin::CompetencyMatrix
       track: track_label_for(student),
       program_year: student.program_year,
       advisor_name: student.advisor&.display_name,
+      lifecycle_label: student.lifecycle_label,
+      current_record: student.current_record?,
       ratings: visible_competency_titles.index_with do |title|
         {
           self_rating: self_ratings.dig(student.student_id, title),
@@ -84,6 +86,7 @@ class Admin::CompetencyMatrix
       advisor_id: normalized_advisor_id,
       semester: normalized_semester,
       domain: normalized_domain,
+      student_status: normalized_student_status,
       competencies: normalized_competencies
     }
   end
@@ -95,12 +98,13 @@ class Admin::CompetencyMatrix
       advisors: advisor_options,
       semesters: semester_options,
       domains: domain_options,
+      student_statuses: Student.lifecycle_filter_options,
       competencies: competency_options
     }
   end
 
   def filtered_students
-    scope = base_student_scope.includes(:user, advisor: :user).left_outer_joins(:user)
+    scope = lifecycle_student_scope.includes(:user, advisor: :user).left_outer_joins(:user)
 
     if normalized_filters[:q].present?
       term = "%#{ActiveRecord::Base.sanitize_sql_like(normalized_filters[:q])}%"
@@ -199,15 +203,17 @@ class Admin::CompetencyMatrix
     rows = GradeCompetencyRating
       .joins(:grade_import_batch)
       .merge(GradeImportBatch.reportable)
-      .where(student_id: student_ids, competency_title: visible_competency_titles)
-      .select("grade_competency_ratings.student_id, grade_competency_ratings.competency_title, grade_competency_ratings.aggregated_level")
+      .includes(:competency)
+      .where(student_id: student_ids)
+    rows = filter_competency_identity(rows, table_name: "grade_competency_ratings")
+    rows = rows.select("grade_competency_ratings.student_id, grade_competency_ratings.competency_id, grade_competency_ratings.competency_title, grade_competency_ratings.aggregated_level")
 
     if normalized_filters[:semester].present?
       semester = ProgramSemester.find_by_name_case_insensitive(normalized_filters[:semester])
       rows = semester ? rows.where(grade_import_batches: { program_semester_id: semester.id }) : rows.none
     end
 
-    grouped = rows.group_by { |row| [ row.student_id, row.competency_title ] }
+    grouped = rows.to_a.group_by { |row| [ row.student_id, canonical_competency_title(row) ] }
 
     grouped.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |((student_id, competency_title), entries), lookup|
       levels = entries.filter_map { |entry| entry.aggregated_level&.to_f }
@@ -245,16 +251,17 @@ class Admin::CompetencyMatrix
 
     tracks = students.map { |student| track_label_for(student) }.compact.uniq
     records = CompetencyTargetLevel
-      .where(program_semester_id: semester.id, competency_title: visible_competency_titles)
+      .includes(:competency)
+      .where(program_semester_id: semester.id)
       .where(track: tracks)
-      .to_a
+    records = filter_competency_identity(records, table_name: "competency_target_levels").to_a
 
     students.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |student, lookup|
       student_track = track_label_for(student)
       next if student_track.blank?
 
       visible_competency_titles.each do |title|
-        matches = records.select { |record| record.track == student_track && record.competency_title == title }
+        matches = records.select { |record| record.track == student_track && canonical_competency_title(record) == title }
         exact_year = matches.find { |record| record.program_year == student.program_year }
         exact_class = matches.find { |record| record.class_of == student.program_year }
         fallback = matches.find { |record| record.program_year.blank? && record.class_of.blank? }
@@ -341,11 +348,11 @@ class Admin::CompetencyMatrix
   end
 
   def program_year_options
-    base_student_scope.where.not(program_year: nil).distinct.order(:program_year).pluck(:program_year)
+    lifecycle_student_scope.where.not(program_year: nil).distinct.order(:program_year).pluck(:program_year)
   end
 
   def advisor_options
-    advisor_ids = base_student_scope.where.not(advisor_id: nil).distinct.order(:advisor_id).pluck(:advisor_id)
+    advisor_ids = lifecycle_student_scope.where.not(advisor_id: nil).distinct.order(:advisor_id).pluck(:advisor_id)
 
     Advisor
       .where(advisor_id: advisor_ids)
@@ -399,6 +406,10 @@ class Admin::CompetencyMatrix
     value.presence
   end
 
+  def normalized_student_status
+    Student.normalize_lifecycle_filter(params[:student_status])
+  end
+
   def normalized_competencies
     Array(params[:competencies])
       .map { |value| value.to_s.strip }
@@ -415,6 +426,26 @@ class Admin::CompetencyMatrix
     value.to_s.parameterize(separator: "_")
   end
 
+  def filter_competency_identity(scope, table_name:)
+    return scope.where(competency_title: visible_competency_titles) if visible_competency_ids.empty?
+
+    scope.where(
+      "#{table_name}.competency_id IN (:ids) OR #{table_name}.competency_title IN (:titles)",
+      ids: visible_competency_ids,
+      titles: visible_competency_titles
+    )
+  end
+
+  def visible_competency_ids
+    @visible_competency_ids ||= Competency.where(title: visible_competency_titles).pluck(:id)
+  end
+
+  def canonical_competency_title(record)
+    record.competency&.title.presence || record.competency_title
+  rescue ActiveModel::MissingAttributeError
+    record.competency_title
+  end
+
   def base_student_scope
     @base_student_scope ||= begin
       if actor_user&.role_advisor?
@@ -423,6 +454,10 @@ class Admin::CompetencyMatrix
         Student.all
       end
     end
+  end
+
+  def lifecycle_student_scope
+    @lifecycle_student_scope ||= base_student_scope.with_lifecycle_filter(normalized_filters[:student_status])
   end
 
   def visible_competency_titles

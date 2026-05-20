@@ -16,6 +16,9 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "My Competencies"
+    assert_includes response.body, "How To Read This Page"
+    assert_includes response.body, "What Changed Since Last Semester?"
+    assert_includes response.body, "End-of-program target"
     assert_includes response.body, @competency_title
   end
 
@@ -132,7 +135,7 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_select "input[name='sources[]'][value='self'][checked='checked']"
     assert_select "th", text: "Self"
     assert_select "th", text: "Course", count: 0
-    assert_select "th", text: "End of Program Target", count: 0
+    assert_select "th", text: "End-of-Program Target", count: 0
     refute_includes response.body, "\"label\":\"Course\""
   end
 
@@ -218,10 +221,10 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "2 sources"
     assert_includes response.body, "PHPM-601-700"
     assert_includes response.body, "Competency level 1"
-    assert_includes response.body, "Target level 3"
+    assert_includes response.body, "Course target level 3"
     assert_includes response.body, "PHPM-633-700"
     assert_includes response.body, "Competency level 5"
-    assert_includes response.body, "Target level 4"
+    assert_includes response.body, "Course target level 4"
     refute_includes response.body, "Community Assessment"
     refute_includes response.body, "Raw 71.0"
     refute_includes response.body, "PHPM-601.xlsx"
@@ -248,8 +251,9 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     get student_competencies_path(semester: @survey.semester)
 
     assert_response :success
-    assert_select "th", "End of Program Target"
+    assert_select "th", "End-of-Program Target"
     refute_includes response.body, "<th>Course Target</th>"
+    assert_includes response.body, "End-of-program expectation"
     assert_select ".c-score-pill--program", text: "5"
     assert_select ".c-score-pill--program", text: "2", count: 0
   end

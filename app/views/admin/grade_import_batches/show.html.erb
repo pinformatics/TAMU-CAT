@@ -1,16 +1,20 @@
 <% button_help = {
   back_to_batches: "Return to the grade import batch history without changing this batch.",
   commit_preview: "Publish this preview so its imported course competency ratings appear in student, admin, and report views.",
-  approve_preview: "Confirm an admin reviewed the failed or pending rows and allow this preview to be committed.",
+  approve_preview: "Confirm an admin reviewed failed, pending, or target-warning rows and allow this preview to be committed.",
   recommit_batch: "Restore this rolled-back batch so its preserved competency data becomes visible again.",
   export_csv: "Download the derived competency ratings created from this batch.",
   correction_file: "Download failed and pending rows in a correction-friendly CSV.",
   error_report: "Download only the parser and validation errors for this batch.",
+  reupload_files: "Upload corrected files into this preview. Matching filenames replace previous rows in this batch.",
+  rebuild_ratings: "Recalculate derived competency ratings from the current imported evidence rows.",
+  finalize_batch: "Lock this committed batch after review so rows, ratings, semester, and rollback/delete actions are protected.",
   rollback_batch: "Hide this committed batch from downstream competency views while preserving its rows.",
   delete_batch: "Permanently remove this batch and its imported rows, including duplicate fingerprints.",
   update_semester: "Apply the selected semester to this batch so semester filters include it correctly.",
   new_batch: "Start a new grade import batch upload."
 } %>
+<% target_review_required = @batch.dry_run? && @target_warning_summary[:requires_review] %>
 
 <main class="c-main c-main--dashboard">
   <div class="c-page">
@@ -34,67 +38,6 @@
                 class: button_classes(:secondary),
                 title: button_help[:back_to_batches],
                 aria: { label: button_help[:back_to_batches] } %>
-          <% if @batch.committable_dry_run? %>
-            <%= button_to "Commit preview",
-                  commit_admin_grade_import_batch_path(@batch),
-                  method: :post,
-                  class: button_classes(:primary),
-                  title: button_help[:commit_preview],
-                  aria: { label: button_help[:commit_preview] },
-                  form: { data: { turbo_confirm: "Publish this preview so its course competency ratings appear in the app?" } } %>
-          <% end %>
-          <% if @batch.needs_admin_approval? && !@batch.admin_approved? %>
-            <%= button_to "Approve preview",
-                  approve_admin_grade_import_batch_path(@batch),
-                  method: :post,
-                  class: button_classes(:primary),
-                  title: button_help[:approve_preview],
-                  aria: { label: button_help[:approve_preview] },
-                  form: { data: { turbo_confirm: "Confirm that you reviewed the failed and pending rows for this preview?" } } %>
-          <% end %>
-          <% if @batch.recommittable_rollback? %>
-            <%= button_to "Recommit batch",
-                  recommit_admin_grade_import_batch_path(@batch),
-                  method: :post,
-                  class: button_classes(:primary),
-                  title: button_help[:recommit_batch],
-                  aria: { label: button_help[:recommit_batch] },
-                  form: { data: { turbo_confirm: "Make this rolled-back batch visible in the app again?" } } %>
-          <% end %>
-          <%= link_to "Export CSV",
-                export_ratings_admin_grade_import_batch_path(@batch, format: :csv),
-                class: button_classes(:secondary),
-                title: button_help[:export_csv],
-                aria: { label: button_help[:export_csv] },
-                data: { turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." } %>
-          <%= link_to "Correction file",
-                correction_file_admin_grade_import_batch_path(@batch, format: :csv),
-                class: button_classes(:secondary),
-                title: button_help[:correction_file],
-                aria: { label: button_help[:correction_file] },
-                data: { turbo_confirm: "FERPA reminder: this correction file may include student identifiers and course data. Continue only for a legitimate educational interest." } %>
-          <%= link_to "Error report",
-                error_report_admin_grade_import_batch_path(@batch),
-                class: button_classes(:secondary),
-                title: button_help[:error_report],
-                aria: { label: button_help[:error_report] },
-                data: { turbo_confirm: "FERPA reminder: this error report may include student identifiers and course data. Continue only for a legitimate educational interest." } %>
-          <% unless @batch.rolled_back? || @batch.dry_run? %>
-            <%= button_to "Rollback batch",
-                  rollback_admin_grade_import_batch_path(@batch),
-                  method: :post,
-                  class: button_classes(:danger),
-                  title: button_help[:rollback_batch],
-                  aria: { label: button_help[:rollback_batch] },
-                  form: { data: { turbo_confirm: "Hide this committed batch from competencies, reports, and other downstream views?" } } %>
-          <% end %>
-          <%= button_to "Delete batch",
-                admin_grade_import_batch_path(@batch),
-                method: :delete,
-                class: button_classes(:danger),
-                title: button_help[:delete_batch],
-                aria: { label: button_help[:delete_batch] },
-                form: { data: { turbo_confirm: "Permanently delete this batch and all imported rows? This removes duplicate fingerprints so the same files can be uploaded again." } } %>
         </div>
       </header>
     </section>
@@ -103,6 +46,14 @@
       <% if @batch.summary["rolled_back_at"].present? %>
         <div class="c-callout">
           Rolled back at <%= @batch.summary["rolled_back_at"] %>.
+        </div>
+      <% end %>
+
+      <% if @batch.finalized? %>
+        <div class="c-callout c-callout--info">
+          <strong>Finalized and locked:</strong>
+          <%= @batch.summary["finalized_by"].presence || "Admin" %>
+          finalized this batch at <%= @batch.summary["finalized_at"] %>. Imported rows, derived ratings, semester assignment, rollback, and delete actions are locked.
         </div>
       <% end %>
 
@@ -121,19 +72,7 @@
         </div>
       <% end %>
 
-      <% if @batch.dry_run? %>
-        <div class="c-callout <%= @validation_summary[:failed_files].zero? ? 'c-callout--info' : 'c-callout--warning' %>">
-          <strong>Preview validation:</strong>
-          <%= pluralize(@validation_summary[:imported_rows], "imported row") %>,
-          <%= pluralize(@validation_summary[:pending_rows], "pending student match") %>,
-          <%= pluralize(@validation_summary[:failed_rows], "failed row") %>,
-          <%= pluralize(@validation_summary[:duplicate_rows], "duplicate row") %>,
-          and <%= pluralize(@validation_summary[:duplicate_file_uploads], "duplicate file upload warning") %>.
-          Review the mapping preview and correction file before committing.
-        </div>
-      <% end %>
-
-      <% if @batch.needs_admin_approval? %>
+      <% if @batch.needs_admin_approval? || target_review_required %>
         <% if @batch.admin_approved? %>
           <div class="c-callout c-callout--info">
             <strong>Admin approved:</strong>
@@ -143,7 +82,7 @@
         <% else %>
           <div class="c-callout c-callout--warning">
             <strong>Admin approval required:</strong>
-            This preview has failed or pending rows. Review the diagnostics and correction file, then approve it before committing.
+            This preview has failed, pending, or target-warning rows. Review the diagnostics, target warnings, and correction file, then approve it before committing.
           </div>
         <% end %>
       <% end %>
@@ -153,6 +92,250 @@
           <strong>Duplicate upload warning:</strong>
           This batch includes <%= pluralize(@duplicate_upload_warnings, "file") %> with a checksum seen in an earlier batch. Duplicate rows are suppressed, but review the source and batch notes before committing.
         </div>
+      <% end %>
+
+      <section class="u-stack u-stack--md">
+        <div>
+          <p class="c-eyebrow">Batch actions</p>
+          <h2 class="c-heading-inline">Next Steps</h2>
+        </div>
+
+        <div class="u-grid" style="--u-grid-min: 260px">
+          <section class="u-stack u-stack--sm">
+            <div>
+              <p class="c-table__title">Review Workflow</p>
+              <p class="c-help">Use these after diagnostics, corrections, and target warnings have been reviewed.</p>
+            </div>
+            <div class="u-actions u-actions--start">
+              <% workflow_action_rendered = false %>
+              <% if @batch.committable_dry_run? && (!target_review_required || @batch.admin_approved?) %>
+                <% workflow_action_rendered = true %>
+                <%= button_to "Commit preview",
+                      commit_admin_grade_import_batch_path(@batch),
+                      method: :post,
+                      class: button_classes(:primary),
+                      title: button_help[:commit_preview],
+                      aria: { label: button_help[:commit_preview] },
+                      form: { data: { turbo_confirm: "Publish this preview so its course competency ratings appear in the app?" } } %>
+              <% end %>
+              <% if @batch.dry_run? && (@batch.needs_admin_approval? || target_review_required) && !@batch.admin_approved? %>
+                <% workflow_action_rendered = true %>
+                <%= button_to "Approve preview",
+                      approve_admin_grade_import_batch_path(@batch),
+                      method: :post,
+                      class: button_classes(:primary),
+                      title: button_help[:approve_preview],
+                      aria: { label: button_help[:approve_preview] },
+                      form: { data: { turbo_confirm: "Confirm that you reviewed failed, pending, and target-warning rows for this preview?" } } %>
+              <% end %>
+              <% if @batch.recommittable_rollback? %>
+                <% workflow_action_rendered = true %>
+                <%= button_to "Recommit batch",
+                      recommit_admin_grade_import_batch_path(@batch),
+                      method: :post,
+                      class: button_classes(:primary),
+                      title: button_help[:recommit_batch],
+                      aria: { label: button_help[:recommit_batch] },
+                      form: { data: { turbo_confirm: "Make this rolled-back batch visible in the app again?" } } %>
+              <% end %>
+              <% if @batch.grade_competency_evidences.exists? && !@batch.finalized? %>
+                <% workflow_action_rendered = true %>
+                <%= button_to "Rebuild ratings",
+                      rebuild_ratings_admin_grade_import_batch_path(@batch),
+                      method: :post,
+                      class: button_classes(:secondary),
+                      title: button_help[:rebuild_ratings],
+                      aria: { label: button_help[:rebuild_ratings] },
+                      form: { data: { turbo_confirm: "Rebuild derived competency ratings from the current evidence rows?" } } %>
+              <% end %>
+              <% if @batch.finalizable? %>
+                <% workflow_action_rendered = true %>
+                <%= button_to "Finalize batch",
+                      finalize_admin_grade_import_batch_path(@batch),
+                      method: :post,
+                      class: button_classes(:primary),
+                      title: button_help[:finalize_batch],
+                      aria: { label: button_help[:finalize_batch] },
+                      form: { data: { turbo_confirm: "Finalize and lock this committed batch after review?" } } %>
+              <% end %>
+              <% unless workflow_action_rendered %>
+                <span class="c-help">No review action is currently available.</span>
+              <% end %>
+            </div>
+          </section>
+
+          <% if @batch.dry_run? && !@batch.finalized? %>
+            <section class="u-stack u-stack--sm">
+              <div>
+                <p class="c-table__title">Correct Uploads</p>
+                <p class="c-help">Re-upload the corrected CSV or workbook before approval or commit.</p>
+              </div>
+              <%= form_with url: reupload_admin_grade_import_batch_path(@batch),
+                    method: :post,
+                    local: true,
+                    multipart: true,
+                    data: { turbo: false },
+                    class: "u-stack u-stack--sm" do %>
+                <div class="c-field">
+                  <label class="c-label" for="batch_reupload_files">Corrected file</label>
+                  <%= file_field_tag "files[]",
+                        id: "batch_reupload_files",
+                        multiple: true,
+                        accept: ".xlsx,.xlsm,.csv",
+                        class: "c-input" %>
+                  <span class="c-help">Use the same filename to replace that file's previous rows in this batch.</span>
+                </div>
+                <div class="u-actions u-actions--start">
+                  <%= submit_tag "Re-upload files",
+                        class: button_classes(:secondary),
+                        title: button_help[:reupload_files],
+                        aria: { label: button_help[:reupload_files] },
+                        data: { turbo_confirm: "Re-upload corrected files into this preview? Matching filenames will replace prior rows in this batch." } %>
+                </div>
+              <% end %>
+            </section>
+          <% end %>
+
+          <section class="u-stack u-stack--sm">
+            <div>
+              <p class="c-table__title">Exports</p>
+              <p class="c-help">Download review files and student-level outputs.</p>
+            </div>
+            <div class="u-actions u-actions--start">
+              <%= link_to "Export CSV",
+                    export_ratings_admin_grade_import_batch_path(@batch, format: :csv),
+                    class: button_classes(:secondary),
+                    title: button_help[:export_csv],
+                    aria: { label: button_help[:export_csv] },
+                    data: { turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." } %>
+              <%= link_to "Correction file",
+                    correction_file_admin_grade_import_batch_path(@batch, format: :csv),
+                    class: button_classes(:secondary),
+                    title: button_help[:correction_file],
+                    aria: { label: button_help[:correction_file] },
+                    data: { turbo_confirm: "FERPA reminder: this correction file may include student identifiers and course data. Continue only for a legitimate educational interest." } %>
+              <%= link_to "Error report",
+                    error_report_admin_grade_import_batch_path(@batch),
+                    class: button_classes(:secondary),
+                    title: button_help[:error_report],
+                    aria: { label: button_help[:error_report] },
+                    data: { turbo_confirm: "FERPA reminder: this error report may include student identifiers and course data. Continue only for a legitimate educational interest." } %>
+            </div>
+          </section>
+
+          <section class="u-stack u-stack--sm">
+            <div>
+              <p class="c-table__title">Batch Management</p>
+              <p class="c-help">Destructive or visibility-changing actions.</p>
+            </div>
+            <div class="u-actions u-actions--start">
+              <% management_action_rendered = false %>
+              <% unless @batch.rolled_back? || @batch.dry_run? || @batch.finalized? %>
+                <% management_action_rendered = true %>
+                <%= button_to "Rollback batch",
+                      rollback_admin_grade_import_batch_path(@batch),
+                      method: :post,
+                      class: button_classes(:danger),
+                      title: button_help[:rollback_batch],
+                      aria: { label: button_help[:rollback_batch] },
+                      form: { data: { turbo_confirm: "Hide this committed batch from competencies, reports, and other downstream views?" } } %>
+              <% end %>
+              <% unless @batch.finalized? %>
+                <% management_action_rendered = true %>
+                <%= button_to "Delete batch",
+                      admin_grade_import_batch_path(@batch),
+                      method: :delete,
+                      class: button_classes(:danger),
+                      title: button_help[:delete_batch],
+                      aria: { label: button_help[:delete_batch] },
+                      form: { data: { turbo_confirm: "Permanently delete this batch and all imported rows? This removes duplicate fingerprints so the same files can be uploaded again." } } %>
+              <% end %>
+              <% unless management_action_rendered %>
+                <span class="c-help">This batch is locked.</span>
+              <% end %>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <% if target_review_required %>
+        <details class="c-card c-card--flush c-section-group" open>
+          <summary class="c-section-group__header">
+            <h2>Target Warnings Before Commit</h2>
+            <span>
+              <%= pluralize(@target_warning_summary.dig(:counts, :missing_course_targets).to_i, "missing uploaded target") %>
+            </span>
+          </summary>
+
+          <div class="u-stack u-stack--md u-p-md">
+            <div class="c-callout c-callout--warning">
+              Review these rows before committing. Course targets currently come from the uploaded mastery-points columns, so imported evidence should include that target value when a result is present.
+            </div>
+
+            <% warning_groups = [
+              ["Missing Uploaded Course Targets", @target_warning_summary[:missing_course_targets]]
+            ] %>
+            <% warning_groups.each do |title, rows| %>
+              <% next if rows.blank? %>
+              <section class="u-stack u-stack--sm">
+                <h3 class="c-heading-inline"><%= title %></h3>
+                <div class="c-table-wrapper">
+                  <table class="c-table c-table--sm">
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th>Course</th>
+                        <th>Competency</th>
+                        <th>Uploaded Target</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% rows.each do |row| %>
+                        <tr>
+                          <td>
+                            <span class="c-table__title"><%= row[:student] %></span>
+                            <span class="c-table__meta"><%= [row[:track], row[:class_of].present? ? "Class of #{row[:class_of]}" : nil].compact.join(" / ") %></span>
+                          </td>
+                          <td><%= row[:course_code] %></td>
+                          <td class="c-table__title"><%= row[:competency] %></td>
+                          <td><%= row[:course_target].presence || "Missing" %></td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            <% end %>
+
+            <% if @target_warning_summary[:target_coverage].present? %>
+              <section class="u-stack u-stack--sm">
+                <h3 class="c-heading-inline">Target Coverage</h3>
+                <div class="c-table-wrapper">
+                  <table class="c-table c-table--sm">
+                    <thead>
+                      <tr>
+                        <th>Course</th>
+                        <th>Competency</th>
+                        <th>Targets Present</th>
+                        <th>Missing</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% @target_warning_summary[:target_coverage].first(50).each do |coverage| %>
+                        <tr>
+                          <td><%= coverage[:course_code] %></td>
+                          <td class="c-table__title"><%= coverage[:competency] %></td>
+                          <td><%= "#{coverage[:present_count]} / #{coverage[:total_count]}" %></td>
+                          <td><%= coverage[:missing_count] %></td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            <% end %>
+          </div>
+        </details>
       <% end %>
 
       <section class="c-card c-card--tight">
@@ -241,7 +424,10 @@
                         <summary class="c-cell-details__summary"><%= pluralize(file.parse_errors.size, "issue") %></summary>
                         <ul class="u-mt-sm">
                           <% file.parse_errors.first(20).each do |err| %>
-                            <li>Row <%= err["row"] || "—" %>: <%= err["message"] || err %></li>
+                            <li>
+                              <% if err["type"].present? %><strong><%= err["type"].to_s.humanize %>:</strong><% end %>
+                              Row <%= err["row"] || "—" %>: <%= err["message"] || err %>
+                            </li>
                           <% end %>
                         </ul>
                       </details>
@@ -403,7 +589,10 @@
                   <h3 class="c-heading-inline">Diagnostics</h3>
                   <ul class="c-help u-stack u-stack--xs">
                     <% Array(file.parse_errors).first(20).each do |error| %>
-                      <li>Row <%= error["row"] || "—" %>: <%= error["message"] || error %></li>
+                      <li>
+                        <% if error["type"].present? %><strong><%= error["type"].to_s.humanize %>:</strong><% end %>
+                        Row <%= error["row"] || "—" %>: <%= error["message"] || error %>
+                      </li>
                     <% end %>
                     <% Array(debug["mapping_warnings_preview"]).first(10).each do |warning| %>
                       <li>Mapping row <%= warning["row"] || "—" %>: <%= warning["message"] || warning %></li>
@@ -424,29 +613,107 @@
           <h2>Pending Student Matches</h2>
           <span><%= pluralize(@pending_rows.size, "row") %></span>
         </summary>
-        <% pending_students = @pending_rows.map { |row| [row.student_name.presence || row.student_identifier.presence || "Unknown Student", row.student_uin.presence || "No UIN"] }.uniq %>
-        <% if pending_students.empty? %>
+        <% if @pending_rows.empty? %>
           <div class="c-empty-state">
             <p class="c-empty-state__body">No pending student matches were created for this batch.</p>
           </div>
         <% else %>
-          <div class="c-table-wrapper">
-            <table class="c-table c-table--sm">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>UIN</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% pending_students.each do |student_label, student_uin| %>
-                  <tr>
-                    <td class="c-table__title"><%= student_label %></td>
-                    <td><%= student_uin %></td>
-                  </tr>
-                <% end %>
-              </tbody>
-            </table>
+          <div class="u-stack u-stack--sm u-p-md">
+            <% @pending_rows.each do |row| %>
+              <details class="c-accordion">
+                <summary class="c-accordion__summary">
+                  <span class="c-accordion__title"><%= row.student_name.presence || row.student_identifier.presence || "Unknown Student" %></span>
+                  <span class="c-accordion__meta">
+                    <%= row.course_code.presence || "No course" %>
+                    · <%= row.competency_title %>
+                    · row <%= row.row_number || "—" %>
+                  </span>
+                </summary>
+
+                <div class="u-stack u-stack--md u-p-md">
+                  <div class="c-table-wrapper">
+                    <table class="c-table c-table--sm">
+                      <tbody>
+                        <tr>
+                          <th>File</th>
+                          <td><%= row.grade_import_file&.file_name %></td>
+                        </tr>
+                        <tr>
+                          <th>Imported student</th>
+                          <td><%= [row.student_name, row.student_uin, row.student_email].compact_blank.join(" / ") %></td>
+                        </tr>
+                        <tr>
+                          <th>Evidence</th>
+                          <td><%= [row.course_code, row.assignment_name, row.competency_title].compact_blank.join(" / ") %></td>
+                        </tr>
+                        <tr>
+                          <th>Levels</th>
+                          <td>Result <%= row.mapped_level %>; course target <%= row.course_target_level.presence || "missing" %></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <% if @batch.finalized? %>
+                    <div class="c-callout c-callout--info">This batch is finalized and locked.</div>
+                  <% else %>
+                    <%= form_with url: pending_row_admin_grade_import_batch_path(@batch, row),
+                          method: :patch,
+                          local: true,
+                          data: { turbo: false },
+                          class: "u-stack u-stack--md" do %>
+                      <div class="u-grid" style="--u-grid-min: 220px">
+                        <div class="c-field">
+                          <%= label_tag "grade_import_pending_row_#{row.id}_matched_student_id", "Match to student", class: "c-label" %>
+                          <%= select_tag "grade_import_pending_row[matched_student_id]",
+                                options_for_select(
+                                  [["Keep pending", ""]] + @student_match_options.map { |student| ["#{student.user&.display_name || student.student_id} (UIN #{student.uin.presence || 'missing'})", student.student_id] },
+                                  row.matched_student_id
+                                ),
+                                id: "grade_import_pending_row_#{row.id}_matched_student_id",
+                                class: "c-select u-w-full" %>
+                        </div>
+                        <div class="c-field">
+                          <%= label_tag "grade_import_pending_row_#{row.id}_student_uin", "Student UIN", class: "c-label" %>
+                          <%= text_field_tag "grade_import_pending_row[student_uin]", row.student_uin, id: "grade_import_pending_row_#{row.id}_student_uin", class: "c-input" %>
+                        </div>
+                        <div class="c-field">
+                          <%= label_tag "grade_import_pending_row_#{row.id}_student_email", "Student email", class: "c-label" %>
+                          <%= email_field_tag "grade_import_pending_row[student_email]", row.student_email, id: "grade_import_pending_row_#{row.id}_student_email", class: "c-input" %>
+                        </div>
+                        <div class="c-field">
+                          <%= label_tag "grade_import_pending_row_#{row.id}_student_name", "Student name", class: "c-label" %>
+                          <%= text_field_tag "grade_import_pending_row[student_name]", row.student_name, id: "grade_import_pending_row_#{row.id}_student_name", class: "c-input" %>
+                        </div>
+                        <div class="c-field">
+                          <%= label_tag "grade_import_pending_row_#{row.id}_course_code", "Course code", class: "c-label" %>
+                          <%= text_field_tag "grade_import_pending_row[course_code]", row.course_code, id: "grade_import_pending_row_#{row.id}_course_code", class: "c-input" %>
+                        </div>
+                        <div class="c-field">
+                          <%= label_tag "grade_import_pending_row_#{row.id}_competency_title", "Competency", class: "c-label" %>
+                          <%= select_tag "grade_import_pending_row[competency_title]",
+                                options_for_select(Reports::DataAggregator::COMPETENCY_TITLES, row.competency_title),
+                                id: "grade_import_pending_row_#{row.id}_competency_title",
+                                class: "c-select u-w-full" %>
+                        </div>
+                        <div class="c-field">
+                          <%= label_tag "grade_import_pending_row_#{row.id}_mapped_level", "Result level", class: "c-label" %>
+                          <%= number_field_tag "grade_import_pending_row[mapped_level]", row.mapped_level, id: "grade_import_pending_row_#{row.id}_mapped_level", class: "c-input", min: 1, max: 5 %>
+                        </div>
+                        <div class="c-field">
+                          <%= label_tag "grade_import_pending_row_#{row.id}_course_target_level", "Course target", class: "c-label" %>
+                          <%= number_field_tag "grade_import_pending_row[course_target_level]", row.course_target_level, id: "grade_import_pending_row_#{row.id}_course_target_level", class: "c-input", min: 1, max: 5 %>
+                        </div>
+                      </div>
+
+                      <div class="u-actions u-actions--start">
+                        <%= submit_tag "Save correction", class: button_classes(:secondary) %>
+                      </div>
+                    <% end %>
+                  <% end %>
+                </div>
+              </details>
+            <% end %>
           </div>
         <% end %>
       </details>
@@ -481,6 +748,7 @@
                         <th>Actual Level</th>
                         <th>Course Target</th>
                         <th>Source</th>
+                        <th>Correction</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -500,6 +768,48 @@
                           <td><span class="c-score-pill c-score-pill--course"><%= evidence.mapped_level %></span></td>
                           <td><span class="c-score-pill c-score-pill--program <%= 'c-score-pill--empty' if evidence.course_target_level.blank? %>"><%= evidence.course_target_level.presence || "—" %></span></td>
                           <td><%= evidence.grade_import_file&.file_name %></td>
+                          <td>
+                            <% if @batch.finalized? %>
+                              <span class="c-muted">Locked</span>
+                            <% else %>
+                              <details class="c-cell-details">
+                                <summary class="c-cell-details__summary">Edit</summary>
+                                <%= form_with url: evidence_admin_grade_import_batch_path(@batch, evidence),
+                                      method: :patch,
+                                      local: true,
+                                      data: { turbo: false },
+                                      class: "u-stack u-stack--sm u-mt-sm" do %>
+                                  <div class="c-field">
+                                    <%= label_tag "grade_competency_evidence_#{evidence.id}_competency_title", "Competency", class: "c-label" %>
+                                    <%= select_tag "grade_competency_evidence[competency_title]",
+                                          options_for_select(Reports::DataAggregator::COMPETENCY_TITLES, evidence.competency_title),
+                                          id: "grade_competency_evidence_#{evidence.id}_competency_title",
+                                          class: "c-select u-w-full" %>
+                                  </div>
+                                  <div class="c-field">
+                                    <%= label_tag "grade_competency_evidence_#{evidence.id}_course_code", "Course", class: "c-label" %>
+                                    <%= text_field_tag "grade_competency_evidence[course_code]", evidence.course_code, id: "grade_competency_evidence_#{evidence.id}_course_code", class: "c-input" %>
+                                  </div>
+                                  <div class="c-field">
+                                    <%= label_tag "grade_competency_evidence_#{evidence.id}_assignment_name", "Assignment", class: "c-label" %>
+                                    <%= text_field_tag "grade_competency_evidence[assignment_name]", evidence.assignment_name, id: "grade_competency_evidence_#{evidence.id}_assignment_name", class: "c-input" %>
+                                  </div>
+                                  <div class="u-grid" style="--u-grid-min: 110px">
+                                    <div class="c-field">
+                                      <%= label_tag "grade_competency_evidence_#{evidence.id}_mapped_level", "Result", class: "c-label" %>
+                                      <%= number_field_tag "grade_competency_evidence[mapped_level]", evidence.mapped_level, id: "grade_competency_evidence_#{evidence.id}_mapped_level", class: "c-input", min: 1, max: 5 %>
+                                    </div>
+                                    <div class="c-field">
+                                      <%= label_tag "grade_competency_evidence_#{evidence.id}_course_target_level", "Target", class: "c-label" %>
+                                      <%= number_field_tag "grade_competency_evidence[course_target_level]", evidence.course_target_level, id: "grade_competency_evidence_#{evidence.id}_course_target_level", class: "c-input", min: 1, max: 5 %>
+                                    </div>
+                                  </div>
+                                  <%= hidden_field_tag "grade_competency_evidence[raw_grade]", evidence.raw_grade %>
+                                  <%= submit_tag "Save", class: button_classes(:secondary, extra_classes: "btn-sm") %>
+                                <% end %>
+                              </details>
+                            <% end %>
+                          </td>
                         </tr>
                       <% end %>
                     </tbody>

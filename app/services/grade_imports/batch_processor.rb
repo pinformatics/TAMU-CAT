@@ -87,19 +87,22 @@ module GradeImports
       "legal & ethical bases for health services and health systems" => "Legal & Ethical Bases for Health Services and Health Systems"
     }.freeze
 
-    def initialize(batch:, files:, dry_run: false)
+    def initialize(batch:, files:, dry_run: false, replace_existing_files: false)
       @batch = batch
       @files = Array(files)
       @dry_run = dry_run
+      @replace_existing_files = replace_existing_files
       @student_cache_by_uin = {}
       @student_cache_by_email = {}
     end
 
     def call
+      replace_existing_batch_files! if replace_existing_files?
+
       batch.update!(
         status: "processing",
         started_at: Time.current,
-        total_files: files.size,
+        total_files: batch.grade_import_files.count + files.size,
         summary: batch.summary.merge("dry_run" => dry_run?)
       )
 
@@ -152,19 +155,20 @@ module GradeImports
       batch.update!(
         status: final_status,
         completed_at: Time.current,
+        total_files: file_scope.count,
         processed_files: successful_files,
         failed_files: failed_files,
         evidence_count: evidence_count,
         rating_count: rating_count,
         pending_count: pending_count,
         summary: batch.summary.merge(
-          files_uploaded: files.size,
-          files_processed: successful_files,
-          files_failed: failed_files,
-          pending_rows: pending_count,
-          evidences_created: evidence_count,
-          ratings_created: rating_count,
-          preview_validation: preview_validation_summary(batch)
+          "files_uploaded" => files.size,
+          "files_processed" => successful_files,
+          "files_failed" => failed_files,
+          "pending_rows" => pending_count,
+          "evidences_created" => evidence_count,
+          "ratings_created" => rating_count,
+          "preview_validation" => preview_validation_summary(batch)
         )
       )
 
@@ -177,6 +181,17 @@ module GradeImports
 
     def dry_run?
       @dry_run == true
+    end
+
+    def replace_existing_files?
+      @replace_existing_files == true
+    end
+
+    def replace_existing_batch_files!
+      file_names = files.map { |uploaded_file| uploaded_file.original_filename.to_s }.compact_blank
+      return if file_names.empty?
+
+      batch.grade_import_files.where(file_name: file_names).find_each(&:destroy!)
     end
 
     def process_file!(grade_file, uploaded_file)
@@ -340,14 +355,15 @@ module GradeImports
       student_name_header = headers.find { |header| normalize_key(header) == "student_name" }
       student_id_header = headers.find { |header| normalize_key(header) == "student_id" }
       student_sis_id_header = headers.find { |header| normalize_key(header) == "student_sis_id" }
-      competency_columns = direct_competency_columns(headers)
+      direct_mapping = direct_competency_column_mapping(headers)
+      competency_columns = direct_mapping[:columns]
       course_code = normalized_direct_course_code(source_name.presence || fallback_source_name)
       assignment_name = ""
 
       imported_rows = 0
       pending_rows = 0
-      error_rows = 0
-      errors = []
+      errors = direct_mapping[:errors].dup
+      error_rows = errors.size
       duplicate_warnings = []
       matched_students = Set.new
       seen_rows = Hash.new(0)
@@ -375,7 +391,7 @@ module GradeImports
 
         if identifier.blank?
           error_rows += 1
-          errors << row_error(row_number, "Student SIS ID, Student ID, or Student name is required")
+          errors << row_error(row_number, "Student SIS ID, Student ID, or Student name is required", type: "student_identifier")
           next
         end
 
@@ -389,19 +405,46 @@ module GradeImports
           result_value = row[column[:result_header]]
           result_level = parse_level_value(result_value)
           raw_points = parse_decimal(result_value)
-          course_target_level = parse_level_value(row[column[:mastery_points_header]])
-          next if result_level.nil? && course_target_level.nil?
+          mastery_value = column[:mastery_points_header].present? ? row[column[:mastery_points_header]] : nil
+          course_target_level = parse_level_value(mastery_value)
+
+          if result_value.blank?
+            if mastery_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
+              row_had_value = true
+              error_rows += 1
+              errors << row_error(
+                row_number,
+                "#{column[:competency_title]} mastery points must be an integer between 1 and 5",
+                type: "invalid_value",
+                column: column[:mastery_points_header],
+                value: mastery_value
+              )
+            end
+            next
+          end
 
           row_had_value = true
           if result_level.nil? || !(1..5).cover?(result_level)
             error_rows += 1
-            errors << row_error(row_number, "#{column[:competency_title]} result must be an integer between 1 and 5")
+            errors << row_error(
+              row_number,
+              "#{column[:competency_title]} result must be an integer between 1 and 5",
+              type: result_value.blank? ? "missing_value" : "invalid_value",
+              column: column[:result_header],
+              value: result_value
+            )
             next
           end
 
-          if course_target_level.present? && !(1..5).cover?(course_target_level)
+          if mastery_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
             error_rows += 1
-            errors << row_error(row_number, "#{column[:competency_title]} mastery points must be an integer between 1 and 5")
+            errors << row_error(
+              row_number,
+              "#{column[:competency_title]} mastery points must be an integer between 1 and 5",
+              type: "invalid_value",
+              column: column[:mastery_points_header],
+              value: mastery_value
+            )
             next
           end
 
@@ -485,7 +528,7 @@ module GradeImports
         next if row_had_value
 
         error_rows += 1
-        errors << row_error(row_number, "No direct competency result values were found in this row")
+        errors << row_error(row_number, "No direct competency result values were found in this row", type: "missing_value")
       end
 
       {
@@ -502,6 +545,8 @@ module GradeImports
           direct_course_code: course_code,
           direct_assignment_name: assignment_name,
           direct_competency_count: competency_columns.size,
+          direct_mapping_issue_count: direct_mapping[:errors].size,
+          direct_mapping_issues_preview: direct_mapping[:errors].first(50),
           direct_competencies_preview: competency_columns.first(50),
           grade_sheet_debug: {
             mode: "direct_competency",
@@ -539,7 +584,7 @@ module GradeImports
       normalized = headers.map { |header| normalize_key(header) }
       has_student_id = normalized.include?("student_id")
       has_student_sis_id = normalized.include?("student_sis_id")
-      direct_columns_present = direct_competency_columns(headers).any?
+      direct_columns_present = direct_competency_result_headers(headers).any?
 
       unless (has_student_id || has_student_sis_id) && direct_columns_present
         raise "Not a direct competency export"
@@ -549,26 +594,66 @@ module GradeImports
     end
 
     def direct_competency_columns(headers)
-      headers.filter_map do |header|
-        next if header.blank?
+      direct_competency_column_mapping(headers)[:columns]
+    end
 
+    def direct_competency_column_mapping(headers)
+      columns = []
+      errors = []
+
+      direct_competency_result_headers(headers).each do |header|
         header_text = header.to_s.strip
-        normalized = normalize_key(header_text)
-        next if normalized.start_with?("hpmc_")
-        next unless DIRECT_COMPETENCY_PREFIXES.any? { |prefix| normalized.start_with?("#{prefix}_competencies_") }
-        next unless normalized.end_with?("_result")
-
         competency_token = extract_direct_competency_title(header_text)
         competency_title = normalized_competency_title(competency_token)
-        next if competency_title.blank?
 
-        mastery_header = header_text.sub(/\s+result\z/i, " mastery points")
-        {
+        if competency_title.blank? || !COMPETENCY_TITLES.include?(competency_title)
+          errors << row_error(
+            1,
+            "Unknown direct competency column '#{header_text}'. Check the competency name against the configured competency list.",
+            type: "mapping",
+            column: header_text,
+            value: competency_token
+          )
+          next
+        end
+
+        mastery_header = direct_mastery_header_for(headers, header_text)
+        if mastery_header.blank?
+          errors << row_error(
+            1,
+            "Missing mastery points column for '#{competency_title}'. Add the paired mastery points column or approve this preview after review.",
+            type: "mapping",
+            column: header_text,
+            value: competency_title
+          )
+        end
+
+        columns << {
           result_header: header_text,
           mastery_points_header: mastery_header,
           competency_title: competency_title
         }
       end
+
+      { columns: columns, errors: errors }
+    end
+
+    def direct_competency_result_headers(headers)
+      headers.filter_map do |header|
+        next if header.blank?
+
+        header_text = header.to_s.strip
+        normalized = normalize_key(header_text)
+        next unless DIRECT_COMPETENCY_PREFIXES.any? { |prefix| normalized.start_with?("#{prefix}_competencies_") }
+        next unless normalized.end_with?("_result")
+
+        header_text
+      end
+    end
+
+    def direct_mastery_header_for(headers, result_header)
+      expected = normalize_key(result_header).sub(/_result\z/, "_mastery_points")
+      headers.find { |header| normalize_key(header) == expected }
     end
 
     def extract_direct_competency_title(header_text)
@@ -776,7 +861,7 @@ module GradeImports
         end
 
         unless COMPETENCY_TITLES.include?(competency)
-          errors << row_error(row_number, "Unknown competency_title '#{competency}'")
+          errors << row_error(row_number, "Unknown competency_title '#{competency}'", type: "mapping", column: "competency_title", value: row[:competency_title])
           next
         end
 
@@ -785,23 +870,23 @@ module GradeImports
         level = parse_integer(row[:competency_level])
 
         if min_grade.nil? || max_grade.nil?
-          errors << row_error(row_number, "min_grade and max_grade must be numeric")
+          errors << row_error(row_number, "min_grade and max_grade must be numeric", type: "mapping_value")
           next
         end
 
         if level.nil? || !(1..5).include?(level)
-          errors << row_error(row_number, "competency_level must be an integer between 1 and 5")
+          errors << row_error(row_number, "competency_level must be an integer between 1 and 5", type: "mapping_value", column: "competency_level", value: row[:competency_level])
           next
         end
 
         if max_grade < min_grade
-          errors << row_error(row_number, "max_grade must be greater than or equal to min_grade")
+          errors << row_error(row_number, "max_grade must be greater than or equal to min_grade", type: "mapping_value")
           next
         end
 
         assignment_match_value = row[:assignment_match_value].to_s.strip.presence || row[:assignment_name].to_s.strip.presence
         if assignment_match_value.blank?
-          errors << row_error(row_number, "assignment_match_value (or assignment_name) is required")
+          errors << row_error(row_number, "assignment_match_value (or assignment_name) is required", type: "mapping")
           next
         end
 
@@ -811,14 +896,14 @@ module GradeImports
         score_basis = normalize_key(row[:score_basis])
         score_basis = "points" if score_basis.blank?
         unless %w[points percent].include?(score_basis)
-          errors << row_error(row_number, "score_basis must be 'points' or 'percent'")
+          errors << row_error(row_number, "score_basis must be 'points' or 'percent'", type: "mapping", column: "score_basis", value: row[:score_basis])
           next
         end
 
         match_type = normalize_key(row[:assignment_match_type])
         match_type = "exact" if match_type.blank?
         unless %w[exact contains regex].include?(match_type)
-          errors << row_error(row_number, "assignment_match_type must be exact, contains, or regex")
+          errors << row_error(row_number, "assignment_match_type must be exact, contains, or regex", type: "mapping", column: "assignment_match_type", value: row[:assignment_match_type])
           next
         end
 
@@ -1640,7 +1725,10 @@ module GradeImports
     end
 
     def create_evidence!(grade_file:, student:, source_key:, import_fingerprint:, assignment_name:, course_code:, raw_points:, mapped_level:, competency_title:, row_number:, score_for_mapping:, score_basis:, points_possible:, student_identifiers:, course_target_level: nil)
-      batch.grade_competency_evidences.create!(
+      course_offering = course_offering_for(course_code:, grade_file:)
+      competency = Competency.find_by_normalized_title(competency_title) if defined?(Competency)
+
+      attrs = {
         grade_import_file: grade_file,
         student_id: student.student_id,
         competency_title: competency_title,
@@ -1657,11 +1745,18 @@ module GradeImports
           score_for_mapping: score_for_mapping,
           points_possible: points_possible
         )
-      )
+      }
+      attrs[:competency] = competency if GradeCompetencyEvidence.column_names.include?("competency_id")
+      attrs[:course_offering] = course_offering if GradeCompetencyEvidence.column_names.include?("course_offering_id")
+
+      batch.grade_competency_evidences.create!(attrs)
     end
 
     def create_pending_row!(grade_file:, identifier:, identifier_type:, student_uin:, student_email:, student_name:, assignment_name:, course_code:, raw_points:, mapped_level:, competency_title:, row_number:, score_for_mapping:, score_basis:, points_possible:, source_key: nil, import_fingerprint:, course_target_level: nil)
-      batch.grade_import_pending_rows.create!(
+      course_offering = course_offering_for(course_code:, grade_file:)
+      competency = Competency.find_by_normalized_title(competency_title) if defined?(Competency)
+
+      attrs = {
         grade_import_file: grade_file,
         status: "pending_student_match",
         student_identifier: identifier,
@@ -1689,7 +1784,24 @@ module GradeImports
           score_for_mapping: score_for_mapping,
           points_possible: points_possible
         }
+      }
+      attrs[:competency] = competency if GradeImportPendingRow.column_names.include?("competency_id")
+      attrs[:course_offering] = course_offering if GradeImportPendingRow.column_names.include?("course_offering_id")
+
+      batch.grade_import_pending_rows.create!(attrs)
+    end
+
+    def course_offering_for(course_code:, grade_file:)
+      return if course_code.blank? || !defined?(CourseOffering)
+      return unless CourseOffering.table_exists?
+
+      offering = CourseOffering.find_or_create_from_code!(
+        course_code,
+        program_semester: batch.program_semester,
+        source_name: grade_file.file_name
       )
+      grade_file.update_column(:course_offering_id, offering.id) if offering.present? && GradeImportFile.column_names.include?("course_offering_id") && grade_file.course_offering_id.blank?
+      offering
     end
 
     def find_student_by_uin(uin)
@@ -1749,11 +1861,16 @@ module GradeImports
       COMPETENCY_TITLES.find { |known| normalize_competency_token(known) == normalized }
     end
 
-    def row_error(row_number, message)
-      {
+    def row_error(row_number, message, type: nil, severity: nil, column: nil, value: nil)
+      error = {
         row: row_number,
         message: message
       }
+      error[:type] = type if type.present?
+      error[:severity] = severity if severity.present?
+      error[:column] = column if column.present?
+      error[:value] = value if value.present?
+      error
     end
 
     def build_source_key(identifier:, course_code:, assignment_name:, competency_title:, row_number:)
@@ -1801,6 +1918,10 @@ module GradeImports
       files = batch.grade_import_files.to_a
       duplicate_file_count = files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i }
       duplicate_row_count = files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
+      issue_type_counts = files
+        .flat_map { |file| Array(file.parse_errors).map { |error| error["type"] || error[:type] || "error" } }
+        .compact_blank
+        .tally
 
       {
         commit_ready: files.any? && files.none? { |file| file.status == "failed" },
@@ -1811,6 +1932,7 @@ module GradeImports
         failed_rows: files.sum(&:error_rows),
         duplicate_file_uploads: duplicate_file_count,
         duplicate_rows: duplicate_row_count,
+        issue_type_counts: issue_type_counts,
         checked_at: Time.current.iso8601
       }
     end
@@ -1835,12 +1957,14 @@ module GradeImports
           if previous && entry[:min_grade].to_f < previous[:max_grade].to_f - 0.001
             warnings << {
               row: entry[:source_row_number],
+              type: "mapping_range",
               severity: "error",
               message: "Grade range overlaps a prior mapping range for the same assignment/course/competency"
             }
           elsif previous && entry[:min_grade].to_f > previous[:max_grade].to_f + 0.02
             warnings << {
               row: entry[:source_row_number],
+              type: "mapping_range",
               severity: "error",
               message: "Grade range gap detected for the same assignment/course/competency"
             }

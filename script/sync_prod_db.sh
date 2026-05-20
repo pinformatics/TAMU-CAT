@@ -3,13 +3,15 @@ set -euo pipefail
 
 APP="mha501"
 HEROKU_DATABASE="DATABASE_URL"
-LOCAL_DATABASE="health_development"
+LOCAL_DATABASE="tamu_cat_development"
 DB_SERVICE="db"
 DB_USER="dev_user"
 DB_PASSWORD="dev_pass"
+APP_SERVICE="web"
 RESTORE_CLIENT_IMAGE="postgres:17"
 BACKUP_FILE="${TMPDIR:-/tmp}/mha501-prod-latest.dump"
 SKIP_CONFIRM=0
+SKIP_MIGRATE=0
 USE_LATEST_BACKUP=0
 
 usage() {
@@ -19,13 +21,15 @@ Usage: script/sync_prod_db.sh [options]
 Options:
   --app NAME              Heroku app name. Default: mha501
   --heroku-db NAME        Heroku database attachment. Default: DATABASE_URL
-  --local-db NAME         Local database name. Default: health_development
+  --local-db NAME         Local database name. Default: tamu_cat_development
   --db-service NAME       Docker Compose Postgres service. Default: db
   --db-user NAME          Local Postgres user. Default: dev_user
   --db-password VALUE     Local Postgres password. Default: dev_pass
+  --app-service NAME      Docker Compose Rails service for migrations. Default: web
   --restore-image IMAGE   pg_restore client image. Default: postgres:17
   --backup-file PATH      Local backup download path. Default: /tmp/mha501-prod-latest.dump
   --use-latest-backup     Download latest existing Heroku backup instead of capturing a fresh one
+  --skip-migrate          Do not run local Rails migrations after restore
   --skip-confirm          Do not prompt before dropping local DB
   -h, --help              Show this help
 
@@ -60,6 +64,10 @@ while [[ $# -gt 0 ]]; do
       DB_PASSWORD="$2"
       shift 2
       ;;
+    --app-service)
+      APP_SERVICE="$2"
+      shift 2
+      ;;
     --restore-image)
       RESTORE_CLIENT_IMAGE="$2"
       shift 2
@@ -74,6 +82,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-confirm)
       SKIP_CONFIRM=1
+      shift
+      ;;
+    --skip-migrate)
+      SKIP_MIGRATE=1
       shift
       ;;
     -h|--help)
@@ -98,6 +110,19 @@ require_command() {
 quote_sql_literal() {
   local value="$1"
   printf "'%s'" "${value//\'/\'\'}"
+}
+
+compose_container_id() {
+  local service="$1"
+  local container_id
+  container_id="$(docker compose ps -q "$service" | head -n 1)"
+
+  if [[ -z "$container_id" ]]; then
+    echo "Could not resolve a running Docker Compose container for service '$service'." >&2
+    exit 1
+  fi
+
+  printf '%s' "$container_id"
 }
 
 require_command docker
@@ -179,9 +204,10 @@ docker compose cp "$BACKUP_FILE" "${DB_SERVICE}:/tmp/prod.dump"
 echo "Restoring production backup into local database '$LOCAL_DATABASE'..."
 if ! docker compose exec -T "$DB_SERVICE" pg_restore -U "$DB_USER" -d "$LOCAL_DATABASE" --no-owner --no-acl --clean --if-exists /tmp/prod.dump; then
   echo "Container pg_restore could not read the backup. Retrying with $RESTORE_CLIENT_IMAGE pg_restore..." >&2
+  db_container_id="$(compose_container_id "$DB_SERVICE")"
   set +e
   restore_output="$(docker run --rm \
-    --network "container:$DB_SERVICE" \
+    --network "container:$db_container_id" \
     -e "PGPASSWORD=$DB_PASSWORD" \
     -v "${BACKUP_FILE}:/tmp/prod.dump:ro" \
     "$RESTORE_CLIENT_IMAGE" \
@@ -207,6 +233,11 @@ if ! docker compose exec -T "$DB_SERVICE" pg_restore -U "$DB_USER" -d "$LOCAL_DA
   fi
 fi
 docker compose exec -T "$DB_SERVICE" rm -f /tmp/prod.dump
+
+if [[ "$SKIP_MIGRATE" -ne 1 ]]; then
+  echo "Running local Rails migrations on '$LOCAL_DATABASE'..."
+  docker compose run --rm -e "DATABASE=$LOCAL_DATABASE" "$APP_SERVICE" bin/rails db:migrate
+fi
 
 echo
 echo "Local database '$LOCAL_DATABASE' now contains a copy of Heroku app '$APP'."

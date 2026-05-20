@@ -30,6 +30,10 @@ class GradeImportBatch < ApplicationRecord
     status == "rolled_back"
   end
 
+  def finalized?
+    summary["finalized_at"].present?
+  end
+
   def dry_run?
     ActiveModel::Type::Boolean.new.cast(summary["dry_run"])
   end
@@ -63,5 +67,9 @@ class GradeImportBatch < ApplicationRecord
     previous_status = summary["previous_status"].to_s
     %w[completed completed_with_errors].include?(previous_status) &&
       (grade_competency_evidences.exists? || grade_competency_ratings.exists? || grade_import_pending_rows.exists?)
+  end
+
+  def finalizable?
+    reportable? && !finalized?
   end
 end

@@ -37,6 +37,10 @@
         <%= link_to "Student Records",
                     student_records_path,
                     class: "c-nav-link #{'active' if local_assigns[:active_page] == 'students'}" %>
+
+        <%= link_to "Student Overview",
+                    student_overviews_path,
+                    class: "c-nav-link #{'active' if local_assigns[:active_page] == 'student_overviews'}" %>
       </nav>
     </div>
 

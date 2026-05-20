@@ -11,7 +11,8 @@ module Reports
       {
         filters: matrix_payload[:filters],
         cohort_comparison: cohort_comparison,
-        heatmap: heatmap_rows
+        heatmap: heatmap_rows,
+        target_attainment: target_attainment_rows
       }
     end
 
@@ -67,6 +68,18 @@ module Reports
       end
     end
 
+    def target_attainment_rows
+      students.map do |student|
+        ratings = student[:ratings] || {}
+
+        {
+          student_id: student[:id],
+          met_count: ratings.count { |_title, row| target_met?(row) },
+          total_count: ratings.size
+        }
+      end
+    end
+
     def average_for(cohort_students, rating_key)
       values = cohort_students.flat_map do |student|
         student[:ratings].values.filter_map { |ratings| ratings[rating_key] }
@@ -84,6 +97,13 @@ module Reports
           [ ratings[:course_rating], ratings[:self_rating] ].compact.any? { |value| value.to_f < target.to_f }
         end
       end
+    end
+
+    def target_met?(ratings)
+      target = ratings[:program_target]
+      value = ratings[:course_rating].presence || ratings[:self_rating].presence
+
+      target.present? && value.present? && value.to_f >= target.to_f
     end
 
     def average(values)

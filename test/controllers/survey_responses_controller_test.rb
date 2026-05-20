@@ -1058,8 +1058,8 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
 
     get survey_response_path(survey_response)
     assert_response :success
-    assert_match(/#{Regexp.escape(competency_title)}.*End of Program Target Level: 5\/5/m, response.body)
-    refute_match(/#{Regexp.escape(competency_title)}.*End of Program Target Level: 1\/5/m, response.body)
+    assert_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 5\/5/m, response.body)
+    refute_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 1\/5/m, response.body)
   end
 
   test "show includes released course competency and target context" do
@@ -1112,7 +1112,7 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
     get survey_response_path(SurveyResponse.build(student: student, survey: survey))
 
     assert_response :success
-    assert_includes response.body, "Course level 4"
+    assert_includes response.body, "Course result 4"
     assert_includes response.body, "Course target 5"
   end
 

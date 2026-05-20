@@ -332,8 +332,8 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     get survey_path(@survey)
     assert_response :success
 
-    assert_match(/#{Regexp.escape(competency_title)}.*End of Program Target Level: 4\/5/m, response.body)
-    refute_match(/#{Regexp.escape(competency_title)}.*End of Program Target Level: 1\/5/m, response.body)
+    assert_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 4\/5/m, response.body)
+    refute_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 1\/5/m, response.body)
   end
 
   test "show displays course competency context only when survey setting is enabled" do
@@ -384,12 +384,12 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
     get survey_path(@survey)
     assert_response :success
-    refute_includes response.body, "Course level 4"
+    refute_includes response.body, "Course result 4"
 
     @survey.update!(show_course_competencies_with_survey: true)
     get survey_path(@survey)
     assert_response :success
-    assert_includes response.body, "Course level 4"
+    assert_includes response.body, "Course result 4"
     assert_includes response.body, "Course target 5"
   end
 

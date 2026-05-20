@@ -10,8 +10,8 @@ class StudentCompetencyDashboard
   SOURCE_OPTIONS = {
     "self" => "Self",
     "course" => "Course",
-    "advisor" => "Advisor",
-    "target" => "Target"
+    "advisor" => "Advisor legacy",
+    "target" => "End-of-Program Target"
   }.freeze
 
   def initialize(student:, params: {})
@@ -30,6 +30,7 @@ class StudentCompetencyDashboard
       domains: domain_rows,
       domain_averages: domain_averages,
       summary: student_summary,
+      change_summary: change_summary,
       radar_chart: radar_chart,
       trend_chart: trend_chart,
       course_released: course_released?,
@@ -140,12 +141,14 @@ class StudentCompetencyDashboard
           .pluck("program_semesters.name")
       )
 
-      names.concat(
-        GradeCompetencyRating
+      rating_semester_scope = GradeCompetencyRating
           .joins(:grade_import_batch)
           .merge(GradeImportBatch.reportable)
           .joins("INNER JOIN program_semesters ON program_semesters.id = grade_import_batches.program_semester_id")
-          .where(student_id: student.student_id, competency_title: COMPETENCY_TITLES)
+          .where(student_id: student.student_id)
+
+      names.concat(
+        filter_competency_identity(rating_semester_scope, table_name: "grade_competency_ratings")
           .distinct
           .pluck("program_semesters.name")
       )
@@ -360,19 +363,7 @@ class StudentCompetencyDashboard
 
   def course_rating_details
     @course_rating_details ||= begin
-      rows = GradeCompetencyRating
-        .joins(:grade_import_batch)
-        .merge(GradeImportBatch.reportable)
-        .where(student_id: student.student_id, competency_title: COMPETENCY_TITLES)
-        .select(:competency_title, :aggregated_level, :updated_at, :grade_import_batch_id)
-      rows = filter_course_rows_by_semester(rows)
-
-      rows.group_by(&:competency_title).transform_values do |ratings|
-        {
-          value: CourseCompetencyRule.aggregate(ratings.filter_map { |rating| rating.aggregated_level&.to_f }, rule_key: SiteSetting.course_competency_rule),
-          updated_at: ratings.filter_map(&:updated_at).max
-        }
-      end
+      course_rating_details_for_semester(filters[:semester])
     end
   end
 
@@ -381,12 +372,13 @@ class StudentCompetencyDashboard
       rows = GradeCompetencyEvidence
         .joins(:grade_import_batch)
         .merge(GradeImportBatch.reportable)
-        .includes(:grade_import_file)
-        .where(student_id: student.student_id, competency_title: COMPETENCY_TITLES)
+        .includes(:competency, :grade_import_file)
+        .where(student_id: student.student_id)
         .order(:competency_title, :course_code, :assignment_name, :updated_at)
+      rows = filter_competency_identity(rows, table_name: "grade_competency_evidences")
       rows = filter_course_rows_by_semester(rows)
 
-      rows.group_by(&:competency_title).transform_values do |entries|
+      rows.group_by { |row| canonical_competency_title(row) }.transform_values do |entries|
         entries.map do |entry|
           {
             course_code: entry.course_code.presence || "Unspecified course",
@@ -427,12 +419,13 @@ class StudentCompetencyDashboard
       rows = GradeCompetencyEvidence
         .joins(:grade_import_batch)
         .merge(GradeImportBatch.reportable)
-        .includes(grade_import_batch: { program_semester: :course_grade_release_date })
-        .where(student_id: student.student_id, competency_title: COMPETENCY_TITLES)
-        .select(:competency_title, :grade_import_batch_id)
+        .includes(:competency, grade_import_batch: { program_semester: :course_grade_release_date })
+        .where(student_id: student.student_id)
+      rows = filter_competency_identity(rows, table_name: "grade_competency_evidences")
+        .select(:competency_id, :competency_title, :grade_import_batch_id)
         .to_a
 
-      rows.reject { |row| course_row_released?(row) }.map(&:competency_title).to_set
+      rows.reject { |row| course_row_released?(row) }.map { |row| canonical_competency_title(row) }.to_set
     end
   end
 
@@ -462,12 +455,13 @@ class StudentCompetencyDashboard
     return {} if program_semester.blank? || student.track_key.blank?
 
     records = CompetencyTargetLevel
-      .where(competency_title: COMPETENCY_TITLES, program_semester_id: program_semester.id)
+      .includes(:competency)
+      .where(program_semester_id: program_semester.id)
       .where("LOWER(track) = ?", student.track_key)
-      .to_a
+    records = filter_competency_identity(records, table_name: "competency_target_levels").to_a
 
     COMPETENCY_TITLES.index_with do |title|
-      matches = records.select { |record| record.competency_title == title }
+      matches = records.select { |record| canonical_competency_title(record) == title }
       exact_year = matches.find { |record| record.program_year == student.program_year }
       exact_class = matches.find { |record| record.class_of == student.program_year }
       fallback = matches.find { |record| record.program_year.blank? && record.class_of.blank? }
@@ -488,6 +482,26 @@ class StudentCompetencyDashboard
         updated_at: row.updated_at
       }
     end
+  end
+
+  def filter_competency_identity(scope, table_name:)
+    return scope.where(competency_title: COMPETENCY_TITLES) if competency_ids.empty?
+
+    scope.where(
+      "#{table_name}.competency_id IN (:ids) OR #{table_name}.competency_title IN (:titles)",
+      ids: competency_ids,
+      titles: COMPETENCY_TITLES
+    )
+  end
+
+  def competency_ids
+    @competency_ids ||= Competency.where(title: COMPETENCY_TITLES).pluck(:id)
+  end
+
+  def canonical_competency_title(record)
+    record.competency&.title.presence || record.competency_title
+  rescue ActiveModel::MissingAttributeError
+    record.competency_title
   end
 
   def filtered_by_semester(scope)
@@ -542,7 +556,7 @@ class StudentCompetencyDashboard
   def trend_chart
     series = {
       "Self average" => source_selected?("self") ? self_trend_by_semester : {},
-      "Advisor average" => advisor_visible? ? advisor_trend_by_semester : {},
+      "Advisor average" => source_selected?("advisor") ? advisor_trend_by_semester : {},
       "Course average" => source_selected?("course") ? course_trend_by_semester : {},
       "Target average" => source_selected?("target") ? target_trend_by_semester : {}
     }.select { |_label, values| values.present? }
@@ -585,7 +599,8 @@ class StudentCompetencyDashboard
         .joins(grade_import_batch: :program_semester)
         .merge(GradeImportBatch.reportable)
         .includes(grade_import_batch: { program_semester: :course_grade_release_date })
-        .where(student_id: student.student_id, competency_title: COMPETENCY_TITLES)
+        .where(student_id: student.student_id)
+      rows = filter_competency_identity(rows, table_name: "grade_competency_ratings")
         .select("program_semesters.name AS semester_name, grade_competency_ratings.aggregated_level, grade_competency_ratings.grade_import_batch_id")
         .to_a
         .select { |row| course_row_released?(row) }
@@ -619,6 +634,233 @@ class StudentCompetencyDashboard
     return nil if values.empty?
 
     (values.sum.to_f / values.size).round(2)
+  end
+
+  def change_summary
+    @change_summary ||= begin
+      current_semester = filters[:semester]
+
+      if current_semester.blank?
+        {
+          current_semester: "All semesters",
+          previous_semester: nil,
+          headline: "Choose one semester to compare it with the previous semester.",
+          source_changes: [],
+          competency_changes: []
+        }
+      elsif (previous_semester = previous_semester_name(current_semester)).blank?
+        {
+          current_semester: current_semester,
+          previous_semester: nil,
+          headline: "No earlier semester is available for this comparison yet.",
+          source_changes: [],
+          competency_changes: []
+        }
+      else
+        source_changes = change_source_summaries(current_semester, previous_semester)
+        competency_changes = change_competency_summaries(current_semester, previous_semester)
+
+        headline = if source_changes.blank? && competency_changes.blank?
+          "There is not enough overlapping data yet to compare #{current_semester} with #{previous_semester}."
+        else
+          "Compared with #{previous_semester}, these are the clearest changes in #{current_semester}."
+        end
+
+        {
+          current_semester: current_semester,
+          previous_semester: previous_semester,
+          headline: headline,
+          source_changes: source_changes,
+          competency_changes: competency_changes
+        }
+      end
+    end
+  end
+
+  def previous_semester_name(current_semester)
+    current_key = semester_sort_key(current_semester)
+    return nil if current_key.blank?
+
+    semester_options
+      .select { |name| (semester_sort_key(name) <=> current_key) == -1 }
+      .max_by { |name| semester_sort_key(name) || [ 0, 0 ] }
+  end
+
+  def change_source_summaries(current_semester, previous_semester)
+    change_sources.filter_map do |source|
+      previous_average = source_average_for_semester(source[:key], previous_semester)
+      current_average = source_average_for_semester(source[:key], current_semester)
+      next if previous_average.blank? || current_average.blank?
+
+      delta = (current_average.to_f - previous_average.to_f).round(2)
+      {
+        source: source[:key],
+        label: source[:label],
+        previous: previous_average,
+        current: current_average,
+        delta: delta,
+        direction: change_direction(delta),
+        sentence: change_sentence(source[:label], previous_average, current_average, delta)
+      }
+    end
+  end
+
+  def change_competency_summaries(current_semester, previous_semester)
+    change_sources.flat_map do |source|
+      previous_details = source_details_for_semester(source[:key], previous_semester)
+      current_details = source_details_for_semester(source[:key], current_semester)
+
+      COMPETENCY_TITLES.filter_map do |title|
+        previous_value = previous_details.dig(title, :value)
+        current_value = current_details.dig(title, :value)
+        next if previous_value.blank? || current_value.blank?
+
+        delta = (current_value.to_f - previous_value.to_f).round(2)
+        next if delta.zero?
+
+        {
+          source: source[:key],
+          label: source[:label],
+          title: title,
+          previous: previous_value,
+          current: current_value,
+          delta: delta,
+          direction: change_direction(delta)
+        }
+      end
+    end
+      .sort_by { |row| [ -row[:delta].abs, row[:title].to_s ] }
+      .first(3)
+  end
+
+  def change_sources
+    SOURCE_OPTIONS.keys.filter_map do |source_key|
+      next if source_key == "target"
+      next unless source_selected?(source_key)
+      next if source_key == "advisor" && advisor_ratings.values.all?(&:nil?)
+
+      {
+        key: source_key,
+        label: {
+          "self" => "Self-assessment",
+          "course" => "Course-derived",
+          "advisor" => "Advisor legacy"
+        }.fetch(source_key)
+      }
+    end
+  end
+
+  def source_average_for_semester(source, semester_name)
+    values = source_details_for_semester(source, semester_name).values.filter_map { |detail| detail[:value] }
+    average(values)
+  end
+
+  def source_details_for_semester(source, semester_name)
+    case source
+    when "self"
+      self_rating_details_for_semester(semester_name)
+    when "course"
+      course_rating_details_for_semester(semester_name)
+    when "advisor"
+      advisor_rating_details_for_semester(semester_name)
+    else
+      {}
+    end
+  end
+
+  def self_rating_details_for_semester(semester_name)
+    lookup = latest_rating_detail_lookup(
+      self_rating_scope
+        .where("LOWER(program_semesters.name) = ?", semester_name.to_s.downcase)
+        .select("questions.question_text, student_questions.response_value, student_questions.updated_at, student_questions.id")
+        .order("questions.question_text ASC, student_questions.updated_at DESC, student_questions.id DESC"),
+      value_method: :response_value
+    )
+
+    version_ratings = CompetencySurveyVersionRatings.call(
+      student_ids: [ student.student_id ],
+      survey_scope: Survey.joins(:program_semester).where("LOWER(program_semesters.name) = ?", semester_name.to_s.downcase),
+      competency_titles: COMPETENCY_TITLES
+    ).fetch(student.student_id, {})
+
+    version_ratings.each do |title, value|
+      lookup[title] ||= { value: normalize_rating(value), updated_at: nil }
+    end
+
+    lookup
+  end
+
+  def advisor_rating_details_for_semester(semester_name)
+    lookup = latest_rating_detail_lookup(
+      Feedback
+        .joins(:question, survey: :program_semester)
+        .where(student_id: student.student_id, questions: { question_text: COMPETENCY_TITLES })
+        .where("LOWER(program_semesters.name) = ?", semester_name.to_s.downcase)
+        .select("questions.question_text, feedback.average_score, feedback.updated_at, feedback.id")
+        .order("questions.question_text ASC, feedback.updated_at DESC, feedback.id DESC"),
+      value_method: :average_score
+    )
+
+    submitted_ratings = CompetencySurveyVersionRatings.call(
+      student_ids: [ student.student_id ],
+      survey_scope: Survey
+        .joins(:program_semester, :advisor_feedback_submissions)
+        .merge(AdvisorFeedbackSubmission.submitted.where(student_id: student.student_id))
+        .where("LOWER(program_semesters.name) = ?", semester_name.to_s.downcase)
+        .distinct,
+      competency_titles: COMPETENCY_TITLES
+    ).fetch(student.student_id, {})
+
+    submitted_ratings.each do |title, value|
+      lookup[title] ||= { value: normalize_rating(value), updated_at: nil }
+    end
+
+    lookup
+  end
+
+  def course_rating_details_for_semester(semester_name)
+    rows = GradeCompetencyRating
+      .joins(:grade_import_batch)
+      .merge(GradeImportBatch.reportable)
+      .includes(:competency)
+      .where(student_id: student.student_id)
+    rows = filter_competency_identity(rows, table_name: "grade_competency_ratings")
+      .select(:competency_id, :competency_title, :aggregated_level, :updated_at, :grade_import_batch_id)
+
+    rows = if semester_name.present?
+      semester = ProgramSemester.find_by_name_case_insensitive(semester_name)
+      scoped_rows = semester ? rows.where(grade_import_batches: { program_semester_id: semester.id }) : rows.none
+      scoped_rows.includes(grade_import_batch: { program_semester: :course_grade_release_date }).to_a.select { |row| course_row_released?(row) }
+    else
+      filter_course_rows_by_semester(rows)
+    end
+
+    rows.group_by { |row| canonical_competency_title(row) }.transform_values do |ratings|
+      {
+        value: CourseCompetencyRule.aggregate(ratings.filter_map { |rating| rating.aggregated_level&.to_f }, rule_key: SiteSetting.course_competency_rule),
+        updated_at: ratings.filter_map(&:updated_at).max
+      }
+    end
+  end
+
+  def change_direction(delta)
+    return "increased" if delta.positive?
+    return "decreased" if delta.negative?
+
+    "stayed about the same"
+  end
+
+  def change_sentence(label, previous_average, current_average, delta)
+    direction = change_direction(delta)
+    return "#{label} average stayed about the same at #{format_change_score(current_average)}." if delta.zero?
+
+    "#{label} average #{direction} from #{format_change_score(previous_average)} to #{format_change_score(current_average)}."
+  end
+
+  def format_change_score(value)
+    return nil if value.blank?
+
+    value.to_f.round(2).to_s.sub(/\.0+\z/, "").sub(/(\.\d*[1-9])0+\z/, "\\1")
   end
 
   def source_averages_for(competencies)

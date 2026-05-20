@@ -6,6 +6,11 @@ class Admin::CompetencyMatrixTest < ActiveSupport::TestCase
     @admin = users(:admin)
     @student = students(:student)
     @competency_name = Reports::DataAggregator::COMPETENCY_TITLES.first
+    domain = Domain.find_or_create_by!(name: Reports::DataAggregator::REPORT_DOMAINS.first)
+    Competency.find_or_create_by!(title: @competency_name) do |competency|
+      competency.domain = domain
+      competency.position = 0
+    end
     SiteSetting.set_course_competency_rule!(CourseCompetencyRule::DEFAULT_RULE)
   end
 
@@ -61,6 +66,16 @@ class Admin::CompetencyMatrixTest < ActiveSupport::TestCase
 
     assert_equal 3.0, value
     assert_equal "max", payload[:course_competency_rule]
+  end
+
+  test "course ratings prefer canonical competency id when source title drifts" do
+    rating = create_course_rating(level: 4.0)
+    rating.update_columns(competency_title: "Imported typo for #{@competency_name}")
+
+    payload = Admin::CompetencyMatrix.new(params: {}, actor_user: @admin).call
+    student_row = payload[:students].find { |row| row[:id] == @student.student_id }
+
+    assert_in_delta 4.0, student_row.dig(:ratings, @competency_name, :course_rating), 0.001
   end
 
   test "course ratings are scoped to the selected import semester" do

@@ -145,12 +145,14 @@ class DashboardsController < ApplicationController
     admin_impersonating_advisor = current_user.admin_profile.present? && !current_user.role_admin?
 
     if admin_impersonating_advisor
-      @advisees = Student.left_joins(:user).includes(:advisor).order(Arel.sql("LOWER(users.name) ASC"))
-      @recent_feedback = Feedback.includes(:category, :survey, :student).order(created_at: :desc).limit(5)
+      @advisees = Student.current_records.left_joins(:user).includes(:advisor).order(Arel.sql("LOWER(users.name) ASC"))
+      advisee_ids = @advisees.map(&:student_id)
+      @recent_feedback = Feedback.where(student_id: advisee_ids).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
       @pending_notifications_count = current_user.notifications.unread.count
     else
-      @advisees = @advisor&.advisees&.includes(:user) || []
-      @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
+      @advisees = (@advisor&.advisees || Student.none).current_records.includes(:user)
+      advisee_ids = @advisees.map(&:student_id)
+      @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id, student_id: advisee_ids).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
       @pending_notifications_count = current_user.notifications.unread.count
     end
 
@@ -158,7 +160,6 @@ class DashboardsController < ApplicationController
     @active_survey_count = Survey.count
     advisee_ids = Array(@advisees).map(&:student_id).compact
     @total_reports = advisee_ids.empty? ? 0 : SurveyAssignment.where(student_id: advisee_ids).count
-    @students_needing_attention = AdvisorAttentionList.new(students: @advisees, semester: ProgramSemester.current&.name).call
   end
 
   # Shows high-level system metrics for administrators.
@@ -177,6 +178,7 @@ class DashboardsController < ApplicationController
     @total_responses = StudentQuestion.count
     @total_reports = SurveyAssignment.count
     @maintenance_enabled = SiteSetting.maintenance_enabled?
+    @data_model_health = DataModelHealthCheck.new.call
   end
 
   # Provides a single admin workspace for member and student management.
@@ -488,6 +490,7 @@ class DashboardsController < ApplicationController
   def update_student_advisor
     @student = Student.find(params[:id])
     previous_advisor = @student.advisor
+    @student.advisor_assignment_actor = current_user
     if @student.update(student_params)
       AdminActivityLog.record!(
         admin: current_user,
@@ -514,14 +517,29 @@ class DashboardsController < ApplicationController
     advisor_updates = normalize_student_updates(params[:advisor_updates])
     track_updates = normalize_student_updates(params[:track_updates])
     assignment_group_updates = normalize_student_updates(params[:assignment_group_updates])
+    status_updates = normalize_student_updates(params[:status_updates])
+    selected_student_ids = normalize_student_ids(params[:selected_student_ids])
+    bulk_status = params[:bulk_status].to_s.strip.downcase.presence
+    lifecycle_reason = params[:lifecycle_reason].to_s.strip.presence
 
-    if advisor_updates.blank? && track_updates.blank? && assignment_group_updates.blank?
+    if bulk_status.present?
+      if selected_student_ids.blank?
+        redirect_to people_management_path(tab: "students"), alert: "Select at least one student before applying a bulk lifecycle status."
+        return
+      end
+
+      selected_student_ids.each do |student_id|
+        status_updates[student_id.to_s] = bulk_status
+      end
+    end
+
+    if advisor_updates.blank? && track_updates.blank? && assignment_group_updates.blank? && status_updates.blank?
       redirect_to people_management_path(tab: "students"), alert: "No student changes were submitted."
       return
     end
 
     advisor_lookup = build_advisor_lookup(advisor_updates.values)
-    student_ids = (advisor_updates.keys + track_updates.keys + assignment_group_updates.keys).uniq
+    student_ids = (advisor_updates.keys + track_updates.keys + assignment_group_updates.keys + status_updates.keys).uniq
     students = Student.includes(:user, advisor: :user)
                       .where(student_id: student_ids)
                       .index_by { |student| student.student_id.to_s }
@@ -532,6 +550,8 @@ class DashboardsController < ApplicationController
     track_failures = []
     group_successes = []
     group_failures = []
+    status_successes = []
+    status_failures = []
 
     ActiveRecord::Base.transaction do
       student_ids.each do |student_id|
@@ -540,7 +560,13 @@ class DashboardsController < ApplicationController
         if student.nil?
           advisor_failures << "Student ##{student_id} not found" if advisor_updates.key?(student_id)
           track_failures << "Student ##{student_id} not found" if track_updates.key?(student_id)
+          group_failures << "Student ##{student_id} not found" if assignment_group_updates.key?(student_id)
+          status_failures << "Student ##{student_id} not found" if status_updates.key?(student_id)
           next
+        end
+
+        if status_updates.key?(student_id)
+          apply_status_update(student, status_updates[student_id], lifecycle_reason, status_successes, status_failures)
         end
 
         if track_updates.key?(student_id)
@@ -602,6 +628,16 @@ class DashboardsController < ApplicationController
       alert_parts << "Assignment group update errors: #{group_failures.join(', ')}"
     end
 
+    if status_successes.present?
+      summary = "Updated #{status_successes.size} student lifecycle status#{'es' if status_successes.size != 1}"
+      summary += ". Changes: #{status_successes.join(', ')}" if status_successes.any?
+      notice_parts << "#{summary}."
+    end
+
+    if status_failures.present?
+      alert_parts << "Lifecycle update errors: #{status_failures.join(', ')}"
+    end
+
     if notice_parts.blank? && alert_parts.blank?
       notice_parts << "No student changes were needed."
     end
@@ -630,11 +666,12 @@ class DashboardsController < ApplicationController
   end
 
   def load_student_management_state
+    @student_status_filter = Student.normalize_lifecycle_filter(params[:student_status])
     @students = load_students
     if params[:q].present?
       q = params[:q].strip
       @students = @students.where(
-        "users.name ILIKE :q OR users.email ILIKE :q OR users.uid::text ILIKE :q OR students.student_id::text ILIKE :q",
+        "users.name ILIKE :q OR users.email ILIKE :q OR users.uid::text ILIKE :q OR students.student_id::text ILIKE :q OR students.program_year::text ILIKE :q",
         q: "%#{q}%"
       )
     end
@@ -642,10 +679,16 @@ class DashboardsController < ApplicationController
     @advisor_select_options = [ [ "Unassigned", "" ] ] + @advisors.map { |advisor| [ advisor.display_name, advisor.advisor_id.to_s ] }
     @track_select_options = Student.tracks.keys.map { |key| [ key.titleize, key ] }
     @assignment_group_select_options = build_assignment_group_select_options
+    @student_status_options = Student.lifecycle_filter_options
+    @lifecycle_status_select_options = Student::STATUSES.map { |status| [ status.titleize, status ] }
+    @student_status_counts = Student.group(:status).count
     @assignment_stats = {
       total: @students.size,
       assigned: @students.count { |student| student.advisor_id.present? },
-      unassigned: @students.count { |student| student.advisor_id.blank? }
+      unassigned: @students.count { |student| student.advisor_id.blank? },
+      current: Student.current_records.count,
+      graduated: Student.graduated.count,
+      archived: Student.archived_records.count
     }
     @can_manage = current_user.role_admin?
   end
@@ -761,11 +804,12 @@ class DashboardsController < ApplicationController
   # @return [ActiveRecord::Relation<Student>]
   def load_students
     has_admin_privileges = current_user&.role_admin? || current_user&.admin_profile.present?
+    lifecycle_filter = Student.normalize_lifecycle_filter(params[:student_status])
 
     scope = if has_admin_privileges
-      Student.all
+      Student.with_lifecycle_filter(lifecycle_filter)
     else
-      current_advisor_profile&.advisees || Student.none
+      (current_advisor_profile&.advisees || Student.none).with_lifecycle_filter(lifecycle_filter)
     end
 
     scope
@@ -797,6 +841,22 @@ class DashboardsController < ApplicationController
     updates_hash.each_with_object({}) do |(student_id, value), memo|
       memo[student_id.to_s] = value
     end
+  end
+
+  def normalize_student_ids(raw_ids)
+    values = case raw_ids
+    when String
+      raw_ids.split(/[\s,]+/)
+    when Array
+      raw_ids
+    else
+      []
+    end
+
+    values.filter_map do |value|
+      id = value.to_s.strip.to_i
+      id.positive? ? id : nil
+    end.uniq
   end
 
   # Builds a lookup of advisors referenced in the submitted payload to avoid
@@ -883,6 +943,7 @@ class DashboardsController < ApplicationController
     new_advisor_record = normalized_advisor_id.present? ? advisor_lookup[normalized_advisor_id] : nil
     new_label = new_advisor_record&.display_name || "Unassigned"
 
+    student.advisor_assignment_actor = current_user
     student.update!(advisor_id: normalized_advisor_id)
     successes << "#{student_label}: #{previous_label} → #{new_label}"
   rescue StandardError => e
@@ -911,6 +972,79 @@ class DashboardsController < ApplicationController
     successes << "#{student_label}: #{previous_label} → #{new_label}"
   rescue StandardError => e
     failures << "#{student_label}: #{e.message}"
+  end
+
+  def apply_status_update(student, new_status_value, reason, successes, failures)
+    student_label = student_display_label(student)
+    new_status = new_status_value.to_s.strip.downcase
+    return if new_status.blank?
+
+    unless Student::STATUSES.include?(new_status)
+      failures << "#{student_label}: invalid lifecycle status"
+      return
+    end
+
+    current_status = student.status.to_s
+    return if current_status == new_status
+
+    previous_label = student.lifecycle_label
+    attributes = lifecycle_status_attributes(new_status, reason)
+    student.update!(attributes)
+    new_label = student.reload.lifecycle_label
+    successes << "#{student_label}: #{previous_label} → #{new_label}"
+
+    AdminActivityLog.record!(
+      admin: current_user,
+      action: "student_lifecycle_update",
+      description: "Lifecycle status updated for #{student_label}: #{previous_label} → #{new_label}",
+      subject: student,
+      metadata: {
+        previous_status: current_status,
+        new_status: new_status,
+        reason: reason
+      }.compact
+    )
+  rescue StandardError => e
+    failures << "#{student_label}: #{e.message}"
+  end
+
+  def lifecycle_status_attributes(status, reason)
+    case status
+    when "active"
+      {
+        status: "active",
+        graduated_at: nil,
+        archived_at: nil,
+        archived_by: nil,
+        archive_reason: nil
+      }
+    when "graduated"
+      {
+        status: "graduated",
+        graduated_at: Time.current,
+        archived_at: nil,
+        archived_by: nil,
+        archive_reason: nil
+      }
+    when "archived"
+      {
+        status: "archived",
+        graduated_at: nil,
+        archived_at: Time.current,
+        archived_by: current_user,
+        archive_reason: reason
+      }
+    when "inactive", "withdrawn"
+      {
+        status: status,
+        graduated_at: nil,
+        archived_at: nil,
+        archived_by: nil,
+        archive_reason: nil
+      }
+    else
+      { status: status }
+    end
   end
 
   # Human-friendly identifier for logging/flash messages.

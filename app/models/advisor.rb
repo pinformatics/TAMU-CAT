@@ -5,6 +5,7 @@ class Advisor < ApplicationRecord
 
   belongs_to :user, foreign_key: :advisor_id, primary_key: :id, inverse_of: :advisor_profile
   has_many :advisees, class_name: "Student", foreign_key: :advisor_id, dependent: :destroy
+  has_many :student_advisor_assignments, foreign_key: :advisor_id, primary_key: :advisor_id, dependent: :nullify, inverse_of: :advisor
   has_many :student_questions, foreign_key: :advisor_id, dependent: :nullify
   has_many :feedbacks, foreign_key: :advisor_id
   has_many :survey_assignments, foreign_key: :advisor_id, primary_key: :advisor_id, dependent: :nullify

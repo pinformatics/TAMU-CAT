@@ -136,6 +136,26 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "People Management"
     assert_includes response.body, "Student Advisor Management"
+    assert_includes response.body, "Bulk lifecycle update"
+  end
+
+  test "people_management students tab filters lifecycle status" do
+    sign_in @admin
+    student = students(:student)
+    student.graduate!(at: Time.current)
+
+    get people_management_path, params: { tab: "students" }
+
+    assert_response :success
+    names = Nokogiri::HTML.parse(response.body).css(".user-name-cell .c-value").map { |node| node.text.strip }
+    refute_includes names, student.user.name
+
+    get people_management_path, params: { tab: "students", student_status: "graduated" }
+
+    assert_response :success
+    names = Nokogiri::HTML.parse(response.body).css(".user-name-cell .c-value").map { |node| node.text.strip }
+    assert_includes names, student.user.name
+    assert_includes response.body, "Graduated"
   end
 
   test "manage_members lists users for admin" do
@@ -403,24 +423,34 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, admin_competencies_path
   end
 
-  test "advisor dashboard shows students needing attention" do
+  test "advisor dashboard does not show students needing attention on main dashboard" do
     sign_in @advisor
 
     get advisor_dashboard_path
 
     assert_response :success
-    assert_includes response.body, "Students Needing Attention"
-    assert_includes response.body, students(:student).user.display_name
-    assert_includes response.body, "Detailed competencies"
+    refute_includes response.body, "Students Needing Attention"
+    refute_includes response.body, "Detailed competencies"
   end
 
   test "update_student_advisor updates assignment" do
     sign_in @admin
     student = students(:student)
+    StudentAdvisorAssignment.delete_all
+
     patch update_student_advisor_path(student), params: { student: { advisor_id: advisors(:other_advisor).advisor_id } }
+
     assert_redirected_to people_management_path(tab: "students")
     assert_match "Advisor updated successfully", flash[:notice]
     assert_equal advisors(:other_advisor).advisor_id, student.reload.advisor_id
+
+    assignments = student.advisor_assignments.order(:starts_on, :id).to_a
+    assert_equal 2, assignments.size
+    assert_equal advisors(:advisor), assignments.first.advisor
+    assert_not_nil assignments.first.ends_on
+    assert_equal advisors(:other_advisor), assignments.second.advisor
+    assert_equal @admin, assignments.second.assigned_by
+    assert assignments.second.current?
   ensure
     student.update!(advisor: advisors(:advisor))
   end
@@ -446,6 +476,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     student = students(:student)
     other_student = students(:other_student)
+    StudentAdvisorAssignment.delete_all
 
     payload = {
       student.student_id => advisors(:other_advisor).advisor_id,
@@ -457,6 +488,11 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_match "Updated", flash[:notice]
     assert_equal advisors(:other_advisor).advisor_id, student.reload.advisor_id
+
+    current_assignment = student.advisor_assignments.current.first
+    assert_equal advisors(:other_advisor), current_assignment.advisor
+    assert_equal @admin, current_assignment.assigned_by
+    assert_empty other_student.advisor_assignments.current
   ensure
     student.update!(advisor: advisors(:advisor))
     other_student.update!(advisor: advisors(:other_advisor))
@@ -478,6 +514,66 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Executive", student.reload.track
   ensure
     student.update!(track: original_track)
+  end
+
+  test "update_student_advisors updates lifecycle status and logs activity" do
+    sign_in @admin
+
+    student = students(:student)
+
+    assert_difference -> { AdminActivityLog.where(action: "student_lifecycle_update").count }, 1 do
+      patch update_student_advisors_path, params: { status_updates: { student.student_id => "graduated" } }
+    end
+
+    assert_redirected_to people_management_path(tab: "students")
+    follow_redirect!
+    assert_match(/updated 1 student lifecycle status/i, flash[:notice].to_s)
+    assert_equal "graduated", student.reload.status
+    assert_not_nil student.graduated_at
+  end
+
+  test "update_student_advisors archives selected students in bulk with reason" do
+    sign_in @admin
+
+    student = students(:student)
+
+    patch update_student_advisors_path, params: {
+      selected_student_ids: [ student.student_id ],
+      bulk_status: "archived",
+      lifecycle_reason: "Graduated cohort cleanup"
+    }
+
+    assert_redirected_to people_management_path(tab: "students")
+    follow_redirect!
+    assert_match(/updated 1 student lifecycle status/i, flash[:notice].to_s)
+    student.reload
+    assert_equal "archived", student.status
+    assert_equal @admin, student.archived_by
+    assert_equal "Graduated cohort cleanup", student.archive_reason
+  end
+
+  test "bulk lifecycle update requires selected students" do
+    sign_in @admin
+
+    patch update_student_advisors_path, params: { bulk_status: "archived" }
+
+    assert_redirected_to people_management_path(tab: "students")
+    follow_redirect!
+    assert_match(/select at least one student/i, flash[:alert].to_s)
+  end
+
+  test "update_student_advisors rejects invalid lifecycle status" do
+    sign_in @admin
+
+    student = students(:student)
+
+    patch update_student_advisors_path, params: { status_updates: { student.student_id => "sabbatical" } }
+
+    assert_redirected_to people_management_path(tab: "students")
+    follow_redirect!
+    assert_match(/lifecycle update errors/i, flash[:alert].to_s)
+    assert_match(/invalid lifecycle status/i, flash[:alert].to_s)
+    assert_equal "active", student.reload.status
   end
 
   test "update_student_advisors rejects invalid track selection" do
@@ -931,6 +1027,22 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Preview: Survey #"
   end
 
+  test "admin activities page includes admin activity logs" do
+    sign_in @admin
+
+    AdminActivityLog.record!(
+      admin: @admin,
+      action: "student_lifecycle_update",
+      description: "Lifecycle status updated for Student User: Active → Graduated"
+    )
+
+    get admin_activities_path
+
+    assert_response :success
+    assert_includes response.body, "Student Lifecycle Update"
+    assert_includes response.body, "Lifecycle status updated for Student User"
+  end
+
   test "update_roles reports failures when an update raises" do
     sign_in @admin
 
@@ -967,6 +1079,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     get admin_dashboard_path
     assert_response :success
   assert_includes response.body, "Admin Dashboard"
+    assert_includes response.body, "Data Model Health"
   end
 
   test "advisor dashboard shows total reports count" do
@@ -977,6 +1090,17 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     reports_description = extract_feature_description(response.body, "Reports")
     assert_equal "1 generated", reports_description
+  end
+
+  test "advisor dashboard excludes graduated advisees from current workload counts" do
+    students(:student).graduate!(at: Time.current)
+    sign_in @advisor
+
+    get advisor_dashboard_path
+
+    assert_response :success
+    assert_equal "0 generated", extract_feature_description(response.body, "Reports")
+    assert_equal "0 assigned students", extract_feature_description(response.body, "Records")
   end
 
   test "admin dashboard shows total reports count" do

@@ -6,6 +6,13 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
     @student = students(:student)
     @admin = users(:admin)
     @competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    domain = Domain.find_or_create_by!(name: Reports::DataAggregator::REPORT_DOMAINS.first)
+    Reports::DataAggregator::COMPETENCY_TITLES.each_with_index do |title, index|
+      Competency.find_or_create_by!(title: title) do |competency|
+        competency.domain = domain
+        competency.position = index
+      end
+    end
     SiteSetting.set_course_competency_rule!(CourseCompetencyRule::DEFAULT_RULE)
   end
 
@@ -43,6 +50,18 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
 
     assert_in_delta 2.0, competency[:course_rating], 0.001
     assert_equal [ "PHPM-601-700" ], competency[:course_sources].map { |source| source[:course_code] }
+  end
+
+  test "course data prefers canonical competency id when imported title drifts" do
+    records = create_course_record(level: 4.0, semester: program_semesters(:fall_2025), course_code: "PHPM-CANON-700")
+    records[:rating].update_columns(competency_title: "Typo #{@competency_title}")
+    records[:evidence].update_columns(competency_title: "Typo #{@competency_title}")
+
+    payload = StudentCompetencyDashboard.new(student: @student, params: { semester: "Fall 2025" }).call
+    competency = find_competency(payload, @competency_title)
+
+    assert_in_delta 4.0, competency[:course_rating], 0.001
+    assert_equal [ "PHPM-CANON-700" ], competency[:course_sources].map { |source| source[:course_code] }
   end
 
   test "future release date hides course ratings and sources from dashboard payload and csv" do
@@ -126,6 +145,47 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
     assert payload[:domain_averages].values.any? { |averages| averages[:self].present? }
   end
 
+  test "change summary compares selected semester with the previous semester" do
+    ProgramSemester.update_all(current: false)
+    program_semesters(:spring_2026).update!(current: true)
+
+    create_self_rating(value: 2, updated_at: Time.zone.local(2025, 10, 1, 10, 0, 0), survey: surveys(:fall_2025))
+    create_self_rating(value: 4, updated_at: Time.zone.local(2026, 3, 1, 10, 0, 0), survey: surveys(:spring_2026_residential))
+
+    payload = StudentCompetencyDashboard.new(
+      student: @student,
+      params: { semester: "Spring 2026", sources: [ "self" ] }
+    ).call
+
+    assert_equal "Spring 2026", payload[:change_summary][:current_semester]
+    assert_equal "Fall 2025", payload[:change_summary][:previous_semester]
+    assert_includes payload[:change_summary][:headline], "Compared with Fall 2025"
+    assert_includes payload[:change_summary][:source_changes].first[:sentence], "Self-assessment average increased from 2 to 4"
+
+    competency_change = payload[:change_summary][:competency_changes].find { |change| change[:title] == @competency_title }
+    assert_equal "increased", competency_change[:direction]
+    assert_in_delta 2.0, competency_change[:delta], 0.001
+  end
+
+  test "semester trend includes self advisor and course series when data exists in the trend period" do
+    ProgramSemester.update_all(current: false)
+    program_semesters(:spring_2026).update!(current: true)
+
+    create_self_rating(value: 3, updated_at: Time.zone.local(2025, 10, 1, 10, 0, 0), survey: surveys(:fall_2025))
+    create_advisor_feedback(score: 4)
+    create_course_record(level: 5.0, semester: program_semesters(:fall_2025), course_code: "PHPM-TREND-700")
+
+    payload = StudentCompetencyDashboard.new(
+      student: @student,
+      params: { semester: "Spring 2026" }
+    ).call
+
+    labels = payload[:trend_chart][:datasets].map { |dataset| dataset[:label] }
+    assert_includes labels, "Self average"
+    assert_includes labels, "Advisor average"
+    assert_includes labels, "Course average"
+  end
+
   private
 
   def find_competency(payload, title)
@@ -147,14 +207,14 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
       file_checksum: "student-dashboard-#{unique}",
       status: "processed"
     )
-    batch.grade_competency_ratings.create!(
+    rating = batch.grade_competency_ratings.create!(
       student: @student,
       competency_title: competency_title,
       aggregated_level: level,
       aggregation_rule: "max",
       evidence_count: 1
     )
-    batch.grade_competency_evidences.create!(
+    evidence = batch.grade_competency_evidences.create!(
       grade_import_file: file,
       student: @student,
       assignment_name: "Course Evidence #{unique}",
@@ -166,10 +226,11 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
       source_key: "student-dashboard-source-#{unique}",
       import_fingerprint: "student-dashboard-fingerprint-#{unique}"
     )
+
+    { rating: rating, evidence: evidence }
   end
 
-  def create_self_rating(value:, updated_at:)
-    survey = surveys(:fall_2025)
+  def create_self_rating(value:, updated_at:, survey: surveys(:fall_2025), competency_title: @competency_title)
     section = SurveySection.find_or_create_by!(
       survey: survey,
       title: SurveySection::MHA_COMPETENCY_SECTION_TITLE
@@ -179,7 +240,7 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
       section: section
     )
     question = category.questions.create!(
-      question_text: @competency_title,
+      question_text: competency_title,
       question_type: "dropdown",
       question_order: 1,
       answer_options: %w[1 2 3 4 5]

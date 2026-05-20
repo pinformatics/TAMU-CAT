@@ -23,6 +23,11 @@ class Admin::ActivitiesController < Admin::BaseController
       .order(Arel.sql("COALESCE(last_saved_at, submitted_at, updated_at) DESC"))
       .limit(150)
 
+    @admin_activity_logs = AdminActivityLog
+      .includes(:admin)
+      .recent
+      .limit(150)
+
     @entries = filtered_entries(build_entries)
       .sort_by { |entry| entry[:timestamp] || Time.zone.at(0) }
       .reverse
@@ -70,7 +75,31 @@ class Admin::ActivitiesController < Admin::BaseController
       }
     end
 
-    survey_entries + submission_entries + feedback_entries
+    survey_entries + submission_entries + feedback_entries + admin_activity_entries
+  end
+
+  def admin_activity_entries
+    @admin_activity_logs.map do |log|
+      admin_name = log.admin&.display_name.presence || log.admin&.email || "Admin"
+
+      {
+        type: "Admin Action",
+        icon: "ADM",
+        timestamp: log.created_at,
+        title: log.action.to_s.titleize,
+        subtitle: log.description,
+        actor: admin_name,
+        link: admin_activity_link_for(log)
+      }
+    end
+  end
+
+  def admin_activity_link_for(log)
+    return people_management_path(tab: "students") if log.action == "student_lifecycle_update"
+    return people_management_path if log.action.in?(%w[role_update member_removal])
+    return people_management_path(tab: "students") if log.action.in?(%w[advisor_assignment bulk_advisor_assignment track_update])
+
+    nil
   end
 
   def feedback_entries
