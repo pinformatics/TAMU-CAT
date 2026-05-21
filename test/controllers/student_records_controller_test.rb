@@ -11,7 +11,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
 
     get student_records_path
     assert_response :success
-    assert_includes response.body, "Student Records"
+    assert_includes response.body, "Survey Records"
     assert_match(/Completion.*Feedback.*Advisor Feedback.*Actions/m, response.body)
     assert_not_includes response.body, "Course Competencies"
     assert_includes response.body, users(:student).name
@@ -20,12 +20,13 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Submitted"
   end
 
-  test "admin can export current student records view as xlsx" do
+  test "admin can export current survey records view as xlsx" do
     sign_in @admin
 
     get export_student_records_excel_path(q: users(:student).name)
     assert_response :success
     assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
+    assert_includes response.headers["Content-Disposition"], "survey-records"
     assert_includes response.headers["Content-Disposition"], ".xlsx"
   end
 
@@ -36,9 +37,9 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, users(:student).name
     assert_not_includes response.body, users(:other_student).name
-    assert_includes response.body, "No student records for this survey are assigned to you."
+    assert_includes response.body, "No survey records for this survey are assigned to you."
 
-    # Advisors can view Student Records but should not see admin-only edit/delete actions.
+    # Advisors can view Survey Records but should not see admin-only edit/delete actions.
     assert_not_includes response.body, 'aria-label="More actions"'
     assert_not_includes response.body, "Delete this student's survey responses?"
   end
@@ -103,7 +104,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_not_includes response.body, users(:student).name
     assert_not_includes response.body, users(:other_student).name
-    assert_includes response.body, "No student records match this survey yet."
+    assert_includes response.body, "No survey records match this survey yet."
   end
 
   test "admin can filter surveys by keyword" do
@@ -132,7 +133,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     get student_records_path(status: "unassigned")
     assert_response :success
     assert_not_includes response.body, ">Unassigned</span>"
-    assert_includes response.body, "No student records match this survey yet."
+    assert_includes response.body, "No survey records match this survey yet."
   end
 
   test "admin can filter students by track" do

@@ -1100,7 +1100,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "0 generated", extract_feature_description(response.body, "Reports")
-    assert_equal "0 assigned students", extract_feature_description(response.body, "Records")
+    assert_equal "0 assigned students", extract_feature_description(response.body, "Survey Records")
   end
 
   test "admin dashboard shows total reports count" do

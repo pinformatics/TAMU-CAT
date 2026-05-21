@@ -18,7 +18,7 @@ Use it when:
 4. `Survey Builder`
 5. `Grade Import Batches`
 6. `Competencies`
-7. `Student Records`
+7. `Survey Records`
 8. `Reports`
 
 ## Admin Dashboard
@@ -140,7 +140,7 @@ Check that:
 - course ratings only appear from reportable batches
 - semester filtering is clear to the operator
 
-## Student Records
+## Survey Records
 
 Use this area to review semester-by-semester survey progress.
 

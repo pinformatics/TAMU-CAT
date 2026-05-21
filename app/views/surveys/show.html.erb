@@ -160,7 +160,7 @@
               </span>
 
               <% effective_target_level = effective_competency_target_level(question: question, survey: @survey, student: current_student) %>
-              <% course_context = @survey.show_course_competencies_with_survey? ? course_competency_context_for(question: question, survey: @survey, student: current_student, viewer: current_user) : nil %>
+              <% course_context = course_competency_context_for(question: question, survey: @survey, student: current_student, viewer: current_user) %>
               <% if question.question_type_dropdown? && effective_target_level.present? %>
                 <span class="c-question-card__meta">
                   <span class="c-level-badge">End-of-program target level: <%= effective_target_level %>/5</span>
@@ -168,7 +168,7 @@
               <% end %>
             </label>
 
-            <%= render_course_competency_context(course_context) if @survey.show_course_competencies_with_survey? %>
+            <%= render_course_competency_context(course_context) %>
 
             <% case question.question_type %>
             <% when "short_answer" %>

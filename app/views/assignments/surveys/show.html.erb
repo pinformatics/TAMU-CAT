@@ -30,8 +30,11 @@
             <h1 class="c-page-title c-page-title--brand"><%= @survey.title %></h1>
             <p class="c-page-subtitle">
               Survey #<%= @survey_number %> ·
+              Available from:
+              <strong><%= @survey.available_from.present? ? l(@survey.available_from.in_time_zone, format: :long) : "No start date" %></strong>
+              ·
               Default deadline:
-              <strong><%= @survey.available_until.present? ? format_calendar_date(@survey.available_until) : "No deadline" %></strong>
+              <strong><%= @survey.available_until.present? ? l(@survey.available_until.in_time_zone, format: :long) : "No deadline" %></strong>
             </p>
           </div>
 
@@ -71,6 +74,62 @@
           This survey is archived. New assignments and deadline extensions are disabled.
         </div>
       <% end %>
+
+      <section class="c-card c-card--flush u-overflow-hidden">
+        <div class="c-panel-header c-panel-header--with-border">
+          <div class="u-responsive-split u-w-full">
+            <div class="u-stack u-stack--sm">
+              <h2 class="c-panel-title">Survey Availability</h2>
+              <p class="c-panel-subtitle">These are the same dates shown in Survey Builder settings. Updating them here updates the survey defaults everywhere.</p>
+            </div>
+            <span class="c-status-badge <%= @survey.is_active? ? 'c-status-badge--success' : 'c-status-badge--muted' %>">
+              <%= @survey.is_active? ? "Active" : "Archived" %>
+            </span>
+          </div>
+        </div>
+
+        <div class="c-panel-body">
+          <% if current_user&.role_admin? %>
+            <%= form_with url: availability_assignments_survey_path(@survey), method: :patch, local: true, class: "u-stack u-stack--md" do %>
+              <div class="u-grid u-grid--form">
+                <div class="c-field">
+                  <%= label_tag "survey_available_from", "Available from", class: "c-label" %>
+                  <%= datetime_field_tag "survey[available_from]",
+                                         datetime_local_value(@survey.available_from),
+                                         id: "survey_available_from",
+                                         class: "c-input u-w-full" %>
+                </div>
+
+                <div class="c-field">
+                  <%= label_tag "survey_available_until", "Available until", class: "c-label" %>
+                  <%= datetime_field_tag "survey[available_until]",
+                                         datetime_local_value(@survey.available_until),
+                                         id: "survey_available_until",
+                                         class: "c-input u-w-full" %>
+                </div>
+              </div>
+
+              <div class="u-actions u-actions--start">
+                <%= submit_tag "Save Availability", class: button_classes(:primary) %>
+                <% if current_user&.role_admin? %>
+                  <%= link_to "Open Survey Settings", edit_admin_survey_path(@survey), class: button_classes(:secondary) %>
+                <% end %>
+              </div>
+            <% end %>
+          <% else %>
+            <dl class="c-key-value-grid">
+              <div class="c-key-value">
+                <dt>Available from</dt>
+                <dd><%= @survey.available_from.present? ? l(@survey.available_from.in_time_zone, format: :long) : "Not set" %></dd>
+              </div>
+              <div class="c-key-value">
+                <dt>Available until</dt>
+                <dd><%= @survey.available_until.present? ? l(@survey.available_until.in_time_zone, format: :long) : "Not set" %></dd>
+              </div>
+            </dl>
+          <% end %>
+        </div>
+      </section>
 
       <section class="c-card c-card--flush u-overflow-hidden">
         <div class="c-panel-header c-panel-header--with-border">

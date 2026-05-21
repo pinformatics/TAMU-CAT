@@ -1,7 +1,7 @@
 require "caxlsx"
 
-# Provides rollup views of survey completion status across students for staff
-# members (advisors and admins).
+# Provides survey-focused completion and advisor-feedback rollups across
+# students for staff members (advisors and admins).
 class StudentRecordsController < ApplicationController
   before_action :require_staff_access!
 
@@ -13,7 +13,7 @@ class StudentRecordsController < ApplicationController
     flash.now[:notice] = "Canceled feedback editing." if params[:cancelled_feedback].to_s == "1"
   end
 
-  # Exports Student Records as an Excel workbook with one worksheet per survey.
+  # Exports Survey Records as an Excel workbook with one worksheet per survey.
   #
   # @return [void]
   def export_excel
@@ -21,12 +21,12 @@ class StudentRecordsController < ApplicationController
 
     package = build_student_records_workbook(@student_records)
     record_export_audit!(
-      export_type: "student_records_excel",
-      description: "Exported student records Excel workbook.",
+      export_type: "survey_records_excel",
+      description: "Exported survey records Excel workbook.",
       metadata: { student_count: @students.size }
     )
     send_data package.to_stream.read,
-              filename: "student-records-#{Time.current.strftime('%Y%m%d-%H%M%S')}.xlsx",
+              filename: "survey-records-#{Time.current.strftime('%Y%m%d-%H%M%S')}.xlsx",
               disposition: "attachment",
               type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   end
@@ -59,7 +59,7 @@ class StudentRecordsController < ApplicationController
     @student_records = build_student_records(@students)
   end
 
-  # Ensures only advisors and admins can access student records.
+  # Ensures only advisors and admins can access survey records.
   #
   # @return [void]
   def require_staff_access!

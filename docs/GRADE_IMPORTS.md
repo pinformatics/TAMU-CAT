@@ -62,8 +62,9 @@ Ignored columns:
 
 Important interpretation:
 
-- `mastery points` is used as the competency level
-- `result` is stored as the raw source score
+- `mastery points` is used as the student's actual course competency level
+- `result` is used as the course target level
+- both values must be whole numbers from 1 through 5 when present
 
 Course code derivation:
 

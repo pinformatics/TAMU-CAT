@@ -16,61 +16,7 @@
             <% @pending_surveys.each do |entry| %>
               <% survey = entry[:survey] %>
               <% offering = @offerings_by_survey_id[survey.id] %>
-              <div class="c-list-item">
-                <div class="c-item-title u-actions u-actions--start">
-                  <span><%= survey.title %></span>
-                  <span class="<%= survey_status_badge_classes(survey.is_active? ? 'Active' : 'Archived') %>"><%= survey.is_active? ? "Active" : "Archived" %></span>
-                </div>
-                <% if survey.semester.present? %>
-                  <div class="c-meta-list">
-                    <%= survey.semester %>
-                  </div>
-                <% end %>
-                <% if (review_note = review_meetings_note(offering)).present? %>
-                  <div class="c-meta-list">
-                    Review meetings: <%= review_note %>
-                  </div>
-                <% end %>
-                <% progress = entry[:progress] || {} %>
-                <% completion_status = if entry[:completed_at].present?
-                    "Completed"
-                  elsif progress[:answered_total].to_i.positive?
-                    "In Progress"
-                  else
-                    "Not Started"
-                  end %>
-                <div class="c-meta-list">
-                  <% if entry[:available_from].present? %>
-                    Available from: <%= l(entry[:available_from].in_time_zone, format: :long) %>
-                  <% else %>
-                    Available from: Not set
-                  <% end %>
-                </div>
-                <div class="c-meta-list">
-                  <% if entry[:available_until].present? %>
-                    Due: <%= l(entry[:available_until].in_time_zone, format: :long) %>
-                  <% else %>
-                    Due: Not set
-                  <% end %>
-                </div>
-                <div class="c-meta-list">
-                  <% total_required = progress[:total_required].to_i %>
-                  <% answered_required = progress[:answered_required].to_i %>
-                  <% if total_required.positive? %>
-                    <span class="survey-progress">
-                      <%= answered_required %> of <%= total_required %> required questions answered
-                    </span>
-                  <% end %>
-                </div>
-                <div class="c-meta-list u-actions u-actions--start">
-                  <span class="<%= survey_status_badge_classes(completion_status) %>"><%= completion_status %></span>
-                </div>
-                <div class="c-action-stack">
-                  <div class="u-actions">
-                    <%= link_to 'Open', survey_path(survey), class: button_classes(:primary) %>
-                  </div>
-                </div>
-              </div>
+              <%= render "dashboards/student_survey_card", entry: entry, offering: offering, mode: :pending %>
             <% end %>
           <% else %>
             <div class="c-list-item c-list-item--empty">No pending surveys</div>
@@ -85,91 +31,15 @@
           Completed Surveys
         </h2>
 
-        <div class="completed-list">
+        <div class="u-stack u-stack--md">
           <% if @completed_surveys.present? %>
             <% @completed_surveys.each do |entry| %>
               <% survey = entry[:survey] %>
               <% offering = @offerings_by_survey_id[survey.id] %>
-              <% survey_response = entry[:survey_response] %>
-              <% download_token = entry[:download_token] %>
-              <% available_from = entry[:available_from] %>
-              <% available_until = entry[:available_until] %>
-              <% can_edit = survey.is_active? && (available_until.blank? || available_until >= Time.current) %>
-              <% edit_disabled_hint = survey.is_active? ? "Edit disabled: deadline has passed." : "Edit disabled: this survey is archived." %>
-              <div class="completed-item">
-                <div class="c-item-title u-actions u-actions--start">
-                  <span><%= survey.title %></span>
-                  <span class="<%= survey_status_badge_classes(survey.is_active? ? 'Active' : 'Archived') %>"><%= survey.is_active? ? "Active" : "Archived" %></span>
-                </div>
-                <% if survey.semester.present? %>
-                  <div class="c-meta-list">
-                    <%= survey.semester %>
-                  </div>
-                <% end %>
-                <% if (review_note = review_meetings_note(offering)).present? %>
-                  <div class="c-meta-list">
-                    Review meetings: <%= review_note %>
-                  </div>
-                <% end %>
-                <% progress = entry[:progress] || {} %>
-                <% completion_status = if entry[:completed_at].present?
-                    "Completed"
-                  elsif progress[:answered_total].to_i.positive?
-                    "In Progress"
-                  else
-                    "Not Started"
-                  end %>
-                <div class="c-meta-list">
-                  <% if available_from.present? %>
-                    Available from: <%= l(available_from.in_time_zone, format: :long) %>
-                  <% else %>
-                    Available from: Not set
-                  <% end %>
-                </div>
-                <div class="c-meta-list">
-                  <% if available_until.present? %>
-                    Due: <%= l(available_until.in_time_zone, format: :long) %>
-                  <% else %>
-                    Due: Not set
-                  <% end %>
-                </div>
-
-                <div class="c-meta-list">
-                  <% total_required = progress[:total_required].to_i %>
-                  <% answered_required = progress[:answered_required].to_i %>
-                  <% if total_required.positive? %>
-                    <span class="survey-progress">
-                      <%= answered_required %> of <%= total_required %> required questions answered
-                    </span>
-                  <% end %>
-                </div>
-
-                <div class="c-meta-list u-actions u-actions--start">
-                  <span class="<%= survey_status_badge_classes(completion_status) %>"><%= completion_status %></span>
-                </div>
-                <div class="c-action-stack">
-                  <div class="u-actions">
-                    <%= link_to 'Review', survey_response_path(survey_response), class: button_classes(:secondary) %>
-                    <% if can_edit %>
-                      <%= link_to 'Edit', survey_path(survey), class: button_classes(:secondary) %>
-                    <% else %>
-                        <span
-                          class="<%= button_classes(:secondary) %> u-disabled"
-                          role="button"
-                          aria-disabled="true"
-                          tabindex="0"
-                          aria-describedby="edit-disabled-hint-completed<%= survey.id %>">
-                          Edit
-                        </span>
-                        <span id="edit-disabled-hint-completed<%= survey.id %>" class="sr-only"><%= edit_disabled_hint %></span>
-                    <% end %>
-                    <%= link_to 'Download PDF', download_survey_response_path(survey_response, token: download_token), class: button_classes(:primary), target: "_blank", rel: "noopener noreferrer" %>
-                  </div>
-                </div>
-              </div>
+              <%= render "dashboards/student_survey_card", entry: entry, offering: offering, mode: :completed %>
             <% end %>
           <% else %>
-            <div class="completed-item empty">No completed surveys</div>
+            <div class="c-list-item c-list-item--empty">No completed surveys</div>
           <% end %>
         </div>
       </section>

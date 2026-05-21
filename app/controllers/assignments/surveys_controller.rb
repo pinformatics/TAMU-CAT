@@ -8,7 +8,10 @@ module Assignments
       "Competency Survey Closed"
     ].freeze
 
-    before_action :set_survey, only: %i[show assign assign_all unassign unassign_selected extend_deadline extend_group_deadline reopen]
+    helper_method :datetime_local_value
+
+    before_action :set_survey, only: %i[show assign assign_all unassign unassign_selected availability extend_deadline extend_group_deadline reopen]
+    before_action :require_admin_for_survey_availability!, only: %i[availability]
     before_action :ensure_survey_active_for_mutation!, only: %i[assign assign_all unassign unassign_selected extend_deadline extend_group_deadline reopen]
 
     # Lists surveys with their categories and questions.
@@ -68,6 +71,28 @@ module Assignments
       else
         {}
       end
+    end
+
+    def availability
+      previous_available_from = @survey.available_from
+      previous_available_until = @survey.available_until
+
+      available_from = parsed_survey_datetime(:available_from)
+      available_until = parsed_survey_datetime(:available_until)
+      return if performed?
+
+      @survey.update!(
+        available_from: available_from,
+        available_until: available_until
+      )
+      sync_inherited_availability!(
+        previous_available_from: previous_available_from,
+        previous_available_until: previous_available_until
+      )
+
+      redirect_to assignments_survey_path(@survey), notice: "Survey availability updated. Survey Builder settings now show the same dates."
+    rescue ActiveRecord::RecordInvalid => e
+      redirect_to assignments_survey_path(@survey), alert: e.record.errors.full_messages.to_sentence
     end
 
     # Assigns the selected survey to a single student.
@@ -520,6 +545,68 @@ module Assignments
       I18n.l(Time.current, format: :long)
     rescue I18n::MissingTranslationData, I18n::InvalidLocale
       Time.current.to_fs(:long)
+    end
+
+    def parsed_survey_datetime(attribute)
+      raw_value = params.dig(:survey, attribute).to_s.strip
+      return nil if raw_value.blank?
+
+      Time.zone.parse(raw_value)
+    rescue ArgumentError
+      redirect_to assignments_survey_path(@survey), alert: "Please provide a valid #{attribute.to_s.humanize.downcase}."
+      nil
+    end
+
+    def sync_inherited_availability!(previous_available_from:, previous_available_until:)
+      all_assignments_scope = SurveyAssignment.where(survey_id: @survey.id)
+
+      sync_inherited_assignment_column!(
+        scope: all_assignments_scope,
+        column: :available_from,
+        previous_value: previous_available_from,
+        new_value: @survey.available_from
+      ) if previous_available_from != @survey.available_from
+
+      sync_inherited_assignment_column!(
+        scope: all_assignments_scope,
+        column: :available_until,
+        previous_value: previous_available_until,
+        new_value: @survey.available_until
+      ) if previous_available_until != @survey.available_until
+
+      return unless SurveyOffering.data_source_ready? && SurveyOffering.where(survey_id: @survey.id).exists?
+
+      updates = {
+        available_from: @survey.available_from,
+        available_until: @survey.available_until,
+        updated_at: Time.current
+      }
+      updates[:portfolio_due_date] = @survey.available_until if SurveyOffering.column_names.include?("portfolio_due_date")
+
+      SurveyOffering.where(survey_id: @survey.id).update_all(updates)
+    end
+
+    def sync_inherited_assignment_column!(scope:, column:, previous_value:, new_value:)
+      assignments = SurveyAssignment.arel_table
+      assignment_column = assignments[column]
+
+      inherited_scope = if previous_value.nil?
+        scope.where(column => nil)
+      else
+        scope.where(
+          assignment_column.eq(previous_value).or(
+            Arel::Nodes::NamedFunction.new("DATE", [ assignment_column ]).eq(previous_value.to_date)
+          )
+        )
+      end
+
+      inherited_scope.update_all(column => new_value, updated_at: Time.current)
+    end
+
+    def require_admin_for_survey_availability!
+      return if current_user&.role_admin?
+
+      redirect_to assignments_survey_path(@survey), alert: "Only admins can change survey availability settings."
     end
 
     def ensure_survey_active_for_mutation!

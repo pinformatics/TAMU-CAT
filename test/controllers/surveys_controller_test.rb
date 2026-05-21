@@ -336,7 +336,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     refute_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 1\/5/m, response.body)
   end
 
-  test "show displays course competency context only when survey setting is enabled" do
+  test "show displays course competency context when released evidence exists" do
     sign_in @student_user
 
     @survey.update!(show_course_competencies_with_survey: false)
@@ -384,13 +384,121 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
     get survey_path(@survey)
     assert_response :success
-    refute_includes response.body, "Course result 4"
+    assert_includes response.body, "Course competency evidence"
+    assert_includes response.body, "Mastery level: 4"
+    assert_includes response.body, "PHPM 701-001"
+    assert_includes response.body, "Course target: 5"
+  end
 
-    @survey.update!(show_course_competencies_with_survey: true)
-    get survey_path(@survey)
+  test "show displays released course competency entries from prior semesters under matching questions" do
+    sign_in @student_user
+
+    later_survey = surveys(:spring_2026_residential)
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    category = later_survey.categories.first || later_survey.categories.create!(name: "Test Category", description: "")
+    category.questions.create!(
+      question_text: competency_title,
+      question_order: 1002,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5].to_json
+    )
+
+    batch = GradeImportBatch.create!(
+      uploaded_by: users(:admin),
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "prior-semester-course-context.csv",
+      file_checksum: "prior-semester-course-context-checksum",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Prior Semester Context",
+      course_code: "PHPM-601-700",
+      competency_title: competency_title,
+      raw_grade: 2,
+      mapped_level: 2,
+      course_target_level: 3,
+      row_number: 2,
+      source_key: "prior-semester-course-context-source",
+      import_fingerprint: "prior-semester-course-context-fingerprint"
+    )
+
+    get survey_path(later_survey)
+
     assert_response :success
-    assert_includes response.body, "Course result 4"
-    assert_includes response.body, "Course target 5"
+    assert_includes response.body, "Course competency evidence"
+    assert_includes response.body, "Mastery level: 2"
+    assert_includes response.body, "PHPM 601-700"
+    assert_includes response.body, "Fall 2025"
+  end
+
+  test "show matches course evidence to normalized competency question titles" do
+    sign_in @student_user
+
+    evidence_title = "Legal & Ethical Bases for Health Services and Health Systems"
+    question_title = "Legal and Ethical Bases for Health Services and Health Systems"
+    category = @survey.categories.first || @survey.categories.create!(name: "Test Category", description: "")
+    category.questions.create!(
+      question_text: question_title,
+      question_order: 1004,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5].to_json
+    )
+
+    batch = GradeImportBatch.create!(
+      uploaded_by: users(:admin),
+      program_semester: @survey.program_semester,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "normalized-course-context.csv",
+      file_checksum: "normalized-course-context-checksum",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Normalized Context",
+      course_code: "PHPM-633-700",
+      competency_title: evidence_title,
+      raw_grade: 3,
+      mapped_level: 3,
+      course_target_level: 4,
+      row_number: 2,
+      source_key: "normalized-course-context-source",
+      import_fingerprint: "normalized-course-context-fingerprint"
+    )
+
+    get survey_path(@survey)
+
+    assert_response :success
+    assert_match(/#{Regexp.escape(question_title)}.*Course competency evidence/m, response.body)
+    assert_includes response.body, "Mastery level: 3"
+    assert_includes response.body, "PHPM 633-700"
+  end
+
+  test "show does not render course competency section when a competency has no imported score" do
+    sign_in @student_user
+
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.second
+    category = @survey.categories.first || @survey.categories.create!(name: "Test Category", description: "")
+    category.questions.create!(
+      question_text: competency_title,
+      question_order: 1003,
+      question_type: "dropdown",
+      answer_options: %w[1 2 3 4 5].to_json
+    )
+
+    get survey_path(@survey)
+
+    assert_response :success
+    refute_match(/#{Regexp.escape(competency_title)}.*Course competency evidence/m, response.body)
   end
 
   # Authentication Tests

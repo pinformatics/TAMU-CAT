@@ -269,7 +269,7 @@
 
           <div class="u-stack u-stack--md u-p-md">
             <div class="c-callout c-callout--warning">
-              Review these rows before committing. Course targets currently come from the uploaded mastery-points columns, so imported evidence should include that target value when a result is present.
+              Review these rows before committing. Course targets come from the uploaded result columns, so imported evidence should include that target value when mastery points are present.
             </div>
 
             <% warning_groups = [
@@ -444,27 +444,66 @@
 
       <details class="c-card c-card--flush c-section-group" open>
         <summary class="c-section-group__header">
-          <h2>Column Mapping Preview</h2>
-          <span>Review before commit</span>
+          <h2>Import Review</h2>
+          <span>Format, matching, and competency values</span>
         </summary>
         <div class="u-stack u-stack--md u-p-md">
           <% @files.each do |file| %>
             <% parsed = file.parsed_content || {} %>
             <% debug = parsed["grade_sheet_debug"] || {} %>
+            <% mode = (parsed["mode"] || debug["mode"] || "unknown").to_s %>
+            <% format_label = case mode
+              when "direct_competency" then "Direct competency file"
+              when "canvas" then "Canvas gradebook with mapping rules"
+              when "narrow" then "Narrow grade rows with mapping rules"
+              else mode.humanize
+            end %>
             <% mappings = Array(parsed["mapping_rows_preview"]) %>
             <% assignments = Array(debug["assignment_columns_preview"]) %>
             <% direct_competencies = Array(parsed["direct_competencies_preview"] || debug["direct_competencies_preview"]) %>
+            <% mapping_course_codes = mappings.filter_map { |mapping| mapping["course_code"] || mapping[:course_code] }.compact_blank.uniq.sort %>
+            <% course_label = parsed["direct_course_code"].presence || file.course_offering&.course_code || (mapping_course_codes.one? ? mapping_course_codes.first : nil) || (mapping_course_codes.any? ? mapping_course_codes.to_sentence : "Detected from file, section, or mapping rows") %>
+            <% identifier_column = debug["student_identifier_column"] %>
+            <% student_identifier_label = if mode == "direct_competency"
+              "Student SIS ID, Student ID, then student name"
+            elsif identifier_column.present? && identifier_column.to_s.match?(/\A\d+\z/)
+              "Column #{identifier_column.to_i + 1}"
+            elsif identifier_column.present?
+              identifier_column
+            else
+              "Detected from Student ID / SIS fields"
+            end %>
+            <% pending_student_count = debug["pending_student_count"].presence || @pending_student_counts_by_file[file.id] || file.pending_rows.to_i %>
+            <% pending_competency_count = @pending_competency_counts_by_file.fetch(file.id, file.pending_rows.to_i) %>
+            <% review_items = [] %>
+            <% Array(file.parse_errors).first(20).each do |error| %>
+              <% review_items << {
+                type: error["type"].presence&.to_s&.humanize || "Error",
+                row: error["row"].presence || "-",
+                message: error["message"] || error
+              } %>
+            <% end %>
+            <% Array(debug["mapping_warnings_preview"]).first(10).each do |warning| %>
+              <% review_items << {
+                type: "Mapping warning",
+                row: warning["row"].presence || "-",
+                message: warning["message"] || warning
+              } %>
+            <% end %>
+            <% Array(debug["duplicate_warnings_preview"]).first(10).each do |warning| %>
+              <% review_items << {
+                type: "Duplicate suppressed",
+                row: warning["row"].presence || "-",
+                message: warning["message"] || warning
+              } %>
+            <% end %>
             <details class="c-accordion">
               <summary class="c-accordion__summary">
                 <span class="c-accordion__title"><%= file.file_name %></span>
                 <span class="c-accordion__meta">
-                  <%= (parsed["mode"] || debug["mode"] || "unknown").to_s.humanize %>
-                  <% if parsed["selected_grade_sheet"].present? %>
-                    · grade sheet <%= parsed["selected_grade_sheet"] %>
-                  <% end %>
-                  <% if parsed["selected_mapping_sheet"].present? %>
-                    · mapping sheet <%= parsed["selected_mapping_sheet"] %>
-                  <% end %>
+                  <%= format_label %>
+                  · <%= course_label %>
+                  · <%= review_items.any? ? pluralize(review_items.size, "review item") : "No review items" %>
                 </span>
               </summary>
 
@@ -475,36 +514,137 @@
                 </div>
               <% end %>
 
+              <div class="c-callout c-callout--info u-mt-sm">
+                <% if mode == "direct_competency" %>
+                  This file uses competency columns directly: mastery points create course competency scores, and result columns create course target scores.
+                <% elsif mappings.any? %>
+                  This file uses mapping rules: assignment scores are matched to competency levels before creating course competency evidence.
+                <% else %>
+                  Review the detected format and diagnostics before approving or committing this file.
+                <% end %>
+              </div>
+
               <div class="c-table-wrapper u-mt-sm">
                 <table class="c-table c-table--sm">
                   <tbody>
                     <tr>
-                      <th>Student identifier column</th>
-                      <td><%= debug["student_identifier_column"].presence || "Detected from Student ID / SIS fields" %></td>
+                      <th>Detected format</th>
+                      <td><%= format_label %></td>
                     </tr>
                     <tr>
-                      <th>Rows scanned</th>
+                      <th>Course detected</th>
+                      <td><%= course_label %></td>
+                    </tr>
+                    <tr>
+                      <th>Source sheet</th>
+                      <td>
+                        <%= [
+                          parsed["selected_grade_sheet"].presence,
+                          parsed["selected_mapping_sheet"].present? ? "mapping: #{parsed['selected_mapping_sheet']}" : nil
+                        ].compact_blank.join(" / ").presence || file.file_name %>
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Student matching uses</th>
+                      <td><%= student_identifier_label %></td>
+                    </tr>
+                    <tr>
+                      <th>Student rows scanned</th>
                       <td><%= debug["rows_scanned"].presence || file.total_rows %></td>
                     </tr>
                     <tr>
-                      <th>Matched students</th>
+                      <th>Students matched</th>
                       <td><%= debug["matched_student_count"].presence || "—" %></td>
                     </tr>
                     <tr>
-                      <th>Pending students</th>
-                      <td><%= file.pending_rows %></td>
+                      <th>Students needing match</th>
+                      <td><%= pending_student_count %></td>
+                    </tr>
+                    <tr>
+                      <th>Matched competency values</th>
+                      <td><%= file.imported_rows %></td>
+                    </tr>
+                    <tr>
+                      <th>Competency values needing match</th>
+                      <td><%= pending_competency_count %></td>
                     </tr>
                     <tr>
                       <th>Failed rows</th>
                       <td><%= file.error_rows %></td>
                     </tr>
+                    <tr>
+                      <th>Duplicate values suppressed</th>
+                      <td><%= debug["duplicate_warning_count"].presence || 0 %></td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
 
+              <% if mappings.any? %>
+                <div class="u-mt-md">
+                  <h3 class="c-heading-inline">Mapping Rules Used</h3>
+                  <div class="c-table-wrapper">
+                    <table class="c-table c-table--sm">
+                      <thead>
+                        <tr>
+                          <th>Row</th>
+                          <th>Assignment rule</th>
+                          <th>Course</th>
+                          <th>Competency</th>
+                          <th>Score basis</th>
+                          <th>Score range</th>
+                          <th>Result level</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% mappings.first(30).each do |mapping| %>
+                          <tr>
+                            <td><%= mapping["source_row_number"] || mapping[:source_row_number] %></td>
+                            <td><%= [mapping["assignment_match_type"] || mapping[:assignment_match_type], mapping["assignment_match_value"] || mapping[:assignment_match_value]].compact.join(": ") %></td>
+                            <td><%= (mapping["course_code"] || mapping[:course_code]).presence || "Any course" %></td>
+                            <td class="c-table__title"><%= mapping["competency_title"] || mapping[:competency_title] %></td>
+                            <td><%= mapping["score_basis"] || mapping[:score_basis] %></td>
+                            <td><%= mapping["min_grade"] || mapping[:min_grade] %>-<%= mapping["max_grade"] || mapping[:max_grade] %></td>
+                            <td><%= mapping["competency_level"] || mapping[:competency_level] %></td>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              <% elsif direct_competencies.any? %>
+                <div class="u-mt-md">
+                  <h3 class="c-heading-inline">Competency Columns Used</h3>
+                  <div class="c-table-wrapper">
+                    <table class="c-table c-table--sm">
+                      <thead>
+                        <tr>
+                          <th>Competency</th>
+                          <th>Score column</th>
+                          <th>Course target column</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% direct_competencies.first(30).each do |column| %>
+                          <tr>
+                            <td class="c-table__title"><%= column["competency_title"] || column[:competency_title] %></td>
+                            <td><%= (column["mastery_points_header"] || column[:mastery_points_header]).presence || "No score column" %></td>
+                            <td><%= column["result_header"] || column[:result_header] %></td>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              <% else %>
+                <div class="c-callout c-callout--warning u-mt-md">
+                  No competency columns or mapping rules were detected for this file.
+                </div>
+              <% end %>
+
               <% if assignments.any? %>
                 <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Canvas Assignment Columns</h3>
+                  <h3 class="c-heading-inline">Canvas Columns Seen</h3>
                   <div class="c-table-wrapper">
                     <table class="c-table c-table--sm">
                       <thead>
@@ -526,82 +666,32 @@
                 </div>
               <% end %>
 
-              <% if mappings.any? %>
+              <% if review_items.any? %>
                 <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Mapping Rows</h3>
+                  <h3 class="c-heading-inline">Review Items</h3>
                   <div class="c-table-wrapper">
                     <table class="c-table c-table--sm">
                       <thead>
                         <tr>
+                          <th>Type</th>
                           <th>Row</th>
-                          <th>Match</th>
-                          <th>Course</th>
-                          <th>Competency</th>
-                          <th>Score Basis</th>
-                          <th>Range</th>
-                          <th>Level</th>
+                          <th>Message</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <% mappings.first(30).each do |mapping| %>
+                        <% review_items.each do |item| %>
                           <tr>
-                            <td><%= mapping["source_row_number"] || mapping[:source_row_number] %></td>
-                            <td><%= [mapping["assignment_match_type"] || mapping[:assignment_match_type], mapping["assignment_match_value"] || mapping[:assignment_match_value]].compact.join(": ") %></td>
-                            <td><%= (mapping["course_code"] || mapping[:course_code]).presence || "Any course" %></td>
-                            <td class="c-table__title"><%= mapping["competency_title"] || mapping[:competency_title] %></td>
-                            <td><%= mapping["score_basis"] || mapping[:score_basis] %></td>
-                            <td><%= mapping["min_grade"] || mapping[:min_grade] %>–<%= mapping["max_grade"] || mapping[:max_grade] %></td>
-                            <td><%= mapping["competency_level"] || mapping[:competency_level] %></td>
+                            <td><%= item[:type] %></td>
+                            <td><%= item[:row] %></td>
+                            <td><%= item[:message] %></td>
                           </tr>
                         <% end %>
                       </tbody>
                     </table>
                   </div>
                 </div>
-              <% elsif direct_competencies.any? %>
-                <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Direct Competency Columns</h3>
-                  <div class="c-table-wrapper">
-                    <table class="c-table c-table--sm">
-                      <thead>
-                        <tr>
-                          <th>Result column</th>
-                          <th>Mastery points column</th>
-                          <th>Competency</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <% direct_competencies.first(30).each do |column| %>
-                          <tr>
-                            <td><%= column["result_header"] || column[:result_header] %></td>
-                            <td><%= column["mastery_points_header"] || column[:mastery_points_header] %></td>
-                            <td class="c-table__title"><%= column["competency_title"] || column[:competency_title] %></td>
-                          </tr>
-                        <% end %>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              <% end %>
-
-              <% if file.parse_errors.present? || debug["mapping_warnings_preview"].present? || debug["duplicate_warnings_preview"].present? %>
-                <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Diagnostics</h3>
-                  <ul class="c-help u-stack u-stack--xs">
-                    <% Array(file.parse_errors).first(20).each do |error| %>
-                      <li>
-                        <% if error["type"].present? %><strong><%= error["type"].to_s.humanize %>:</strong><% end %>
-                        Row <%= error["row"] || "—" %>: <%= error["message"] || error %>
-                      </li>
-                    <% end %>
-                    <% Array(debug["mapping_warnings_preview"]).first(10).each do |warning| %>
-                      <li>Mapping row <%= warning["row"] || "—" %>: <%= warning["message"] || warning %></li>
-                    <% end %>
-                    <% Array(debug["duplicate_warnings_preview"]).first(10).each do |warning| %>
-                      <li>Duplicate row <%= warning["row"] || "—" %>: <%= warning["message"] || warning %></li>
-                    <% end %>
-                  </ul>
-                </div>
+              <% else %>
+                <p class="c-help u-mt-md">No file-level mapping, type, duplicate, or parsing issues were detected.</p>
               <% end %>
             </details>
           <% end %>
@@ -618,99 +708,178 @@
             <p class="c-empty-state__body">No pending student matches were created for this batch.</p>
           </div>
         <% else %>
+          <% pending_student_groups = @pending_rows.group_by do |row|
+            identity = row.student_uin.presence ||
+                       row.student_email.presence ||
+                       row.student_identifier.presence ||
+                       row.student_name.presence ||
+                       "pending-row-#{row.id}"
+            [row.student_identifier_type.presence || "student", identity.to_s.downcase.strip]
+          end %>
           <div class="u-stack u-stack--sm u-p-md">
-            <% @pending_rows.each do |row| %>
+            <% pending_student_groups.values.each_with_index do |rows, group_index| %>
+              <% primary_row = rows.first %>
+              <% imported_student_label = primary_row.student_name.presence || primary_row.student_identifier.presence || "Unknown Student" %>
+              <% imported_student_meta = [primary_row.student_uin.presence && "UIN #{primary_row.student_uin}", primary_row.student_email].compact_blank.join(" / ") %>
+              <% course_codes = rows.map(&:course_code).compact_blank.uniq.sort %>
+              <% row_numbers = rows.map(&:row_number).compact_blank.uniq.sort %>
+              <% edit_tab_id = "pending-#{group_index}-edit" %>
+              <% values_tab_id = "pending-#{group_index}-values" %>
               <details class="c-accordion">
                 <summary class="c-accordion__summary">
-                  <span class="c-accordion__title"><%= row.student_name.presence || row.student_identifier.presence || "Unknown Student" %></span>
+                  <span class="c-accordion__title"><%= imported_student_label %></span>
                   <span class="c-accordion__meta">
-                    <%= row.course_code.presence || "No course" %>
-                    · <%= row.competency_title %>
-                    · row <%= row.row_number || "—" %>
+                    <%= pluralize(rows.size, "pending row") %>
+                    <% if course_codes.any? %>· <%= course_codes.to_sentence %><% end %>
+                    <% if row_numbers.any? %>· source rows <%= row_numbers.join(", ") %><% end %>
                   </span>
                 </summary>
 
-                <div class="u-stack u-stack--md u-p-md">
-                  <div class="c-table-wrapper">
-                    <table class="c-table c-table--sm">
-                      <tbody>
-                        <tr>
-                          <th>File</th>
-                          <td><%= row.grade_import_file&.file_name %></td>
-                        </tr>
-                        <tr>
-                          <th>Imported student</th>
-                          <td><%= [row.student_name, row.student_uin, row.student_email].compact_blank.join(" / ") %></td>
-                        </tr>
-                        <tr>
-                          <th>Evidence</th>
-                          <td><%= [row.course_code, row.assignment_name, row.competency_title].compact_blank.join(" / ") %></td>
-                        </tr>
-                        <tr>
-                          <th>Levels</th>
-                          <td>Result <%= row.mapped_level %>; course target <%= row.course_target_level.presence || "missing" %></td>
-                        </tr>
-                      </tbody>
-                    </table>
+                <div class="u-stack u-stack--md u-p-md" data-controller="survey-tabs" data-survey-tabs-default-tab-value="<%= edit_tab_id %>">
+                  <div class="u-responsive-split">
+                    <div class="u-stack u-stack--xs">
+                      <div class="c-table__title"><%= imported_student_label %></div>
+                      <div class="c-table__meta"><%= imported_student_meta.presence || "No UIN or email provided" %></div>
+                    </div>
+                    <div class="c-tabs" role="tablist" aria-label="Pending student match tools">
+                      <button type="button"
+                              class="c-tab is-active"
+                              role="tab"
+                              data-survey-tabs-target="tab"
+                              data-tab-id="<%= edit_tab_id %>"
+                              data-action="click->survey-tabs#switchTab keydown->survey-tabs#handleKeydown">
+                        Edit
+                      </button>
+                      <button type="button"
+                              class="c-tab"
+                              role="tab"
+                              data-survey-tabs-target="tab"
+                              data-tab-id="<%= values_tab_id %>"
+                              data-action="click->survey-tabs#switchTab keydown->survey-tabs#handleKeydown">
+                        Processed values
+                      </button>
+                    </div>
                   </div>
 
-                  <% if @batch.finalized? %>
-                    <div class="c-callout c-callout--info">This batch is finalized and locked.</div>
-                  <% else %>
-                    <%= form_with url: pending_row_admin_grade_import_batch_path(@batch, row),
+                  <div data-survey-tabs-target="panel" data-tab-panel="<%= edit_tab_id %>" role="tabpanel">
+                    <% if @batch.finalized? %>
+                      <div class="c-callout c-callout--info">This batch is finalized and locked.</div>
+                    <% else %>
+                      <%= form_with url: pending_row_group_admin_grade_import_batch_path(@batch),
                           method: :patch,
                           local: true,
                           data: { turbo: false },
                           class: "u-stack u-stack--md" do %>
-                      <div class="u-grid" style="--u-grid-min: 220px">
-                        <div class="c-field">
-                          <%= label_tag "grade_import_pending_row_#{row.id}_matched_student_id", "Match to student", class: "c-label" %>
-                          <%= select_tag "grade_import_pending_row[matched_student_id]",
-                                options_for_select(
-                                  [["Keep pending", ""]] + @student_match_options.map { |student| ["#{student.user&.display_name || student.student_id} (UIN #{student.uin.presence || 'missing'})", student.student_id] },
-                                  row.matched_student_id
-                                ),
-                                id: "grade_import_pending_row_#{row.id}_matched_student_id",
-                                class: "c-select u-w-full" %>
-                        </div>
-                        <div class="c-field">
-                          <%= label_tag "grade_import_pending_row_#{row.id}_student_uin", "Student UIN", class: "c-label" %>
-                          <%= text_field_tag "grade_import_pending_row[student_uin]", row.student_uin, id: "grade_import_pending_row_#{row.id}_student_uin", class: "c-input" %>
-                        </div>
-                        <div class="c-field">
-                          <%= label_tag "grade_import_pending_row_#{row.id}_student_email", "Student email", class: "c-label" %>
-                          <%= email_field_tag "grade_import_pending_row[student_email]", row.student_email, id: "grade_import_pending_row_#{row.id}_student_email", class: "c-input" %>
-                        </div>
-                        <div class="c-field">
-                          <%= label_tag "grade_import_pending_row_#{row.id}_student_name", "Student name", class: "c-label" %>
-                          <%= text_field_tag "grade_import_pending_row[student_name]", row.student_name, id: "grade_import_pending_row_#{row.id}_student_name", class: "c-input" %>
-                        </div>
-                        <div class="c-field">
-                          <%= label_tag "grade_import_pending_row_#{row.id}_course_code", "Course code", class: "c-label" %>
-                          <%= text_field_tag "grade_import_pending_row[course_code]", row.course_code, id: "grade_import_pending_row_#{row.id}_course_code", class: "c-input" %>
-                        </div>
-                        <div class="c-field">
-                          <%= label_tag "grade_import_pending_row_#{row.id}_competency_title", "Competency", class: "c-label" %>
-                          <%= select_tag "grade_import_pending_row[competency_title]",
-                                options_for_select(Reports::DataAggregator::COMPETENCY_TITLES, row.competency_title),
-                                id: "grade_import_pending_row_#{row.id}_competency_title",
-                                class: "c-select u-w-full" %>
-                        </div>
-                        <div class="c-field">
-                          <%= label_tag "grade_import_pending_row_#{row.id}_mapped_level", "Result level", class: "c-label" %>
-                          <%= number_field_tag "grade_import_pending_row[mapped_level]", row.mapped_level, id: "grade_import_pending_row_#{row.id}_mapped_level", class: "c-input", min: 1, max: 5 %>
-                        </div>
-                        <div class="c-field">
-                          <%= label_tag "grade_import_pending_row_#{row.id}_course_target_level", "Course target", class: "c-label" %>
-                          <%= number_field_tag "grade_import_pending_row[course_target_level]", row.course_target_level, id: "grade_import_pending_row_#{row.id}_course_target_level", class: "c-input", min: 1, max: 5 %>
-                        </div>
-                      </div>
+                        <% rows.each do |row| %>
+                          <%= hidden_field_tag "pending_row_ids[]", row.id %>
+                        <% end %>
 
-                      <div class="u-actions u-actions--start">
-                        <%= submit_tag "Save correction", class: button_classes(:secondary) %>
-                      </div>
+                        <div class="c-callout c-callout--info">
+                          Choosing a matched student applies to every pending row in this accordion. Row-level competency score and target values remain editable below.
+                        </div>
+
+                        <div class="u-grid" style="--u-grid-min: 220px">
+                          <div class="c-field">
+                            <%= label_tag "grade_import_pending_row_group_#{group_index}_matched_student_id", "Match all rows to student", class: "c-label" %>
+                            <%= select_tag "grade_import_pending_row_group[matched_student_id]",
+                                  options_for_select(
+                                    [["Keep pending", ""]] + @student_match_options.map { |student| ["#{student.user&.display_name || student.student_id} (UIN #{student.uin.presence || 'missing'})", student.student_id] },
+                                    primary_row.matched_student_id
+                                  ),
+                                  id: "grade_import_pending_row_group_#{group_index}_matched_student_id",
+                                  class: "c-select u-w-full" %>
+                          </div>
+                          <div class="c-field">
+                            <%= label_tag "grade_import_pending_row_group_#{group_index}_student_uin", "Student UIN", class: "c-label" %>
+                            <%= text_field_tag "grade_import_pending_row_group[student_uin]", primary_row.student_uin, id: "grade_import_pending_row_group_#{group_index}_student_uin", class: "c-input" %>
+                          </div>
+                          <div class="c-field">
+                            <%= label_tag "grade_import_pending_row_group_#{group_index}_student_email", "Student email", class: "c-label" %>
+                            <%= email_field_tag "grade_import_pending_row_group[student_email]", primary_row.student_email, id: "grade_import_pending_row_group_#{group_index}_student_email", class: "c-input" %>
+                          </div>
+                          <div class="c-field">
+                            <%= label_tag "grade_import_pending_row_group_#{group_index}_student_name", "Student name", class: "c-label" %>
+                            <%= text_field_tag "grade_import_pending_row_group[student_name]", primary_row.student_name, id: "grade_import_pending_row_group_#{group_index}_student_name", class: "c-input" %>
+                          </div>
+                        </div>
+
+                        <div class="c-table-wrapper">
+                          <table class="c-table c-table--sm">
+                            <thead>
+                              <tr>
+                                <th>Row</th>
+                                <th>Course</th>
+                                <th>Assignment</th>
+                                <th>Competency</th>
+                                <th>Raw</th>
+                                <th>Score</th>
+                                <th>Target</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <% rows.each do |row| %>
+                                <tr>
+                                  <td class="u-whitespace-nowrap"><%= row.row_number || "—" %></td>
+                                  <td><%= text_field_tag "pending_rows[#{row.id}][course_code]", row.course_code, class: "c-input" %></td>
+                                  <td><%= text_field_tag "pending_rows[#{row.id}][assignment_name]", row.assignment_name, class: "c-input" %></td>
+                                  <td>
+                                    <%= select_tag "pending_rows[#{row.id}][competency_title]",
+                                          options_for_select(Reports::DataAggregator::COMPETENCY_TITLES, row.competency_title),
+                                          class: "c-select u-w-full" %>
+                                  </td>
+                                  <td><%= text_field_tag "pending_rows[#{row.id}][raw_grade]", row.raw_grade, class: "c-input" %></td>
+                                  <td><%= number_field_tag "pending_rows[#{row.id}][mapped_level]", row.mapped_level, class: "c-input", min: 1, max: 5 %></td>
+                                  <td><%= number_field_tag "pending_rows[#{row.id}][course_target_level]", row.course_target_level, class: "c-input", min: 1, max: 5 %></td>
+                                </tr>
+                              <% end %>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div class="u-actions u-actions--start">
+                          <%= submit_tag "Save grouped correction", class: button_classes(:secondary) %>
+                        </div>
+                      <% end %>
                     <% end %>
-                  <% end %>
+                  </div>
+
+                  <div class="hidden" data-survey-tabs-target="panel" data-tab-panel="<%= values_tab_id %>" role="tabpanel">
+                    <div class="c-table-wrapper">
+                      <table class="c-table c-table--sm">
+                        <thead>
+                          <tr>
+                            <th>File</th>
+                            <th>Row</th>
+                            <th>Imported Student</th>
+                            <th>Course</th>
+                            <th>Assignment</th>
+                            <th>Competency</th>
+                            <th>Raw</th>
+                            <th>Score</th>
+                            <th>Target</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% rows.each do |row| %>
+                            <tr>
+                              <td><%= row.grade_import_file&.file_name %></td>
+                              <td class="u-whitespace-nowrap"><%= row.row_number || "—" %></td>
+                              <td>
+                                <span class="c-table__title"><%= row.student_name.presence || row.student_identifier.presence || "Unknown Student" %></span>
+                                <span class="c-table__meta"><%= [row.student_uin, row.student_email].compact_blank.join(" / ") %></span>
+                              </td>
+                              <td><%= row.course_code.presence || "—" %></td>
+                              <td><%= row.assignment_name.presence || "—" %></td>
+                              <td class="c-table__title"><%= row.competency_title %></td>
+                              <td><%= row.raw_grade %></td>
+                              <td><span class="c-score-pill c-score-pill--course"><%= row.mapped_level %></span></td>
+                              <td><span class="c-score-pill c-score-pill--program <%= 'c-score-pill--empty' if row.course_target_level.blank? %>"><%= row.course_target_level.presence || "—" %></span></td>
+                            </tr>
+                          <% end %>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </details>
             <% end %>
@@ -796,7 +965,7 @@
                                   </div>
                                   <div class="u-grid" style="--u-grid-min: 110px">
                                     <div class="c-field">
-                                      <%= label_tag "grade_competency_evidence_#{evidence.id}_mapped_level", "Result", class: "c-label" %>
+                                      <%= label_tag "grade_competency_evidence_#{evidence.id}_mapped_level", "Competency score", class: "c-label" %>
                                       <%= number_field_tag "grade_competency_evidence[mapped_level]", evidence.mapped_level, id: "grade_competency_evidence_#{evidence.id}_mapped_level", class: "c-input", min: 1, max: 5 %>
                                     </div>
                                     <div class="c-field">

@@ -18,7 +18,7 @@ This document summarizes the current operating state of TAMU Competency Assessme
   - Survey Builder for surveys, sections, questions, legends, previews, archive/activate flows, and audit/change history.
   - Grade Import Batches for mapping workbooks and direct competency CSV/XLSX/XLSM imports.
   - Competencies matrix comparing self, advisor, and course-derived ratings.
-  - Student Records with semester-oriented progress review and exports.
+  - Survey Records with semester-oriented progress review and exports.
   - Reports with filters, charts, PDF exports, and Excel exports.
   - Maintenance mode management.
 - Course-derived competency ratings are intentionally separate from advisor feedback. They are stored through grade import evidence/rating models rather than overwriting survey or feedback data.

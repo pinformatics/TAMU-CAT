@@ -15,7 +15,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     @temp_paths.each { |path| FileUtils.rm_f(path) }
   end
 
-  test "direct competency xlsx uses result as competency level and mastery points as course target" do
+  test "direct competency xlsx uses mastery points as competency level and result as course target" do
     path = build_direct_competency_workbook(
       sheet_name: "PHPM_790_001",
       rows: [
@@ -46,13 +46,13 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "PHPM-790-001", evidence.course_code
     assert_equal "", evidence.assignment_name
     assert_equal "Legal & Ethical Bases for Health Services and Health Systems", evidence.competency_title
-    assert_equal 5, evidence.mapped_level
-    assert_equal 3, evidence.course_target_level
-    assert_in_delta 5.0, evidence.raw_grade.to_f, 0.001
-    assert_equal 5, rating.aggregated_level
+    assert_equal 3, evidence.mapped_level
+    assert_equal 5, evidence.course_target_level
+    assert_in_delta 3.0, evidence.raw_grade.to_f, 0.001
+    assert_equal 3, rating.aggregated_level
   end
 
-  test "direct competency mastery points never replace result-derived competency ratings" do
+  test "direct competency result targets never replace mastery-derived competency ratings" do
     path = build_direct_competency_workbook(
       sheet_name: "PHPM_790_001",
       rows: [
@@ -78,9 +78,9 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     rating = batch.grade_competency_ratings.first
 
     assert_equal "completed", batch.status
-    assert_equal 2, evidence.mapped_level
-    assert_equal 5, evidence.course_target_level
-    assert_equal 2, rating.aggregated_level
+    assert_equal 5, evidence.mapped_level
+    assert_equal 2, evidence.course_target_level
+    assert_equal 5, rating.aggregated_level
   end
 
   test "canvas direct competency workbook imports primary format and ignores hpmc columns" do
@@ -112,10 +112,37 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.course_target_level
   end
 
+  test "direct competency preview counts pending students separately from pending competency rows" do
+    path = build_primary_direct_competency_workbook(
+      sheet_name: "PHPM_633_700",
+      rows: [
+        [ "Missing Student", nil, nil, 5, 3, 1, 3, 3, 3, 1, 3, 5, 3, nil, 3, nil, 3 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeImportPendingRow.pending_student_match.count }, 5 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "direct_competency_pending_student.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    file = batch.reload.grade_import_files.first
+    debug = file.parsed_content.fetch("grade_sheet_debug")
+
+    assert_equal 5, file.pending_rows
+    assert_equal 1, debug["pending_student_count"]
+    assert_equal 5, debug["pending_row_count"]
+    assert_equal 0, debug["matched_student_count"]
+  end
+
   test "faculty direct competency csv imports primary format and ignores hpmc columns" do
     path = build_primary_direct_competency_csv(
       rows: [
-        [ @student.user.name, @student.student_id, @student.uin, 5, 3, nil, 3, 4, 3, nil, 3, nil, 3, nil, 3, nil, 3 ]
+        [ @student.user.name, @student.student_id, @student.uin, 5, 3, nil, nil, 4, 3, nil, nil, nil, nil, nil, nil, nil, nil ]
       ]
     )
 
@@ -134,9 +161,10 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "completed", batch.status
     assert_equal [ "PHPM-633-700" ], evidences.map(&:course_code).uniq
     assert_equal [ "Legal & Ethical Bases for Health Services and Health Systems", "Policy Analysis" ], evidences.map(&:competency_title)
-    assert_equal 5, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.mapped_level
-    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.course_target_level
-    assert_equal 4, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.mapped_level
+    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.mapped_level
+    assert_equal 5, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.course_target_level
+    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.mapped_level
+    assert_equal 4, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.course_target_level
     assert_equal 0, evidences.count { |evidence| evidence.competency_title.include?("HPMC") }
   end
 
@@ -237,8 +265,8 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     pending = batch.reload.grade_import_pending_rows.first
     assert_equal "student_name", pending.student_identifier_type
     assert_equal @student.user.name, pending.student_name
-    assert_equal 4, pending.mapped_level
-    assert_equal 3, pending.course_target_level
+    assert_equal 3, pending.mapped_level
+    assert_equal 4, pending.course_target_level
 
     assert_difference -> { GradeCompetencyEvidence.count }, 1 do
       assert_equal 1, GradeImports::PendingRowReconciler.call(student: @student)
@@ -490,7 +518,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 1, file.imported_rows
     assert_equal 1, file.error_rows
     assert_equal 1, batch.grade_competency_evidences.count
-    assert_includes file.parse_errors.first["message"], "result must be an integer between 1 and 5"
+    assert_includes file.parse_errors.first["message"], "result target must be an integer between 1 and 5"
   end
 
   test "replace existing files reprocesses corrected upload without duplicating evidence" do

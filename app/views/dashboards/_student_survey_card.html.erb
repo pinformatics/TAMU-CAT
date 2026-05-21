@@ -1,0 +1,101 @@
+<% survey = entry[:survey] %>
+<% offering = local_assigns[:offering] %>
+<% progress = entry[:progress] || {} %>
+<% available_from = entry[:available_from] %>
+<% available_until = entry[:available_until] %>
+<% total_required = progress[:total_required].to_i %>
+<% answered_required = progress[:answered_required].to_i %>
+<% progress_percent = total_required.positive? ? ((answered_required.to_f / total_required) * 100).round : 0 %>
+<% completion_status = if entry[:completed_at].present?
+  "Completed"
+elsif progress[:answered_total].to_i.positive?
+  "In Progress"
+else
+  "Not Started"
+end %>
+<% completion_variant = case completion_status
+when "Completed" then "success"
+when "In Progress" then "info"
+else "muted"
+end %>
+<% active_status = survey.is_active? ? "Active" : "Archived" %>
+<% available_from_label = available_from.present? ? l(available_from.in_time_zone, format: :long) : "Not set" %>
+<% due_label = available_until.present? ? l(available_until.in_time_zone, format: :long) : "Not set" %>
+<% review_note = review_meetings_note(offering) %>
+
+<article class="c-list-item u-stack u-stack--md">
+  <header class="u-actions u-actions--split u-gap-md">
+    <div class="u-stack u-stack--xs u-min-w-0">
+      <div class="c-item-title"><%= survey.title %></div>
+      <div class="u-actions u-actions--start u-gap-xs">
+        <span class="c-pill c-pill--muted"><%= survey.semester.presence || "Semester TBD" %></span>
+        <span class="c-pill <%= survey.is_active? ? 'c-pill--primary' : 'c-pill--muted' %>"><%= active_status %></span>
+      </div>
+    </div>
+
+    <span class="c-status-badge c-status-badge--<%= completion_variant %>"><%= completion_status %></span>
+  </header>
+
+  <dl class="c-key-value-grid">
+    <% if review_note.present? %>
+      <div class="c-key-value">
+        <dt>Review meetings</dt>
+        <dd><%= review_note %></dd>
+      </div>
+    <% end %>
+
+    <div class="c-key-value">
+      <dt>Available from</dt>
+      <dd>
+        <span class="sr-only">Available from: <%= available_from_label %></span>
+        <span aria-hidden="true"><%= available_from_label %></span>
+      </dd>
+    </div>
+
+    <div class="c-key-value">
+      <dt>Due</dt>
+      <dd>
+        <span class="sr-only">Due: <%= due_label %></span>
+        <span aria-hidden="true"><%= due_label %></span>
+      </dd>
+    </div>
+  </dl>
+
+  <% if total_required.positive? %>
+    <div class="c-progress-summary">
+      <div class="c-progress-summary__row">
+        <span><%= answered_required %> of <%= total_required %> required questions answered</span>
+        <strong><%= progress_percent %>%</strong>
+      </div>
+      <div class="c-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= progress_percent %>" aria-label="Required question completion">
+        <div class="c-progress-bar" style="width: <%= progress_percent %>%"></div>
+      </div>
+    </div>
+  <% end %>
+
+  <footer class="u-actions u-actions--start">
+    <% if local_assigns[:mode] == :completed %>
+      <% survey_response = entry[:survey_response] %>
+      <% download_token = entry[:download_token] %>
+      <% can_edit = survey.is_active? && (available_until.blank? || available_until >= Time.current) %>
+      <% edit_disabled_hint = survey.is_active? ? "Edit disabled: deadline has passed." : "Edit disabled: this survey is archived." %>
+      <%= link_to "Review", survey_response_path(survey_response), class: button_classes(:secondary) %>
+      <% if can_edit %>
+        <%= link_to "Edit", survey_path(survey), class: button_classes(:secondary) %>
+      <% else %>
+        <span
+          class="<%= button_classes(:secondary) %> u-disabled"
+          role="button"
+          aria-disabled="true"
+          tabindex="0"
+          aria-describedby="edit-disabled-hint-completed<%= survey.id %>">
+          Edit
+        </span>
+        <span id="edit-disabled-hint-completed<%= survey.id %>" class="sr-only"><%= edit_disabled_hint %></span>
+      <% end %>
+      <%= link_to "Download PDF", download_survey_response_path(survey_response, token: download_token), class: button_classes(:primary), target: "_blank", rel: "noopener noreferrer" %>
+    <% else %>
+      <%= link_to "Open", survey_path(survey), class: button_classes(:primary) %>
+    <% end %>
+  </footer>
+</article>

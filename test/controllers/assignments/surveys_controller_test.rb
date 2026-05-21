@@ -79,6 +79,78 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, expected_deadline
   end
 
+  test "admin show displays survey availability settings" do
+    sign_in users(:admin)
+
+    @survey.update!(
+      available_from: Time.zone.local(2035, 1, 5, 15, 0),
+      available_until: Time.zone.local(2035, 2, 15, 18, 0)
+    )
+
+    get assignments_survey_path(@survey)
+
+    assert_response :success
+    assert_includes response.body, "Survey Availability"
+    assert_includes response.body, "Save Availability"
+    assert_match(/id="survey_available_from"[^>]*value="2035-01-05T15:00"/, response.body)
+    assert_match(/id="survey_available_until"[^>]*value="2035-02-15T18:00"/, response.body)
+    assert_includes response.body, edit_admin_survey_path(@survey)
+  end
+
+  test "availability action updates survey dates and inherited assignments" do
+    sign_in users(:admin)
+
+    previous_start = Time.zone.local(2035, 1, 5, 15, 0)
+    previous_deadline = Time.zone.local(2035, 2, 15, 18, 0)
+    next_start = Time.zone.local(2035, 1, 12, 9, 30)
+    next_deadline = Time.zone.local(2035, 3, 1, 17, 45)
+    @survey.update!(available_from: previous_start, available_until: previous_deadline)
+
+    inherited_assignment = SurveyAssignment.find_or_initialize_by(survey: @survey, student: students(:student))
+    inherited_assignment.advisor ||= advisors(:advisor)
+    inherited_assignment.assigned_at ||= Time.current
+    inherited_assignment.available_from = previous_start
+    inherited_assignment.available_until = previous_deadline
+    inherited_assignment.save!
+
+    custom_assignment = SurveyAssignment.find_or_initialize_by(survey: @survey, student: students(:other_student))
+    custom_assignment.advisor ||= advisors(:other_advisor)
+    custom_assignment.assigned_at ||= Time.current
+    custom_start = previous_start + 2.days
+    custom_deadline = previous_deadline + 2.days
+    custom_assignment.available_from = custom_start
+    custom_assignment.available_until = custom_deadline
+    custom_assignment.save!
+
+    patch availability_assignments_survey_path(@survey), params: {
+      survey: {
+        available_from: "2035-01-12T09:30",
+        available_until: "2035-03-01T17:45"
+      }
+    }
+
+    assert_redirected_to assignments_survey_path(@survey)
+    assert_equal next_start, @survey.reload.available_from
+    assert_equal next_deadline, @survey.available_until
+    assert_equal next_start, inherited_assignment.reload.available_from
+    assert_equal next_deadline, inherited_assignment.available_until
+    assert_equal custom_start, custom_assignment.reload.available_from
+    assert_equal custom_deadline, custom_assignment.available_until
+  end
+
+  test "advisor cannot update survey availability defaults" do
+    previous_deadline = @survey.available_until
+
+    patch availability_assignments_survey_path(@survey), params: {
+      survey: {
+        available_until: "2035-03-01T17:45"
+      }
+    }
+
+    assert_redirected_to assignments_survey_path(@survey)
+    assert_equal previous_deadline.to_i, @survey.reload.available_until.to_i
+  end
+
   test "assign creates student questions and enqueues notification" do
     StudentQuestion.delete_all
     SurveyAssignment.delete_all

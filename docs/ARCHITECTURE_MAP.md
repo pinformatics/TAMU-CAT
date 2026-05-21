@@ -204,7 +204,7 @@ Imported course ratings should not overwrite advisor feedback.
 They are intentionally shown as separate sources in:
 
 - admin competencies view
-- student records
+- survey records
 - reports where applicable
 
 ### Evidence rows are preserved

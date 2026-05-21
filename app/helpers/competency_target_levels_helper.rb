@@ -25,52 +25,54 @@ module CompetencyTargetLevelsHelper
   end
 
   def course_competency_context_for(question:, survey:, student:, viewer: nil)
-    title = question&.question_text.to_s.strip
+    title = canonical_course_competency_title(question&.question_text)
     return if title.blank? || survey.blank? || student.blank?
-    return unless Reports::DataAggregator::COMPETENCY_TITLES.include?(title)
 
-    semester = survey.program_semester
-    return if semester.blank?
+    cache_key = [
+      student.student_id,
+      title,
+      viewer&.respond_to?(:role_student?) && viewer.role_student? ? "student" : "staff"
+    ]
+    @_course_competency_context_cache ||= {}
+    return @_course_competency_context_cache[cache_key] if @_course_competency_context_cache.key?(cache_key)
 
-    release_date = semester.course_grade_release_date
     student_viewer = viewer&.respond_to?(:role_student?) && viewer.role_student?
-    if student_viewer && release_date.present? && !release_date.released?
-      return {
-        released: false,
-        release_label: course_release_label(release_date.release_date)
-      }
-    end
-
-    rating_rows = GradeCompetencyRating
-      .joins(:grade_import_batch)
-      .merge(GradeImportBatch.reportable)
-      .where(
-        student_id: student.student_id,
-        competency_title: title,
-        grade_import_batches: { program_semester_id: semester.id }
-      )
+    competency = Competency.find_by_normalized_title(title) if defined?(Competency)
 
     evidence_rows = GradeCompetencyEvidence
       .joins(:grade_import_batch)
       .merge(GradeImportBatch.reportable)
-      .where(
-        student_id: student.student_id,
-        competency_title: title,
-        grade_import_batches: { program_semester_id: semester.id }
+      .includes(grade_import_batch: { program_semester: :course_grade_release_date })
+      .where(student_id: student.student_id)
+    evidence_rows = if competency&.id.present?
+      evidence_rows.where(
+        "grade_competency_evidences.competency_id = :competency_id OR grade_competency_evidences.competency_title = :title",
+        competency_id: competency.id,
+        title: title
       )
+    else
+      evidence_rows.where(competency_title: title)
+    end
+    evidence_rows = evidence_rows
       .order(:course_code, :assignment_name, :updated_at)
       .to_a
 
-    levels = rating_rows.filter_map { |rating| rating.aggregated_level&.to_f }
-    targets = evidence_rows.filter_map(&:course_target_level).uniq.sort
-    return if levels.empty? && targets.empty?
+    released_rows = student_viewer ? evidence_rows.select { |row| course_evidence_released?(row) } : evidence_rows
+    embargoed_rows = student_viewer ? evidence_rows.reject { |row| course_evidence_released?(row) } : []
 
-    {
-      released: true,
-      course_rating: CourseCompetencyRule.aggregate(levels, rule_key: SiteSetting.course_competency_rule),
-      course_target_levels: targets,
-      source_count: evidence_rows.size
-    }
+    context = if released_rows.any?
+      {
+        released: true,
+        entries: course_competency_evidence_entries(released_rows)
+      }
+    elsif embargoed_rows.any?
+      {
+        released: false,
+        release_label: embargoed_release_label(embargoed_rows)
+      }
+    end
+
+    @_course_competency_context_cache[cache_key] = context
   end
 
   def render_course_competency_context(context)
@@ -79,24 +81,40 @@ module CompetencyTargetLevelsHelper
     if context[:released] == false
       return content_tag(:div, class: "c-context-panel c-context-panel--locked") do
         safe_join([
-          content_tag(:span, "Course competency results", class: "c-context-panel__label"),
+          content_tag(:span, "Course competency evidence", class: "c-context-panel__label"),
           content_tag(:strong, context[:release_label].presence || "Not released")
         ], " ")
       end
     end
 
-    chips = []
-    chips << content_tag(:span, "Course result #{format_competency_context_value(context[:course_rating])}", class: "c-context-panel__chip") if context[:course_rating].present?
-    if context[:course_target_levels].present?
-      target_label = context[:course_target_levels].join(", ")
-      chips << content_tag(:span, "Course target #{target_label}", class: "c-context-panel__chip")
+    entries = Array(context[:entries])
+    return if entries.empty?
+
+    rows = entries.map do |entry|
+      parts = [
+        content_tag(:strong, "Mastery level: #{entry[:mastery_level]}", class: "c-context-panel__value"),
+        content_tag(:span, entry[:course_code], class: "c-context-panel__chip"),
+        content_tag(:span, entry[:semester_name], class: "c-context-panel__meta")
+      ]
+
+      if entry[:course_target_levels].present?
+        parts << content_tag(:span, "Course target: #{entry[:course_target_levels].join(', ')}", class: "c-context-panel__meta")
+      end
+
+      if entry[:source_count].to_i > 1
+        parts << content_tag(:span, pluralize(entry[:source_count], "source"), class: "c-context-panel__meta")
+      end
+
+      content_tag(:div, class: "c-context-panel__row") do
+        safe_join(parts, " ")
+      end
     end
-    chips << content_tag(:span, pluralize(context[:source_count], "source"), class: "c-context-panel__meta") if context[:source_count].to_i.positive?
 
-    return if chips.empty?
-
-    content_tag(:div, class: "c-context-panel", aria: { label: "Imported course competency context" }) do
-      safe_join(chips)
+    content_tag(:div, class: "c-context-panel c-context-panel--stacked", aria: { label: "Imported course competency evidence" }) do
+      safe_join([
+        content_tag(:span, "Course competency evidence", class: "c-context-panel__label"),
+        content_tag(:div, safe_join(rows), class: "c-context-panel__rows")
+      ])
     end
   end
 
@@ -112,6 +130,85 @@ module CompetencyTargetLevelsHelper
     return value if value.blank?
 
     number_with_precision(value, precision: 2, strip_insignificant_zeros: true)
+  end
+
+  def canonical_course_competency_title(value)
+    raw_title = value.to_s.strip
+    return if raw_title.blank?
+    return raw_title if Reports::DataAggregator::COMPETENCY_TITLES.include?(raw_title)
+
+    if defined?(Competency)
+      competency = Competency.find_by_normalized_title(raw_title)
+      return competency.title if competency
+    end
+
+    normalized = if defined?(Competency)
+      Competency.normalize_title(raw_title)
+    else
+      raw_title.downcase.gsub("&", " and ").gsub(/[^\p{Alnum}]+/, " ").squeeze(" ").strip
+    end
+
+    Reports::DataAggregator::COMPETENCY_TITLES.find do |known_title|
+      comparable = if defined?(Competency)
+        Competency.normalize_title(known_title)
+      else
+        known_title.downcase.gsub("&", " and ").gsub(/[^\p{Alnum}]+/, " ").squeeze(" ").strip
+      end
+      comparable == normalized
+    end
+  end
+
+  def course_evidence_released?(row)
+    release = row.grade_import_batch&.program_semester&.course_grade_release_date
+    release.blank? || release.released?
+  end
+
+  def embargoed_release_label(rows)
+    release_dates = Array(rows).filter_map do |row|
+      row.grade_import_batch&.program_semester&.course_grade_release_date&.release_date
+    end
+
+    release_dates.any? ? course_release_label(release_dates.min) : "Not released"
+  end
+
+  def course_competency_evidence_entries(rows)
+    Array(rows).group_by do |row|
+      [
+        row.grade_import_batch&.program_semester_id || "no-semester",
+        row.course_code.presence || "Unspecified course"
+      ]
+    end.map do |(_semester_id, course_code), grouped_rows|
+      first_row = grouped_rows.first
+      mastery_level = CourseCompetencyRule.aggregate(
+        grouped_rows.filter_map { |row| row.mapped_level&.to_f },
+        rule_key: SiteSetting.course_competency_rule
+      )
+
+      next if mastery_level.blank?
+
+      semester = first_row.grade_import_batch&.program_semester
+
+      {
+        course_code: format_course_code_for_context(course_code),
+        semester_name: semester&.name.presence || "No semester assigned",
+        semester_sort: semester&.created_at || Time.at(0),
+        mastery_level: format_competency_context_value(mastery_level),
+        course_target_levels: grouped_rows.filter_map(&:course_target_level).uniq.sort.map { |level| format_competency_context_value(level) },
+        source_count: grouped_rows.size
+      }
+    end.compact.sort_by { |entry| [ entry[:semester_sort], entry[:course_code] ] }
+  end
+
+  def format_course_code_for_context(course_code)
+    normalized = course_code.to_s.strip
+    return "Unspecified course" if normalized.blank?
+
+    if (match = normalized.match(/\A([A-Za-z]+)-(\d+)(?:-(.+))?\z/))
+      suffix = match[3].present? ? "-#{match[3]}" : ""
+      "#{match[1].upcase} #{match[2]}#{suffix}"
+    else
+      normalized
+    end
   end
 
   # Memoized per-request lookup for a semester+track+class_of context.

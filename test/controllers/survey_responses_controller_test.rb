@@ -1112,8 +1112,10 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
     get survey_response_path(SurveyResponse.build(student: student, survey: survey))
 
     assert_response :success
-    assert_includes response.body, "Course result 4"
-    assert_includes response.body, "Course target 5"
+    assert_includes response.body, "Course competency evidence"
+    assert_includes response.body, "Mastery level: 4"
+    assert_includes response.body, "PHPM 701-001"
+    assert_includes response.body, "Course target: 5"
   end
 
   test "student can view their own survey response" do

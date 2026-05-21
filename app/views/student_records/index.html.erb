@@ -4,14 +4,14 @@
     <section class="c-card c-card--brand">
     <header class="c-page-header">
       <div>
-        <p class="c-eyebrow">Reporting</p>
-        <h1 class="c-page-title c-page-title--brand">Student Records</h1>
+        <p class="c-eyebrow">Survey reporting</p>
+        <h1 class="c-page-title c-page-title--brand">Survey Records</h1>
         <% intro_text = if current_user&.respond_to?(:role_admin?) && current_user.role_admin?
-          "Browse survey progress across all students."
+          "Track survey assignment, completion, and advisor feedback across all students."
         elsif current_user&.respond_to?(:role_advisor?) && current_user.role_advisor?
-          "Browse survey progress by semester for the students you advise."
+          "Track survey assignment, completion, and advisor feedback for the students you advise."
         else
-          "Browse survey progress by semester."
+          "Track survey assignment, completion, and advisor feedback by semester."
         end %>
         <p class="c-page-subtitle"><%= intro_text %></p>
       </div>
@@ -204,9 +204,9 @@
                   ) do %>
                         <% if filtered_rows.blank? %>
                           <% empty_track_message = if current_user&.respond_to?(:role_admin?) && current_user.role_admin?
-                            "No student records match this survey yet."
+                            "No survey records match this survey yet."
                           else
-                            "No student records for this survey are assigned to you."
+                            "No survey records for this survey are assigned to you."
                           end %>
                           <tr>
                             <td colspan="7" class="u-text-center c-muted">

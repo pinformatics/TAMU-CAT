@@ -11,7 +11,7 @@
         <div class="u-actions">
           <%= link_to "Back", dashboard_path, class: button_classes(:secondary) %>
           <%= link_to "Reports Excel", export_reports_excel_path, class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export may include student-level records. Continue only for a legitimate educational interest." } %>
-          <%= link_to "Student Records Excel", export_student_records_excel_path, class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export includes student-level records. Continue only for a legitimate educational interest." } %>
+          <%= link_to "Survey Records Excel", export_student_records_excel_path, class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export includes student-level survey records. Continue only for a legitimate educational interest." } %>
           <%= link_to "Download Excel",
                       download_student_portfolio_export_path(request.query_parameters),
                       class: button_classes(:primary),

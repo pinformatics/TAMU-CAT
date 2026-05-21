@@ -366,6 +366,7 @@ module GradeImports
       error_rows = errors.size
       duplicate_warnings = []
       matched_students = Set.new
+      pending_students = Set.new
       seen_rows = Hash.new(0)
       rows_scanned = 0
       rows_skipped_blank = 0
@@ -403,47 +404,47 @@ module GradeImports
 
         competency_columns.each do |column|
           result_value = row[column[:result_header]]
-          result_level = parse_level_value(result_value)
-          raw_points = parse_decimal(result_value)
+          course_target_level = parse_level_value(result_value)
           mastery_value = column[:mastery_points_header].present? ? row[column[:mastery_points_header]] : nil
-          course_target_level = parse_level_value(mastery_value)
+          mastery_level = parse_level_value(mastery_value)
+          raw_points = parse_decimal(mastery_value)
 
-          if result_value.blank?
-            if mastery_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
+          if mastery_value.blank?
+            if result_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
               row_had_value = true
               error_rows += 1
               errors << row_error(
                 row_number,
-                "#{column[:competency_title]} mastery points must be an integer between 1 and 5",
+                "#{column[:competency_title]} result target must be an integer between 1 and 5",
                 type: "invalid_value",
-                column: column[:mastery_points_header],
-                value: mastery_value
+                column: column[:result_header],
+                value: result_value
               )
             end
             next
           end
 
           row_had_value = true
-          if result_level.nil? || !(1..5).cover?(result_level)
-            error_rows += 1
-            errors << row_error(
-              row_number,
-              "#{column[:competency_title]} result must be an integer between 1 and 5",
-              type: result_value.blank? ? "missing_value" : "invalid_value",
-              column: column[:result_header],
-              value: result_value
-            )
-            next
-          end
-
-          if mastery_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
+          if mastery_level.nil? || !(1..5).cover?(mastery_level)
             error_rows += 1
             errors << row_error(
               row_number,
               "#{column[:competency_title]} mastery points must be an integer between 1 and 5",
-              type: "invalid_value",
+              type: mastery_value.blank? ? "missing_value" : "invalid_value",
               column: column[:mastery_points_header],
               value: mastery_value
+            )
+            next
+          end
+
+          if result_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
+            error_rows += 1
+            errors << row_error(
+              row_number,
+              "#{column[:competency_title]} result target must be an integer between 1 and 5",
+              type: "invalid_value",
+              column: column[:result_header],
+              value: result_value
             )
             next
           end
@@ -477,18 +478,19 @@ module GradeImports
               student_name: student_name,
               assignment_name: assignment_name,
               course_code: course_code,
-              raw_points: raw_points || result_level,
-              mapped_level: result_level,
+              raw_points: raw_points || mastery_level,
+              mapped_level: mastery_level,
               course_target_level: course_target_level,
               competency_title: column[:competency_title],
               row_number: row_number,
-              score_for_mapping: raw_points || result_level,
-              score_basis: "direct_result",
+              score_for_mapping: raw_points || mastery_level,
+              score_basis: "direct_mastery_points",
               points_possible: nil,
               source_key: source_key,
               import_fingerprint: import_fingerprint
             )
             pending_rows += 1
+            pending_students << [ identifier_type, identifier.to_s.downcase.strip ]
             next
           end
 
@@ -505,13 +507,13 @@ module GradeImports
             import_fingerprint: import_fingerprint,
             assignment_name: assignment_name,
             course_code: course_code,
-            raw_points: raw_points || result_level,
-            mapped_level: result_level,
+            raw_points: raw_points || mastery_level,
+            mapped_level: mastery_level,
             course_target_level: course_target_level,
             competency_title: column[:competency_title],
             row_number: row_number,
-            score_for_mapping: raw_points || result_level,
-            score_basis: "direct_result",
+            score_for_mapping: raw_points || mastery_level,
+            score_basis: "direct_mastery_points",
             points_possible: nil,
             student_identifiers: {
               student_uin: student_sis_id.presence,
@@ -528,7 +530,7 @@ module GradeImports
         next if row_had_value
 
         error_rows += 1
-        errors << row_error(row_number, "No direct competency result values were found in this row", type: "missing_value")
+        errors << row_error(row_number, "No direct competency mastery points values were found in this row", type: "missing_value")
       end
 
       {
@@ -553,6 +555,7 @@ module GradeImports
             rows_scanned: rows_scanned,
             rows_skipped_blank: rows_skipped_blank,
             matched_student_count: matched_students.size,
+            pending_student_count: pending_students.size,
             pending_row_count: pending_rows,
             duplicate_warning_count: duplicate_warnings.size,
             duplicate_warnings_preview: duplicate_warnings.first(100),
@@ -621,7 +624,7 @@ module GradeImports
         if mastery_header.blank?
           errors << row_error(
             1,
-            "Missing mastery points column for '#{competency_title}'. Add the paired mastery points column or approve this preview after review.",
+            "Missing mastery points column for '#{competency_title}'. Direct competency imports use mastery points as the student competency score and result as the course target.",
             type: "mapping",
             column: header_text,
             value: competency_title
@@ -1044,6 +1047,7 @@ module GradeImports
       debug_rows_scanned = 0
       debug_rows_skipped_blank = 0
       matched_students = Set.new
+      pending_students = Set.new
 
       ((grade_header_row + 1)..grade_sheet.last_row).each do |row_number|
         row = row_from_sheet(grade_sheet, grade_headers, row_number)
@@ -1115,6 +1119,10 @@ module GradeImports
               import_fingerprint: import_fingerprint
             )
             pending_rows += 1
+            pending_students << [
+              row[:student_uin].present? ? "uin" : "email",
+              (row[:student_uin].to_s.strip.presence || row[:student_email].to_s.strip.downcase)
+            ]
           end
           next
         end
@@ -1179,6 +1187,7 @@ module GradeImports
           rows_scanned: debug_rows_scanned,
           rows_skipped_blank: debug_rows_skipped_blank,
           matched_student_count: matched_students.size,
+          pending_student_count: pending_students.size,
           unmatched_row_count: error_rows,
           pending_row_count: pending_rows,
           duplicate_warning_count: duplicate_warnings.size,
@@ -1233,6 +1242,7 @@ module GradeImports
       debug_rows_skipped_blank_identifier = 0
       debug_student_not_found = 0
       matched_students = Set.new
+      pending_students = Set.new
 
       (data_start_row..grade_sheet.last_row).each do |row_number|
         row_values = grade_sheet.row(row_number)
@@ -1317,6 +1327,7 @@ module GradeImports
               import_fingerprint: import_fingerprint
             )
             pending_rows += 1
+            pending_students << [ "uin", identifier.to_s.downcase.strip ]
             next
           end
 
@@ -1409,6 +1420,7 @@ module GradeImports
                 import_fingerprint: import_fingerprint
               )
               pending_rows += 1
+              pending_students << [ "uin", identifier.to_s.downcase.strip ]
               next
             end
 
@@ -1461,6 +1473,7 @@ module GradeImports
           rows_skipped_blank_identifier: debug_rows_skipped_blank_identifier,
           rows_student_not_found: debug_student_not_found,
           matched_student_count: matched_students.size,
+          pending_student_count: pending_students.size,
           unmatched_row_count: error_rows,
           pending_row_count: pending_rows,
           duplicate_warning_count: duplicate_warnings.size,

@@ -34,7 +34,7 @@ Phase 3 began on 2026-05-20 as the first application cutover layer. It keeps leg
 Implemented in Phase 3:
 
 - shared student lifecycle filters on `Student`
-- current-student defaults for Student Overview, Student Records, Admin/Advisor Competencies, advisor dashboard counts, and admin student assignment management
+- current-student defaults for Student Overview, Survey Records, Admin/Advisor Competencies, advisor dashboard counts, and admin student assignment management
 - explicit `student_status` filters for staff overview, survey records, and competency matrix screens
 - historical detail access remains available when an admin/advisor opens a specific permitted student
 - course competency reads now prefer `competency_id` for imported course ratings, imported evidence, and target levels, while retaining `competency_title` fallback behavior
@@ -80,7 +80,7 @@ The app now has three major data sources that are combined in dashboards, studen
 | --- | --- | --- |
 | People and program setup | `users`, `students`, `advisors`, `admins`, `program_tracks`, `program_years`, `program_semesters`, `majors` | Who the person is, their role, their track/year/major, and the current semester context. |
 | Survey and advisor data | `surveys`, `survey_sections`, `categories`, `questions`, `survey_assignments`, `student_questions`, `survey_response_versions`, `feedback`, `advisor_feedback_submissions`, `confidential_advisor_notes` | Student self-assessment responses, survey assignment/completion, historical response snapshots, and legacy advisor feedback. |
-| Course competency imports | `grade_import_batches`, `grade_import_files`, `grade_competency_evidences`, `grade_import_pending_rows`, `grade_competency_ratings`, `course_grade_release_dates` | Faculty/admin uploaded course competency results and imported course target levels from mastery-points columns. |
+| Course competency imports | `grade_import_batches`, `grade_import_files`, `grade_competency_evidences`, `grade_import_pending_rows`, `grade_competency_ratings`, `course_grade_release_dates` | Faculty/admin uploaded course competency scores from mastery-points columns and imported course target levels from result columns. |
 
 The important product-level comparison is:
 
@@ -302,7 +302,7 @@ Recommended long-term direction:
 
 ## Recommended Target Read Model
 
-Long-term, pages like My Competencies, Student Overview, Admin Competencies, Advisor Student Records, exports, and heatmaps would be simpler if they read from one canonical competency evidence model.
+Long-term, pages like My Competencies, Student Overview, Admin Competencies, Survey Records, exports, and heatmaps would be simpler if they read from one canonical competency evidence model.
 
 Possible future table:
 

@@ -1,13 +1,14 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Tab controller for switching between Settings and Builder views without page reload.
+// Shared tab controller for switching between sibling panels without page reload.
 // Implements the ARIA tabs pattern (role="tablist" / role="tab" / role="tabpanel")
 // including arrow-key navigation as per the WAI-ARIA authoring practices.
 export default class extends Controller {
   static targets = ["tab", "panel"]
+  static values = { defaultTab: String }
 
   connect() {
-    this.activeTabId = "settings"
+    this.activeTabId = this.defaultTabValue || this.tabTargets[0]?.dataset.tabId || "settings"
     this.sync()
   }
 
@@ -55,8 +56,12 @@ export default class extends Controller {
 
       tab.setAttribute("aria-selected", isActive ? "true" : "false")
       tab.setAttribute("tabindex", isActive ? "0" : "-1")
-      tab.classList.toggle("btn-primary", isActive)
-      tab.classList.toggle("btn-secondary", !isActive)
+      tab.classList.toggle("is-active", isActive)
+
+      if (tab.classList.contains("btn") || tab.classList.contains("btn-primary") || tab.classList.contains("btn-secondary")) {
+        tab.classList.toggle("btn-primary", isActive)
+        tab.classList.toggle("btn-secondary", !isActive)
+      }
     })
 
     this.panelTargets.forEach((panel) => {

@@ -28,7 +28,7 @@ The most operationally important admin areas are:
 - `Survey Builder`
 - `Grade Import Batches`
 - `Competencies`
-- `Student Records`
+- `Survey Records`
 - `Reports`
 
 ## Recommended first read order
@@ -115,9 +115,9 @@ Filters now support:
 - domain
 - multi-select competency checkbox picker
 
-### Student records workflow
+### Survey records workflow
 
-Use `Student Records` for semester-by-semester survey review with:
+Use `Survey Records` for semester-by-semester survey review with:
 
 - progress status
 - feedback visibility

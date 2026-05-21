@@ -7,7 +7,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   before_action :set_batch, only: %i[
     show approve commit reupload rollback recommit rebuild_ratings finalize semester destroy
-    export_ratings error_report correction_file update_pending_row update_evidence
+    export_ratings error_report correction_file update_pending_row update_pending_row_group update_evidence
   ]
 
   def index
@@ -76,6 +76,8 @@ class Admin::GradeImportBatchesController < Admin::BaseController
                           .includes(:grade_import_file, :matched_student)
                           .order(:grade_import_file_id, :row_number, :id)
                           .limit(2_000)
+    @pending_competency_counts_by_file = @batch.grade_import_pending_rows.pending_student_match.group(:grade_import_file_id).count
+    @pending_student_counts_by_file = pending_student_counts_by_file
     @match_rate = match_rate_for(@files)
     @failed_row_count = @files.sum(&:error_rows)
     @processed_row_count = @files.sum(&:imported_rows)
@@ -316,6 +318,47 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     redirect_to admin_grade_import_batch_path(@batch), alert: "Could not update pending row: #{e.message}"
   end
 
+  def update_pending_row_group
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. Pending rows cannot be changed." and return
+    end
+
+    rows = @batch.grade_import_pending_rows
+                 .pending_student_match
+                 .where(id: normalized_pending_row_ids)
+                 .order(:grade_import_file_id, :row_number, :id)
+                 .to_a
+
+    if rows.blank?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "No pending rows were selected for update." and return
+    end
+
+    shared_attrs = pending_row_group_params
+    row_updates = normalized_pending_row_updates
+    matched_student_id = shared_attrs.delete(:matched_student_id).presence
+    matched_student = matched_student_id.present? ? Student.includes(:user).find(matched_student_id) : nil
+
+    ActiveRecord::Base.transaction do
+      rows.each do |row|
+        row_attrs = shared_attrs.merge(row_updates.fetch(row.id.to_s, {}))
+        row.update!(normalize_blank_level_params(row_attrs))
+        reconcile_pending_row!(row, matched_student) if matched_student.present?
+      end
+    end
+
+    rebuild_batch_ratings! if matched_student.present?
+
+    notice = if matched_student.present?
+      "Matched #{rows.size} pending rows to #{matched_student.user&.display_name || matched_student.student_id} and rebuilt ratings."
+    else
+      "Saved corrections for #{rows.size} pending rows."
+    end
+
+    redirect_to admin_grade_import_batch_path(@batch), notice: notice
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
+    redirect_to admin_grade_import_batch_path(@batch), alert: "Could not update pending rows: #{e.message}"
+  end
+
   def update_evidence
     if @batch.finalized?
       redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. Evidence rows cannot be changed." and return
@@ -375,6 +418,74 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     )
 
     normalize_blank_level_params(raw)
+  end
+
+  def pending_row_group_params
+    raw_params = params[:grade_import_pending_row_group] || {}
+    raw_params = ActionController::Parameters.new(raw_params) unless raw_params.respond_to?(:permit)
+
+    raw = raw_params.permit(
+      :matched_student_id,
+      :student_identifier,
+      :student_identifier_type,
+      :student_name,
+      :student_uin,
+      :student_email
+    )
+
+    raw[:student_identifier_type] = raw[:student_identifier_type].presence if raw.key?(:student_identifier_type)
+    raw
+  end
+
+  def pending_student_counts_by_file
+    counts = Hash.new(0)
+    seen = Hash.new { |hash, key| hash[key] = {} }
+
+    @batch.grade_import_pending_rows
+          .pending_student_match
+          .select(:id, :grade_import_file_id, :student_identifier_type, :student_identifier, :student_uin, :student_email, :student_name)
+          .find_each do |row|
+      identity = row.student_uin.presence ||
+                 row.student_email.presence ||
+                 row.student_identifier.presence ||
+                 row.student_name.presence ||
+                 "pending-row-#{row.id}"
+      identity_key = [
+        row.student_identifier_type.presence || "student",
+        identity.to_s.downcase.strip
+      ]
+
+      next if seen[row.grade_import_file_id][identity_key]
+
+      seen[row.grade_import_file_id][identity_key] = true
+      counts[row.grade_import_file_id] += 1
+    end
+
+    counts
+  end
+
+  def normalized_pending_row_ids
+    Array(params[:pending_row_ids]).filter_map do |value|
+      id = value.to_s.strip.to_i
+      id.positive? ? id : nil
+    end.uniq
+  end
+
+  def normalized_pending_row_updates
+    updates = params.fetch(:pending_rows, {})
+    updates = updates.to_unsafe_h if updates.respond_to?(:to_unsafe_h)
+
+    updates.each_with_object({}) do |(row_id, attrs), memo|
+      permitted = ActionController::Parameters.new(attrs || {}).permit(
+        :course_code,
+        :assignment_name,
+        :competency_title,
+        :raw_grade,
+        :mapped_level,
+        :course_target_level
+      )
+      memo[row_id.to_s] = normalize_blank_level_params(permitted)
+    end
   end
 
   def evidence_params

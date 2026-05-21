@@ -305,6 +305,8 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
           "student_identifier_column" => 2,
           "assignment_columns_preview" => [ { "index" => 5, "name" => "Final Project" } ],
           "matched_student_count" => 1,
+          "pending_student_count" => 1,
+          "pending_row_count" => 1,
           "duplicate_warning_count" => 0
         }
       }
@@ -318,7 +320,13 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Correction file"
     assert_includes response.body, "Admin approval required:"
     refute_includes response.body, "Preview validation:"
-    assert_includes response.body, "Column Mapping Preview"
+    assert_includes response.body, "Import Review"
+    assert_includes response.body, "Detected format"
+    assert_includes response.body, "Course detected"
+    assert_includes response.body, "Student rows scanned"
+    assert_includes response.body, "Students matched"
+    assert_includes response.body, "Students needing match"
+    assert_includes response.body, "Competency values needing match"
     assert_includes response.body, "Final Project"
     assert_includes response.body, "Policy Analysis"
     assert_includes response.body, "Unknown competency_title"
@@ -472,9 +480,50 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "123456789"
     assert_includes response.body, "Hidden Assignment"
     assert_includes response.body, "PHPM-701-001"
-    assert_includes response.body, "Match to student"
-    assert_includes response.body, "Save correction"
-    assert_includes response.body, pending_row_admin_grade_import_batch_path(batch, batch.grade_import_pending_rows.first)
+    assert_includes response.body, "Match all rows to student"
+    assert_includes response.body, "Processed values"
+    assert_includes response.body, "Save grouped correction"
+    assert_includes response.body, pending_row_group_admin_grade_import_batch_path(batch)
+  end
+
+  test "show groups repeated pending rows for the same imported student" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "pending-students-grouped.xlsx",
+      file_checksum: "checksum-pending-students-grouped",
+      status: "processed"
+    )
+
+    %w[Policy\ Analysis Communication].each_with_index do |competency_title, index|
+      batch.grade_import_pending_rows.create!(
+        grade_import_file: file,
+        student_identifier: "Missing Student",
+        student_identifier_type: "student_name",
+        student_name: "Missing Student",
+        student_uin: "123456789",
+        assignment_name: "Hidden Assignment",
+        course_code: "PHPM-701-001",
+        competency_title: competency_title,
+        raw_grade: 88 + index,
+        mapped_level: 3,
+        course_target_level: 4,
+        row_number: 7 + index,
+        source_key: "source-pending-grouped-#{index}",
+        import_fingerprint: "fingerprint-pending-grouped-#{index}"
+      )
+    end
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_select "summary.c-accordion__summary .c-accordion__title", text: "Missing Student", count: 1
+    assert_includes response.body, "2 pending rows"
+    assert_includes response.body, "Policy Analysis"
+    assert_includes response.body, "Communication"
   end
 
   test "pending row correction can match a student and rebuild ratings" do
@@ -541,6 +590,93 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, file.reload.imported_rows
     assert_equal 0, file.pending_rows
     assert_equal 0, batch.reload.pending_count
+  end
+
+  test "pending row group correction can match all rows for one imported student" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "pending-group-correction.xlsx",
+      file_checksum: "checksum-pending-group-correction",
+      status: "processed",
+      pending_rows: 2
+    )
+    first_row = batch.grade_import_pending_rows.create!(
+      grade_import_file: file,
+      student_identifier: "Missing Student",
+      student_identifier_type: "student_name",
+      student_name: "Missing Student",
+      student_uin: "000000000",
+      assignment_name: "Hidden Assignment 1",
+      course_code: "PHPM-701-001",
+      competency_title: "Performance Improvement",
+      raw_grade: 88,
+      mapped_level: 3,
+      course_target_level: 4,
+      row_number: 7,
+      source_key: "source-pending-group-correction-1",
+      import_fingerprint: "fingerprint-pending-group-correction-1"
+    )
+    second_row = batch.grade_import_pending_rows.create!(
+      grade_import_file: file,
+      student_identifier: "Missing Student",
+      student_identifier_type: "student_name",
+      student_name: "Missing Student",
+      student_uin: "000000000",
+      assignment_name: "Hidden Assignment 2",
+      course_code: "PHPM-701-001",
+      competency_title: "Communication",
+      raw_grade: 91,
+      mapped_level: 4,
+      course_target_level: 5,
+      row_number: 8,
+      source_key: "source-pending-group-correction-2",
+      import_fingerprint: "fingerprint-pending-group-correction-2"
+    )
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 2 do
+      patch pending_row_group_admin_grade_import_batch_path(batch), params: {
+        pending_row_ids: [ first_row.id, second_row.id ],
+        grade_import_pending_row_group: {
+          matched_student_id: @student.student_id,
+          student_identifier: @student.uin,
+          student_identifier_type: "uin",
+          student_name: @student.user.name,
+          student_uin: @student.uin,
+          student_email: @student.user.email
+        },
+        pending_rows: {
+          first_row.id => {
+            assignment_name: "Corrected Assignment 1",
+            course_code: "PHPM-701-001",
+            competency_title: "Performance Improvement",
+            raw_grade: 92,
+            mapped_level: 5,
+            course_target_level: 4
+          },
+          second_row.id => {
+            assignment_name: "Corrected Assignment 2",
+            course_code: "PHPM-701-001",
+            competency_title: "Communication",
+            raw_grade: 94,
+            mapped_level: 5,
+            course_target_level: 5
+          }
+        }
+      }
+    end
+
+    assert_redirected_to admin_grade_import_batch_path(batch)
+    assert_equal "reconciled", first_row.reload.status
+    assert_equal "reconciled", second_row.reload.status
+    assert_equal 2, file.reload.imported_rows
+    assert_equal 0, file.pending_rows
+    assert_equal 0, batch.reload.pending_count
+    assert_equal 2, batch.grade_competency_ratings.count
+    assert_match "Matched 2 pending rows", flash[:notice]
   end
 
   test "rebuild ratings action recalculates derived competency ratings" do
@@ -654,7 +790,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       status: "processed",
       imported_rows: 1,
       error_rows: 1,
-      parse_errors: [ { "type" => "invalid_value", "row" => 2, "message" => "Communication result must be an integer between 1 and 5" } ]
+      parse_errors: [ { "type" => "invalid_value", "row" => 2, "message" => "Communication result target must be an integer between 1 and 5" } ]
     )
     old_evidence = batch.grade_competency_evidences.create!(
       grade_import_file: old_file,

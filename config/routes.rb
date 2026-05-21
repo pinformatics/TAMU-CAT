@@ -92,6 +92,7 @@ Rails.application.routes.draw do
         get :export_ratings
         get :error_report
         get :correction_file
+        patch :pending_row_group, to: "grade_import_batches#update_pending_row_group"
         patch "pending_rows/:pending_row_id", to: "grade_import_batches#update_pending_row", as: :pending_row
         patch "evidence/:evidence_id", to: "grade_import_batches#update_evidence", as: :evidence
       end
@@ -163,6 +164,7 @@ Rails.application.routes.draw do
       post   :assign_all, on: :member
       delete :unassign,   on: :member
       delete :unassign_selected, on: :member
+      patch  :availability, on: :member
       patch  :extend_deadline, on: :member
       patch  :extend_group_deadline, on: :member
       patch  :reopen, on: :member
