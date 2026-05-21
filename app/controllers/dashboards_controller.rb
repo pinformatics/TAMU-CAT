@@ -178,7 +178,6 @@ class DashboardsController < ApplicationController
     @total_responses = StudentQuestion.count
     @total_reports = SurveyAssignment.count
     @maintenance_enabled = SiteSetting.maintenance_enabled?
-    @data_model_health = DataModelHealthCheck.new.call
   end
 
   # Provides a single admin workspace for member and student management.

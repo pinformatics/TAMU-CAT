@@ -274,7 +274,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
         "import_notes" => "Canvas export from PHPM 631 after final grades."
       }
     )
-    batch.grade_import_files.create!(
+    file = batch.grade_import_files.create!(
       file_name: "mapping-preview.xlsx",
       file_checksum: "checksum-mapping-preview",
       status: "processed",
@@ -311,6 +311,22 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
         }
       }
     )
+    batch.grade_import_pending_rows.create!(
+      grade_import_file: file,
+      status: "pending_student_match",
+      student_identifier_type: "student_name",
+      student_identifier: "Missing Student",
+      student_name: "Missing Student",
+      student_uin: "123456789",
+      course_code: "PHPM-631-600",
+      assignment_name: "Final Project",
+      competency_title: "Policy Analysis",
+      raw_grade: 91,
+      mapped_level: 4,
+      row_number: 4,
+      source_key: "source-mapping-preview-pending",
+      import_fingerprint: "fingerprint-mapping-preview-pending"
+    )
 
     get admin_grade_import_batch_path(batch)
 
@@ -330,6 +346,17 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Final Project"
     assert_includes response.body, "Policy Analysis"
     assert_includes response.body, "Unknown competency_title"
+    assert_includes response.body, "Approve this preview?"
+    assert_includes response.body, "Review these items before approving"
+    assert_includes response.body, "mapping-preview.xlsx: Unknown competency_title"
+    assert_includes response.body, 'data-controller="modal-confirm"'
+    assert_includes response.body, "modal-confirm-message-value"
+    assert_includes response.body, "modal-confirm-sections-value"
+    assert_includes response.body, "Failed Values"
+    assert_includes response.body, "Pending Student Matches"
+    assert_includes response.body, "Missing Student (UIN 123456789) | PHPM-631-600 | Policy Analysis"
+    assert_includes response.body, "&quot;collapsed&quot;:true"
+    assert_includes response.body, "Keep reviewing"
   end
 
   test "sample action downloads guided import examples" do
@@ -522,6 +549,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "summary.c-accordion__summary .c-accordion__title", text: "Missing Student", count: 1
     assert_includes response.body, "2 pending rows"
+    refute_includes response.body, "source rows"
     assert_includes response.body, "Policy Analysis"
     assert_includes response.body, "Communication"
   end

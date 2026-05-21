@@ -1,6 +1,7 @@
 class Admin::MaintenancesController < Admin::BaseController
   def show
     @maintenance_enabled = SiteSetting.maintenance_enabled?
+    @data_model_health = DataModelHealthCheck.new.call
   end
 
   def update

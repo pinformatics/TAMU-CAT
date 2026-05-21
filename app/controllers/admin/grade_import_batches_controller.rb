@@ -87,6 +87,12 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @validation_summary = validation_summary_for(@files)
     @target_warning_summary = target_warning_summary
     @student_match_options = student_match_options
+    @approval_confirmation_sections = approval_confirmation_sections(
+      files: @files,
+      pending_rows: @pending_rows,
+      target_warning_summary: @target_warning_summary
+    )
+    @approval_confirmation_message = approval_confirmation_message(sections: @approval_confirmation_sections)
   end
 
   def approve
@@ -690,6 +696,95 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   def target_warning_summary
     @target_warning_summary ||= GradeImports::TargetWarningAnalyzer.call(batch: @batch)
+  end
+
+  def approval_confirmation_message(sections:)
+    if sections.blank?
+      return "Approve this preview? This confirms admin review and allows the preview to be committed."
+    end
+
+    [
+      "Approve this preview?",
+      "",
+      "Review these items before approving.",
+      "",
+      "Approving allows commit; it does not fix failed rows, pending matches, target warnings, or duplicate-file warnings."
+    ].join("\n")
+  end
+
+  def approval_confirmation_sections(files:, pending_rows:, target_warning_summary:)
+    sections = []
+    failed_items = []
+    duplicate_upload_items = []
+
+    files.each do |file|
+      Array(file.parse_errors).each do |error|
+        failed_items << approval_parse_error_item(file, error)
+      end
+
+      Array(file.parsed_content["duplicate_file_uploads"]).each do |upload|
+        duplicate_upload_items << approval_duplicate_upload_item(file, upload)
+      end
+    end
+
+    sections << approval_section("Failed Values", failed_items, collapsed: false)
+    sections << approval_section("Duplicate Uploads", duplicate_upload_items, collapsed: false)
+
+    pending_student_items = pending_rows.map { |row| approval_pending_row_item(row) }
+    sections << approval_section("Pending Student Matches", pending_student_items, collapsed: true)
+
+    missing_target_items = Array(target_warning_summary[:missing_course_targets]).map { |row| approval_missing_target_item(row) }
+    sections << approval_section("Missing Course Targets", missing_target_items, collapsed: false)
+
+    sections.compact
+  end
+
+  def approval_parse_error_item(file, error)
+    message = error["message"].presence || error[:message].presence || error.to_s
+    type = error["type"].presence || error[:type].presence
+    column = error["column"].presence || error[:column].presence
+    location = column.present? ? "column #{column}" : nil
+    issue = type.present? ? "#{type.to_s.humanize}: #{message}" : message
+    prefix = [ file.file_name, location.presence ].compact.join(", ")
+
+    "#{prefix}: #{issue}"
+  end
+
+  def approval_duplicate_upload_item(file, upload)
+    batch_id = upload["batch_id"] || upload[:batch_id]
+    uploaded_at = upload["created_at"] || upload[:created_at]
+    prior = [ batch_id.present? ? "batch ##{batch_id}" : nil, uploaded_at.presence ].compact.join(", ")
+    label = "#{file.file_name}: duplicate file upload"
+
+    prior.present? ? "#{label} (#{prior})" : label
+  end
+
+  def approval_pending_row_item(row)
+    student_label = row.student_name.presence || row.student_identifier.presence || "Unmatched student"
+    student = row.student_uin.present? ? "#{student_label} (UIN #{row.student_uin})" : student_label
+
+    [ student, row.course_code, row.competency_title ].compact_blank.join(" | ")
+  end
+
+  def approval_missing_target_item(row)
+    student = row[:student].presence || "Unknown student"
+
+    [ student, row[:course_code], row[:competency], "missing course target" ].compact_blank.join(" | ")
+  end
+
+  def approval_section(title, items, collapsed:)
+    return if items.blank?
+
+    shown_items = items.first(20)
+    hidden_count = items.size - shown_items.size
+
+    {
+      title: title,
+      count: items.size,
+      collapsed: collapsed,
+      items: shown_items,
+      overflow_message: hidden_count.positive? ? "...and #{hidden_count} more #{'item'.pluralize(hidden_count)}." : nil
+    }.compact
   end
 
   def student_match_options

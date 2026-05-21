@@ -126,7 +126,17 @@
                       class: button_classes(:primary),
                       title: button_help[:approve_preview],
                       aria: { label: button_help[:approve_preview] },
-                      form: { data: { turbo_confirm: "Confirm that you reviewed failed, pending, and target-warning rows for this preview?" } } %>
+                      form: {
+                        data: {
+                          controller: "modal-confirm",
+                          action: "submit->modal-confirm#submit",
+                          "modal-confirm-title-value": "Approve preview?",
+                          "modal-confirm-message-value": @approval_confirmation_message,
+                          "modal-confirm-sections-value": @approval_confirmation_sections.to_json,
+                          "modal-confirm-confirm-label-value": "Approve preview",
+                          "modal-confirm-cancel-label-value": "Keep reviewing"
+                        }
+                      } %>
               <% end %>
               <% if @batch.recommittable_rollback? %>
                 <% workflow_action_rendered = true %>
@@ -722,7 +732,6 @@
               <% imported_student_label = primary_row.student_name.presence || primary_row.student_identifier.presence || "Unknown Student" %>
               <% imported_student_meta = [primary_row.student_uin.presence && "UIN #{primary_row.student_uin}", primary_row.student_email].compact_blank.join(" / ") %>
               <% course_codes = rows.map(&:course_code).compact_blank.uniq.sort %>
-              <% row_numbers = rows.map(&:row_number).compact_blank.uniq.sort %>
               <% edit_tab_id = "pending-#{group_index}-edit" %>
               <% values_tab_id = "pending-#{group_index}-values" %>
               <details class="c-accordion">
@@ -731,7 +740,6 @@
                   <span class="c-accordion__meta">
                     <%= pluralize(rows.size, "pending row") %>
                     <% if course_codes.any? %>· <%= course_codes.to_sentence %><% end %>
-                    <% if row_numbers.any? %>· source rows <%= row_numbers.join(", ") %><% end %>
                   </span>
                 </summary>
 
@@ -807,7 +815,6 @@
                           <table class="c-table c-table--sm">
                             <thead>
                               <tr>
-                                <th>Row</th>
                                 <th>Course</th>
                                 <th>Assignment</th>
                                 <th>Competency</th>
@@ -819,7 +826,6 @@
                             <tbody>
                               <% rows.each do |row| %>
                                 <tr>
-                                  <td class="u-whitespace-nowrap"><%= row.row_number || "—" %></td>
                                   <td><%= text_field_tag "pending_rows[#{row.id}][course_code]", row.course_code, class: "c-input" %></td>
                                   <td><%= text_field_tag "pending_rows[#{row.id}][assignment_name]", row.assignment_name, class: "c-input" %></td>
                                   <td>
@@ -849,7 +855,6 @@
                         <thead>
                           <tr>
                             <th>File</th>
-                            <th>Row</th>
                             <th>Imported Student</th>
                             <th>Course</th>
                             <th>Assignment</th>
@@ -863,7 +868,6 @@
                           <% rows.each do |row| %>
                             <tr>
                               <td><%= row.grade_import_file&.file_name %></td>
-                              <td class="u-whitespace-nowrap"><%= row.row_number || "—" %></td>
                               <td>
                                 <span class="c-table__title"><%= row.student_name.presence || row.student_identifier.presence || "Unknown Student" %></span>
                                 <span class="c-table__meta"><%= [row.student_uin, row.student_email].compact_blank.join(" / ") %></span>

@@ -1079,7 +1079,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     get admin_dashboard_path
     assert_response :success
   assert_includes response.body, "Admin Dashboard"
-    assert_includes response.body, "Data Model Health"
+    refute_includes response.body, "Data Health"
   end
 
   test "advisor dashboard shows total reports count" do

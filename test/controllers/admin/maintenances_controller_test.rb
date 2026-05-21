@@ -16,6 +16,7 @@ class Admin::MaintenancesControllerTest < ActionDispatch::IntegrationTest
     sign_in @admin
     get admin_maintenance_path
     assert_response :success
+    assert_includes response.body, "Data Health"
   end
 
   test "admin can enable and disable maintenance" do

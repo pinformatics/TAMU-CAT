@@ -92,6 +92,55 @@
           </div>
         </div>
       </section>
+
+      <% if @data_model_health.present? %>
+        <% issue_count = @data_model_health[:issue_count].to_i %>
+        <% health_checks = @data_model_health[:sections].flat_map(&:checks).select { |check| check.count.to_i.positive? } %>
+        <section class="c-card c-card--spacious u-stack u-stack--md">
+          <header class="u-responsive-split">
+            <div>
+              <p class="c-eyebrow">Guardrails</p>
+              <h2 class="c-section-title c-heading-inline">Data Health</h2>
+              <p class="c-page-subtitle">Quick checks for lifecycle, advisor history, competency links, and course references.</p>
+            </div>
+            <span class="c-status-badge <%= issue_count.zero? ? 'c-status-badge--success' : 'c-status-badge--info' %>">
+              <%= issue_count.zero? ? "Clean" : pluralize(issue_count, "issue") %>
+            </span>
+          </header>
+
+          <% if health_checks.blank? %>
+            <div class="c-callout c-callout--info">
+              <div class="c-callout__title">No data-model issues found</div>
+              <p class="c-lede">The current schema links and lifecycle defaults look consistent.</p>
+            </div>
+          <% else %>
+            <div class="c-card c-card--flush c-table-wrapper">
+              <table class="c-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Area</th>
+                    <th scope="col">Check</th>
+                    <th scope="col">Count</th>
+                    <th scope="col">Severity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @data_model_health[:sections].each do |section| %>
+                    <% section.checks.select { |check| check.count.to_i.positive? }.each do |check| %>
+                      <tr>
+                        <td><span class="c-pill c-pill--muted"><%= section.label %></span></td>
+                        <td><%= check.label %></td>
+                        <td class="u-whitespace-nowrap"><%= check.count %></td>
+                        <td class="u-whitespace-nowrap"><%= check.severity.to_s.titleize %></td>
+                      </tr>
+                    <% end %>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+        </section>
+      <% end %>
     </section>
   </div>
 </main>

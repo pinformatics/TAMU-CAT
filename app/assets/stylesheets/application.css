@@ -1433,6 +1433,198 @@
   color: #991b1b;
 }
 
+body.is-modal-open {
+  overflow: hidden;
+}
+
+.c-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  background-color: rgba(17, 24, 39, 0.48);
+  backdrop-filter: blur(4px);
+}
+
+.c-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: min(82vh, 760px);
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--border-radius-lg);
+  background-color: var(--white);
+  box-shadow: var(--shadow-lg);
+}
+
+.c-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-xl);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.c-modal__title {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--gray-900);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.c-modal__close {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border-color: var(--gray-200);
+  background-color: var(--white);
+  color: var(--gray-600);
+  font-size: var(--font-size-xl);
+  line-height: 1;
+}
+
+.c-modal__close:hover {
+  background-color: var(--gray-50);
+  color: var(--gray-800);
+}
+
+.c-modal__body {
+  overflow-y: auto;
+  padding: var(--spacing-xl);
+  color: var(--gray-700);
+  line-height: var(--line-height-normal);
+}
+
+.c-modal__body p {
+  margin: 0 0 var(--spacing-md);
+}
+
+.c-modal__body p:last-child {
+  margin-bottom: 0;
+}
+
+.c-modal__review-list {
+  display: grid;
+  gap: var(--spacing-sm);
+  margin: 0 0 var(--spacing-md);
+  padding: 0;
+  list-style: none;
+}
+
+.c-modal__review-list li {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid rgba(255, 107, 53, 0.28);
+  border-left: 4px solid var(--warning-color);
+  border-radius: var(--border-radius-md);
+  background-color: var(--surface-warning);
+  color: var(--gray-800);
+}
+
+.c-modal__sections {
+  display: grid;
+  gap: var(--spacing-md);
+  margin: var(--spacing-md) 0;
+}
+
+.c-modal__section {
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--border-radius-md);
+  background-color: var(--white);
+}
+
+.c-modal__section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  color: var(--gray-900);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  list-style: none;
+}
+
+.c-modal__section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.c-modal__section-summary::after {
+  content: "+";
+  color: var(--gray-500);
+  font-weight: var(--font-weight-bold);
+}
+
+.c-modal__section[open] .c-modal__section-summary::after {
+  content: "-";
+}
+
+.c-modal__section-meta {
+  margin-left: auto;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--border-radius-full);
+  background-color: var(--gray-100);
+  color: var(--gray-600);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.c-modal__section-body {
+  padding: 0 var(--spacing-lg) var(--spacing-lg);
+  border-top: 1px solid var(--gray-100);
+}
+
+.c-modal__section-body .c-modal__review-list {
+  margin-top: var(--spacing-md);
+}
+
+.c-modal__section-overflow {
+  color: var(--gray-500);
+  font-size: var(--font-size-sm);
+}
+
+.c-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-top: 1px solid var(--gray-200);
+  background-color: var(--gray-50);
+}
+
+@media (max-width: 640px) {
+  .c-modal-backdrop {
+    align-items: flex-end;
+    padding: var(--spacing-md);
+  }
+
+  .c-modal {
+    max-height: 90vh;
+  }
+
+  .c-modal__header,
+  .c-modal__body,
+  .c-modal__footer {
+    padding: var(--spacing-md);
+  }
+
+  .c-modal__footer {
+    flex-direction: column-reverse;
+  }
+
+  .c-modal__footer .btn {
+    width: 100%;
+  }
+}
+
 .c-filter-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
