@@ -2,7 +2,7 @@
   <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
     <div>
       <h2 class="c-panel-title">Competency Targets</h2>
-      <p class="c-panel-subtitle">Set program target levels per competency, semester, track, and class.</p>
+      <p class="c-panel-subtitle">Set end-of-program target levels for a specific semester, track, and cohort.</p>
     </div>
   </header>
 
@@ -17,10 +17,14 @@
 
   <%= form_with url: admin_program_setup_path, method: :get, local: true, data: { turbo: false } do %>
     <%= hidden_field_tag :tab, "targets" %>
-    <div class="c-card c-card--tight">
+    <div class="c-card c-card--tight u-stack u-stack--md">
       <div class="u-actions u-actions--split u-mt-sm">
-        <p class="c-panel-subtitle">Choose the cohort context first, then edit targets in the table below.</p>
-        <% if @selected_semester_id.present? && @selected_track.present? %>
+        <div>
+          <p class="c-eyebrow">1. Target context</p>
+          <h3 class="c-heading-inline">Choose who these program targets apply to</h3>
+          <p class="c-panel-subtitle">Load a context first, then review coverage and edit the 17 competency targets below.</p>
+        </div>
+        <% if @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present? %>
           <div class="u-actions u-actions--start u-gap-xs">
             <span class="c-pill c-pill--muted">
               <%= @semesters.find { |semester| semester.id == @selected_semester_id }&.name || "Selected semester" %>
@@ -28,9 +32,7 @@
             <span class="c-pill c-pill--muted">
               <%= @selected_track %>
             </span>
-            <% if @selected_class_of.present? %>
-              <span class="c-pill c-pill--muted">Class of <%= @selected_class_of %></span>
-            <% end %>
+            <span class="c-pill c-pill--muted">Class of <%= @selected_class_of %></span>
           </div>
         <% end %>
       </div>
@@ -55,7 +57,7 @@
         </div>
 
         <div class="c-field">
-          <label class="c-label">Class</label>
+          <label class="c-label">Cohort</label>
           <div class="c-select-wrapper">
             <%= select_tag :class_of,
               options_for_select(@class_of_options, @selected_class_of.to_s),
@@ -64,13 +66,66 @@
         </div>
 
         <div>
-          <%= submit_tag "Apply Filters", class: button_classes(:secondary) %>
+          <%= button_tag "Load Targets", type: "submit", name: nil, class: button_classes(:secondary) %>
         </div>
       </div>
     </div>
   <% end %>
 
-  <% if @selected_semester_id.present? && @selected_track.present? %>
+  <% if @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present? %>
+    <% if @target_coverage_summary.present? %>
+      <% coverage = @target_coverage_summary %>
+      <section class="c-card c-card--tight u-stack u-stack--sm">
+        <div class="u-actions u-actions--split">
+          <div>
+            <p class="c-eyebrow">2. Program target coverage</p>
+            <h3 class="c-heading-inline">
+              <%= coverage[:populated] %> of <%= coverage[:total] %> end-of-program targets set
+            </h3>
+            <p class="c-panel-subtitle">
+              These are program targets for this semester, track, and class context. Uploaded faculty CSV course targets are reviewed separately in grade import batches.
+            </p>
+          </div>
+          <span class="c-status-pill <%= coverage[:missing_count].zero? ? 'c-status-pill--success' : 'c-status-pill--warning' %>">
+            <%= coverage[:missing_count].zero? ? "Complete" : "#{coverage[:missing_count]} missing" %>
+          </span>
+        </div>
+
+        <% if coverage[:missing_titles].present? %>
+          <details class="c-cell-details">
+            <summary class="c-cell-details__summary">Show missing program targets</summary>
+            <ul class="u-stack u-stack--xs u-mt-sm">
+              <% coverage[:missing_titles].each do |title| %>
+                <li><%= title %></li>
+              <% end %>
+            </ul>
+          </details>
+        <% end %>
+
+        <% if coverage[:legacy_program_year_count].to_i.positive? %>
+          <p class="c-help">
+            <%= pluralize(coverage[:legacy_program_year_count], "target") %> prefilled from existing cohort target records.
+            Saving will preserve the values for Class of <%= @selected_class_of %>.
+          </p>
+        <% end %>
+
+        <% if coverage[:missing_count].positive? %>
+          <div class="u-actions u-actions--start">
+            <%= button_to "Fill Missing From Defaults",
+                          admin_fill_default_target_levels_path,
+                          method: :post,
+                          params: {
+                            program_semester_id: @selected_semester_id,
+                            track: @selected_track,
+                            class_of: @selected_class_of
+                          },
+                          class: button_classes(:secondary),
+                          data: { turbo_confirm: "Fill only blank target levels from db/data/default_target_levels.yml for this selected context?" } %>
+          </div>
+        <% end %>
+      </section>
+    <% end %>
+
     <% confirm_message = if @submitted_students_count.to_i.positive?
       "Warning: #{@submitted_students_count} student(s) have already submitted surveys for this cohort. Saving target levels may change how reports are interpreted. Continue?"
     else
@@ -90,12 +145,20 @@
       <%= hidden_field_tag :track, @selected_track %>
       <%= hidden_field_tag :class_of, @selected_class_of %>
 
+      <div class="u-actions u-actions--split">
+        <div>
+          <p class="c-eyebrow">3. Edit targets</p>
+          <h3 class="c-heading-inline">Set end-of-program target levels</h3>
+          <p class="c-panel-subtitle">Blank values mean the target is not configured for this context.</p>
+        </div>
+      </div>
+
       <div class="c-card c-card--flush c-table-wrapper">
         <table class="c-table">
           <thead>
             <tr>
               <th style="min-width: 28rem;">Competency</th>
-              <th style="min-width: 10rem;">Target (1-5)</th>
+              <th style="min-width: 10rem;">End-of-program target</th>
               <th style="min-width: 12rem;">Changes</th>
             </tr>
           </thead>
@@ -167,17 +230,17 @@
 
       <div class="u-sticky-action-bar">
         <div class="u-actions u-actions--split">
-          <p class="c-panel-subtitle">Changes are saved for the selected semester, track, and class context.</p>
+          <p class="c-panel-subtitle">Changes are saved for the selected semester, track, and cohort context.</p>
           <div class="u-actions">
-            <%= link_to "Reset Filters", admin_program_setup_path(tab: "targets"), class: button_classes(:ghost), data: { turbo: false } %>
-            <%= submit_tag "Save Target Levels", class: button_classes(:primary) %>
+            <%= link_to "Change Context", admin_program_setup_path(tab: "targets"), class: button_classes(:ghost), data: { turbo: false } %>
+            <%= button_tag "Save Target Levels", type: "submit", name: nil, class: button_classes(:primary) %>
           </div>
         </div>
       </div>
     <% end %>
   <% else %>
     <div class="c-card c-card--tight c-card--muted">
-      <p class="c-panel-subtitle">Select a semester and track above to view and edit competency target levels.</p>
+      <p class="c-panel-subtitle">Select a semester, track, and cohort above, then load targets to begin editing.</p>
     </div>
   <% end %>
 </section>

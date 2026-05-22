@@ -3,9 +3,8 @@
   commit_preview: "Publish this preview so its imported course competency ratings appear in student, admin, and report views.",
   approve_preview: "Confirm an admin reviewed failed, pending, or target-warning rows and allow this preview to be committed.",
   recommit_batch: "Restore this rolled-back batch so its preserved competency data becomes visible again.",
-  export_csv: "Download the derived competency ratings created from this batch.",
+  export_evidence_csv: "Download one row per imported course competency result with assessed level, target level, and target-met status.",
   correction_file: "Download failed and pending rows in a correction-friendly CSV.",
-  error_report: "Download only the parser and validation errors for this batch.",
   reupload_files: "Upload corrected files into this preview. Matching filenames replace previous rows in this batch.",
   rebuild_ratings: "Recalculate derived competency ratings from the current imported evidence rows.",
   finalize_batch: "Lock this committed batch after review so rows, ratings, semester, and rollback/delete actions are protected.",
@@ -15,6 +14,9 @@
   new_batch: "Start a new grade import batch upload."
 } %>
 <% target_review_required = @batch.dry_run? && @target_warning_summary[:requires_review] %>
+<% has_file_issues = @failed_row_count.positive? || @duplicate_upload_warnings.positive? || @duplicate_warnings.positive? || target_review_required %>
+<% has_pending_matches = @pending_row_count.positive? %>
+<% has_evidence_rows = @evidences.any? %>
 
 <main class="c-main c-main--dashboard">
   <div class="c-page">
@@ -209,27 +211,21 @@
           <section class="u-stack u-stack--sm">
             <div>
               <p class="c-table__title">Exports</p>
-              <p class="c-help">Download review files and student-level outputs.</p>
+              <p class="c-help">Download the row-level student data or a correction file for rows that need attention.</p>
             </div>
             <div class="u-actions u-actions--start">
-              <%= link_to "Export CSV",
-                    export_ratings_admin_grade_import_batch_path(@batch, format: :csv),
+              <%= link_to "Export rows CSV",
+                    export_evidence_admin_grade_import_batch_path(@batch, format: :csv),
                     class: button_classes(:secondary),
-                    title: button_help[:export_csv],
-                    aria: { label: button_help[:export_csv] },
-                    data: { turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." } %>
+                    title: button_help[:export_evidence_csv],
+                    aria: { label: button_help[:export_evidence_csv] },
+                    data: { turbo_confirm: "FERPA reminder: this row-level export includes student-level competency data. Continue only for a legitimate educational interest." } %>
               <%= link_to "Correction file",
                     correction_file_admin_grade_import_batch_path(@batch, format: :csv),
                     class: button_classes(:secondary),
                     title: button_help[:correction_file],
                     aria: { label: button_help[:correction_file] },
                     data: { turbo_confirm: "FERPA reminder: this correction file may include student identifiers and course data. Continue only for a legitimate educational interest." } %>
-              <%= link_to "Error report",
-                    error_report_admin_grade_import_batch_path(@batch),
-                    class: button_classes(:secondary),
-                    title: button_help[:error_report],
-                    aria: { label: button_help[:error_report] },
-                    data: { turbo_confirm: "FERPA reminder: this error report may include student identifiers and course data. Continue only for a legitimate educational interest." } %>
             </div>
           </section>
 
@@ -279,7 +275,7 @@
 
           <div class="u-stack u-stack--md u-p-md">
             <div class="c-callout c-callout--warning">
-              Review these rows before committing. Course targets come from the uploaded result columns, so imported evidence should include that target value when mastery points are present.
+              Review these rows before committing. Course targets come from the uploaded file and are separate from end-of-program target levels.
             </div>
 
             <% warning_groups = [
@@ -365,7 +361,7 @@
         <% end %>
       </section>
 
-      <section class="c-stats-grid">
+      <section class="c-stats-grid c-stats-grid--batch-summary">
         <div class="c-card c-card--tight c-stat">
           <span class="c-eyebrow">Status</span>
           <strong class="c-value c-value--xl"><%= @batch.status.humanize %></strong>
@@ -398,11 +394,136 @@
         </div>
       </section>
 
-      <details class="c-card c-card--flush c-section-group">
+      <% if @target_attainment_by_course.any? %>
+        <section class="c-card c-card--tight u-stack u-stack--md">
+          <div class="u-responsive-split">
+            <div>
+              <p class="c-eyebrow">Course target attainment</p>
+              <h2 class="c-heading-inline">Target Performance by Course</h2>
+              <p class="c-help">Met rate uses rows that have both an assessed level and a course target.</p>
+            </div>
+          </div>
+          <div class="c-table-wrapper">
+            <table class="c-table c-table--sm">
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Processed rows</th>
+                  <th>Met</th>
+                  <th>Below target</th>
+                  <th>No target</th>
+                  <th>Met rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @target_attainment_by_course.each do |course_summary| %>
+                  <tr>
+                    <td class="c-table__title"><%= course_summary[:course_code] %></td>
+                    <td><%= course_summary[:total_count] %></td>
+                    <td><span class="c-score-pill c-score-pill--met"><%= course_summary[:met_count] %></span></td>
+                    <td><span class="c-score-pill c-score-pill--below"><%= course_summary[:below_count] %></span></td>
+                    <td><span class="c-score-pill c-score-pill--no-target c-score-pill--empty"><%= course_summary[:no_target_count] %></span></td>
+                    <td><%= course_summary[:met_rate] ? "#{course_summary[:met_rate]}%" : "—" %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      <% end %>
+
+      <% if @target_attainment_by_course_and_competency.any? %>
+        <section class="c-card c-card--tight u-stack u-stack--md">
+          <div>
+            <p class="c-eyebrow">Course competency review</p>
+            <h2 class="c-heading-inline">Actual vs Course Target by Competency</h2>
+            <p class="c-help">Use this to review what each course contributed and whether assessed levels met the uploaded course targets.</p>
+          </div>
+          <div class="c-table-wrapper">
+            <table class="c-table c-table--sm">
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Competency</th>
+                  <th>Rows</th>
+                  <th>Actual avg</th>
+                  <th>Actual range</th>
+                  <th>Course target avg</th>
+                  <th>Target range</th>
+                  <th>Met</th>
+                  <th>Below target</th>
+                  <th>No target</th>
+                  <th>Met rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @target_attainment_by_course_and_competency.each do |summary| %>
+                  <tr>
+                    <td class="c-table__title"><%= summary[:course_code] %></td>
+                    <td><%= summary[:competency_title] %></td>
+                    <td><%= summary[:total_count] %></td>
+                    <td><%= summary[:assessed_average] ? number_with_precision(summary[:assessed_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
+                    <td>
+                      <% if summary[:assessed_min] && summary[:assessed_max] %>
+                        <%= number_with_precision(summary[:assessed_min], precision: 2, strip_insignificant_zeros: true) %>-<%= number_with_precision(summary[:assessed_max], precision: 2, strip_insignificant_zeros: true) %>
+                      <% else %>
+                        —
+                      <% end %>
+                    </td>
+                    <td><%= summary[:course_target_average] ? number_with_precision(summary[:course_target_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
+                    <td>
+                      <% if summary[:course_target_min] && summary[:course_target_max] %>
+                        <%= number_with_precision(summary[:course_target_min], precision: 2, strip_insignificant_zeros: true) %>-<%= number_with_precision(summary[:course_target_max], precision: 2, strip_insignificant_zeros: true) %>
+                      <% else %>
+                        —
+                      <% end %>
+                    </td>
+                    <td><span class="c-score-pill c-score-pill--met"><%= summary[:met_count] %></span></td>
+                    <td><span class="c-score-pill c-score-pill--below"><%= summary[:below_count] %></span></td>
+                    <td><span class="c-score-pill c-score-pill--no-target c-score-pill--empty"><%= summary[:no_target_count] %></span></td>
+                    <td><%= summary[:met_rate] ? "#{summary[:met_rate]}%" : "—" %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      <% end %>
+
+      <section class="c-card c-card--tight u-stack u-stack--md">
+        <div>
+          <p class="c-eyebrow">Import review checklist</p>
+          <h2 class="c-heading-inline">Review in this order</h2>
+          <p class="c-help">Use this page from top to bottom. Fix failed values first, match pending students next, then review the evidence rows before approving or committing.</p>
+        </div>
+        <div class="u-grid" style="--u-grid-min: 220px">
+          <div class="c-review-step">
+            <p class="c-table__title">1. File summary</p>
+            <p class="c-help">Confirm each uploaded file was recognized and see the high-level row counts.</p>
+          </div>
+          <div class="c-review-step">
+            <p class="c-table__title">2. File diagnostics</p>
+            <p class="c-help">Check detected columns, course codes, competency mappings, duplicate warnings, and parse errors.</p>
+          </div>
+          <div class="c-review-step">
+            <p class="c-table__title">3. Pending student matches</p>
+            <p class="c-help">These rows imported, but do not count until they are matched to a student record.</p>
+          </div>
+          <div class="c-review-step">
+            <p class="c-table__title">4. Student processed</p>
+            <p class="c-help">These rows are already matched to students and ready for final review before commit.</p>
+          </div>
+        </div>
+      </section>
+
+      <details class="c-card c-card--flush c-section-group" open>
         <summary class="c-section-group__header">
-          <h2>File Results</h2>
-          <span><%= pluralize(@files.size, "file") %></span>
+          <h2>1. File Summary</h2>
+          <span><%= pluralize(@files.size, "uploaded file") %></span>
         </summary>
+        <div class="c-callout c-callout--info u-m-md">
+          Start here. This table tells you whether each file was processed, how many rows created evidence, how many rows need student matching, and whether parser errors were found.
+        </div>
         <div class="c-table-wrapper">
           <table class="c-table">
             <thead>
@@ -436,7 +557,7 @@
                           <% file.parse_errors.first(20).each do |err| %>
                             <li>
                               <% if err["type"].present? %><strong><%= err["type"].to_s.humanize %>:</strong><% end %>
-                              Row <%= err["row"] || "—" %>: <%= err["message"] || err %>
+                              Row <%= err["row"] || "—" %>: <%= normalized_approval_error_message(err) %>
                             </li>
                           <% end %>
                         </ul>
@@ -452,12 +573,15 @@
         </div>
       </details>
 
-      <details class="c-card c-card--flush c-section-group" open>
+      <details class="c-card c-card--flush c-section-group" <%= "open" if has_file_issues %>>
         <summary class="c-section-group__header">
-          <h2>Import Review</h2>
-          <span>Format, matching, and competency values</span>
+          <h2>2. File Diagnostics</h2>
+          <span>Format, counts, and issues</span>
         </summary>
         <div class="u-stack u-stack--md u-p-md">
+          <div class="c-callout c-callout--info">
+            Check how each file was read. Fix failed values, missing competency strings, or duplicate uploads before approval when needed.
+          </div>
           <% @files.each do |file| %>
             <% parsed = file.parsed_content || {} %>
             <% debug = parsed["grade_sheet_debug"] || {} %>
@@ -469,7 +593,6 @@
               else mode.humanize
             end %>
             <% mappings = Array(parsed["mapping_rows_preview"]) %>
-            <% assignments = Array(debug["assignment_columns_preview"]) %>
             <% direct_competencies = Array(parsed["direct_competencies_preview"] || debug["direct_competencies_preview"]) %>
             <% mapping_course_codes = mappings.filter_map { |mapping| mapping["course_code"] || mapping[:course_code] }.compact_blank.uniq.sort %>
             <% course_label = parsed["direct_course_code"].presence || file.course_offering&.course_code || (mapping_course_codes.one? ? mapping_course_codes.first : nil) || (mapping_course_codes.any? ? mapping_course_codes.to_sentence : "Detected from file, section, or mapping rows") %>
@@ -486,21 +609,21 @@
             <% pending_student_count = debug["pending_student_count"].presence || @pending_student_counts_by_file[file.id] || file.pending_rows.to_i %>
             <% pending_competency_count = @pending_competency_counts_by_file.fetch(file.id, file.pending_rows.to_i) %>
             <% review_items = [] %>
-            <% Array(file.parse_errors).first(20).each do |error| %>
+            <% Array(file.parse_errors).each do |error| %>
               <% review_items << {
                 type: error["type"].presence&.to_s&.humanize || "Error",
                 row: error["row"].presence || "-",
-                message: error["message"] || error
+                message: normalized_approval_error_message(error)
               } %>
             <% end %>
-            <% Array(debug["mapping_warnings_preview"]).first(10).each do |warning| %>
+            <% Array(debug["mapping_warnings_preview"]).each do |warning| %>
               <% review_items << {
                 type: "Mapping warning",
                 row: warning["row"].presence || "-",
                 message: warning["message"] || warning
               } %>
             <% end %>
-            <% Array(debug["duplicate_warnings_preview"]).first(10).each do |warning| %>
+            <% Array(debug["duplicate_warnings_preview"]).each do |warning| %>
               <% review_items << {
                 type: "Duplicate suppressed",
                 row: warning["row"].presence || "-",
@@ -524,97 +647,69 @@
                 </div>
               <% end %>
 
-              <div class="c-callout c-callout--info u-mt-sm">
-                <% if mode == "direct_competency" %>
-                  This file uses competency columns directly: mastery points create course competency scores, and result columns create course target scores.
-                <% elsif mappings.any? %>
-                  This file uses mapping rules: assignment scores are matched to competency levels before creating course competency evidence.
-                <% else %>
-                  Review the detected format and diagnostics before approving or committing this file.
-                <% end %>
-              </div>
-
-              <div class="c-table-wrapper u-mt-sm">
-                <table class="c-table c-table--sm">
-                  <tbody>
-                    <tr>
-                      <th>Detected format</th>
-                      <td><%= format_label %></td>
-                    </tr>
-                    <tr>
-                      <th>Course detected</th>
-                      <td><%= course_label %></td>
-                    </tr>
-                    <tr>
-                      <th>Source sheet</th>
-                      <td>
-                        <%= [
-                          parsed["selected_grade_sheet"].presence,
-                          parsed["selected_mapping_sheet"].present? ? "mapping: #{parsed['selected_mapping_sheet']}" : nil
-                        ].compact_blank.join(" / ").presence || file.file_name %>
-                      </td>
-                    </tr>
-                    <tr>
-                      <th>Student matching uses</th>
-                      <td><%= student_identifier_label %></td>
-                    </tr>
-                    <tr>
-                      <th>Student rows scanned</th>
-                      <td><%= debug["rows_scanned"].presence || file.total_rows %></td>
-                    </tr>
-                    <tr>
-                      <th>Students matched</th>
-                      <td><%= debug["matched_student_count"].presence || "—" %></td>
-                    </tr>
-                    <tr>
-                      <th>Students needing match</th>
-                      <td><%= pending_student_count %></td>
-                    </tr>
-                    <tr>
-                      <th>Matched competency values</th>
-                      <td><%= file.imported_rows %></td>
-                    </tr>
-                    <tr>
-                      <th>Competency values needing match</th>
-                      <td><%= pending_competency_count %></td>
-                    </tr>
-                    <tr>
-                      <th>Failed rows</th>
-                      <td><%= file.error_rows %></td>
-                    </tr>
-                    <tr>
-                      <th>Duplicate values suppressed</th>
-                      <td><%= debug["duplicate_warning_count"].presence || 0 %></td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div class="u-grid u-mt-sm" style="--u-grid-min: 180px">
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Detected format</p>
+                  <p class="c-table__title"><%= format_label %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Course detected</p>
+                  <p class="c-table__title"><%= course_label %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Student matching uses</p>
+                  <p class="c-table__title"><%= student_identifier_label %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Student rows scanned</p>
+                  <p class="c-table__title"><%= debug["rows_scanned"].presence || file.total_rows %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Students matched</p>
+                  <p class="c-table__title"><%= debug["matched_student_count"].presence || "—" %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Students needing match</p>
+                  <p class="c-table__title"><%= pending_student_count %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Matched competency values</p>
+                  <p class="c-table__title"><%= file.imported_rows %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Competency values needing match</p>
+                  <p class="c-table__title"><%= pending_competency_count %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Failed rows</p>
+                  <p class="c-table__title"><%= file.error_rows %></p>
+                </div>
+                <div class="c-review-step">
+                  <p class="c-eyebrow">Duplicate values suppressed</p>
+                  <p class="c-table__title"><%= debug["duplicate_warning_count"].presence || 0 %></p>
+                </div>
               </div>
 
               <% if mappings.any? %>
                 <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Mapping Rules Used</h3>
+                  <h3 class="c-heading-inline">Competency Source</h3>
+                  <p class="c-help">Assignment mapping rules were used to convert Canvas scores into competency levels.</p>
                   <div class="c-table-wrapper">
                     <table class="c-table c-table--sm">
                       <thead>
                         <tr>
-                          <th>Row</th>
-                          <th>Assignment rule</th>
+                          <th>Assignment</th>
                           <th>Course</th>
                           <th>Competency</th>
-                          <th>Score basis</th>
-                          <th>Score range</th>
                           <th>Result level</th>
                         </tr>
                       </thead>
                       <tbody>
                         <% mappings.first(30).each do |mapping| %>
                           <tr>
-                            <td><%= mapping["source_row_number"] || mapping[:source_row_number] %></td>
                             <td><%= [mapping["assignment_match_type"] || mapping[:assignment_match_type], mapping["assignment_match_value"] || mapping[:assignment_match_value]].compact.join(": ") %></td>
                             <td><%= (mapping["course_code"] || mapping[:course_code]).presence || "Any course" %></td>
                             <td class="c-table__title"><%= mapping["competency_title"] || mapping[:competency_title] %></td>
-                            <td><%= mapping["score_basis"] || mapping[:score_basis] %></td>
-                            <td><%= mapping["min_grade"] || mapping[:min_grade] %>-<%= mapping["max_grade"] || mapping[:max_grade] %></td>
                             <td><%= mapping["competency_level"] || mapping[:competency_level] %></td>
                           </tr>
                         <% end %>
@@ -624,13 +719,14 @@
                 </div>
               <% elsif direct_competencies.any? %>
                 <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Competency Columns Used</h3>
+                  <h3 class="c-heading-inline">Competency Source</h3>
+                  <p class="c-help">Competency columns were read directly from the uploaded file.</p>
                   <div class="c-table-wrapper">
                     <table class="c-table c-table--sm">
                       <thead>
                         <tr>
                           <th>Competency</th>
-                          <th>Score column</th>
+                          <th>Assessed level column</th>
                           <th>Course target column</th>
                         </tr>
                       </thead>
@@ -652,53 +748,21 @@
                 </div>
               <% end %>
 
-              <% if assignments.any? %>
-                <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Canvas Columns Seen</h3>
-                  <div class="c-table-wrapper">
-                    <table class="c-table c-table--sm">
-                      <thead>
-                        <tr>
-                          <th>Column</th>
-                          <th>Canvas header</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <% assignments.first(30).each do |assignment| %>
-                          <tr>
-                            <td><%= assignment["index"] || assignment[:index] %></td>
-                            <td class="c-table__title"><%= assignment["name"] || assignment[:name] %></td>
-                          </tr>
-                        <% end %>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              <% end %>
-
               <% if review_items.any? %>
                 <div class="u-mt-md">
                   <h3 class="c-heading-inline">Review Items</h3>
-                  <div class="c-table-wrapper">
-                    <table class="c-table c-table--sm">
-                      <thead>
-                        <tr>
-                          <th>Type</th>
-                          <th>Row</th>
-                          <th>Message</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <% review_items.each do |item| %>
-                          <tr>
-                            <td><%= item[:type] %></td>
-                            <td><%= item[:row] %></td>
-                            <td><%= item[:message] %></td>
-                          </tr>
+                  <ul class="c-modal__review-list">
+                    <% review_items.each do |item| %>
+                      <li>
+                        <strong><%= item[:type] %></strong>
+                        <% if item[:row].present? && item[:row] != "-" %>
+                          · Row <%= item[:row] %>
                         <% end %>
-                      </tbody>
-                    </table>
-                  </div>
+                        <br>
+                        <%= item[:message] %>
+                      </li>
+                    <% end %>
+                  </ul>
                 </div>
               <% else %>
                 <p class="c-help u-mt-md">No file-level mapping, type, duplicate, or parsing issues were detected.</p>
@@ -708,16 +772,19 @@
         </div>
       </details>
 
-      <details class="c-card c-card--flush c-section-group">
+      <details class="c-card c-card--flush c-section-group" <%= "open" if has_pending_matches %>>
         <summary class="c-section-group__header">
-          <h2>Pending Student Matches</h2>
-          <span><%= pluralize(@pending_rows.size, "row") %></span>
+          <h2>3. Pending Student Matching</h2>
+          <span><%= pluralize(@pending_rows.size, "competency row") %> needing a student</span>
         </summary>
         <% if @pending_rows.empty? %>
           <div class="c-empty-state">
             <p class="c-empty-state__body">No pending student matches were created for this batch.</p>
           </div>
         <% else %>
+          <div class="c-callout c-callout--warning u-m-md">
+            These competency values were read from the file, but the importer could not confidently attach them to a student. Review the imported data, then use the Edit tab to correct UIN/email/name or choose the matching student.
+          </div>
           <% pending_student_groups = @pending_rows.group_by do |row|
             identity = row.student_uin.presence ||
                        row.student_email.presence ||
@@ -743,7 +810,7 @@
                   </span>
                 </summary>
 
-                <div class="u-stack u-stack--md u-p-md" data-controller="survey-tabs" data-survey-tabs-default-tab-value="<%= edit_tab_id %>">
+                <div class="u-stack u-stack--md u-p-md" data-controller="survey-tabs" data-survey-tabs-default-tab-value="<%= values_tab_id %>">
                   <div class="u-responsive-split">
                     <div class="u-stack u-stack--xs">
                       <div class="c-table__title"><%= imported_student_label %></div>
@@ -751,7 +818,7 @@
                     </div>
                     <div class="c-tabs" role="tablist" aria-label="Pending student match tools">
                       <button type="button"
-                              class="c-tab is-active"
+                              class="c-tab"
                               role="tab"
                               data-survey-tabs-target="tab"
                               data-tab-id="<%= edit_tab_id %>"
@@ -759,7 +826,7 @@
                         Edit
                       </button>
                       <button type="button"
-                              class="c-tab"
+                              class="c-tab is-active"
                               role="tab"
                               data-survey-tabs-target="tab"
                               data-tab-id="<%= values_tab_id %>"
@@ -769,7 +836,7 @@
                     </div>
                   </div>
 
-                  <div data-survey-tabs-target="panel" data-tab-panel="<%= edit_tab_id %>" role="tabpanel">
+                  <div class="hidden" data-survey-tabs-target="panel" data-tab-panel="<%= edit_tab_id %>" role="tabpanel">
                     <% if @batch.finalized? %>
                       <div class="c-callout c-callout--info">This batch is finalized and locked.</div>
                     <% else %>
@@ -783,7 +850,7 @@
                         <% end %>
 
                         <div class="c-callout c-callout--info">
-                          Choosing a matched student applies to every pending row in this accordion. Row-level competency score and target values remain editable below.
+                          Choosing a matched student applies to every pending competency row in this group. Row-level assessed levels and course targets remain editable below.
                         </div>
 
                         <div class="u-grid" style="--u-grid-min: 220px">
@@ -819,8 +886,8 @@
                                 <th>Assignment</th>
                                 <th>Competency</th>
                                 <th>Raw</th>
-                                <th>Score</th>
-                                <th>Target</th>
+                                  <th>Assessed level</th>
+                                  <th>Course target</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -849,35 +916,41 @@
                     <% end %>
                   </div>
 
-                  <div class="hidden" data-survey-tabs-target="panel" data-tab-panel="<%= values_tab_id %>" role="tabpanel">
+                  <div data-survey-tabs-target="panel" data-tab-panel="<%= values_tab_id %>" role="tabpanel">
                     <div class="c-table-wrapper">
                       <table class="c-table c-table--sm">
                         <thead>
                           <tr>
                             <th>File</th>
-                            <th>Imported Student</th>
+                            <th>Status</th>
+                            <th>Identifier Type</th>
+                            <th>UIN</th>
+                            <th>Email</th>
                             <th>Course</th>
-                            <th>Assignment</th>
                             <th>Competency</th>
                             <th>Raw</th>
-                            <th>Score</th>
-                            <th>Target</th>
+                            <th>Assessed level</th>
+                            <th>Course target</th>
+                            <th>Target status</th>
                           </tr>
                         </thead>
                         <tbody>
                           <% rows.each do |row| %>
                             <tr>
                               <td><%= row.grade_import_file&.file_name %></td>
-                              <td>
-                                <span class="c-table__title"><%= row.student_name.presence || row.student_identifier.presence || "Unknown Student" %></span>
-                                <span class="c-table__meta"><%= [row.student_uin, row.student_email].compact_blank.join(" / ") %></span>
-                              </td>
+                              <td><%= row.status.to_s.humanize %></td>
+                              <td><%= row.student_identifier_type.presence || "—" %></td>
+                              <td><%= row.student_uin.presence || "—" %></td>
+                              <td><%= row.student_email.presence || "—" %></td>
                               <td><%= row.course_code.presence || "—" %></td>
-                              <td><%= row.assignment_name.presence || "—" %></td>
                               <td class="c-table__title"><%= row.competency_title %></td>
                               <td><%= row.raw_grade %></td>
                               <td><span class="c-score-pill c-score-pill--course"><%= row.mapped_level %></span></td>
                               <td><span class="c-score-pill c-score-pill--program <%= 'c-score-pill--empty' if row.course_target_level.blank? %>"><%= row.course_target_level.presence || "—" %></span></td>
+                              <td>
+                                <% target_status = target_met_label(row.mapped_level, row.course_target_level) %>
+                                <span class="c-score-pill <%= target_status == 'Met' ? 'c-score-pill--met' : target_status == 'Below target' ? 'c-score-pill--below' : 'c-score-pill--no-target c-score-pill--empty' %>"><%= target_status %></span>
+                              </td>
                             </tr>
                           <% end %>
                         </tbody>
@@ -891,102 +964,153 @@
         <% end %>
       </details>
 
-      <details class="c-card c-card--flush c-section-group">
+      <details class="c-card c-card--flush c-section-group" <%= "open" if has_evidence_rows && !has_pending_matches && !has_file_issues %>>
         <summary class="c-section-group__header">
-          <h2>Evidence Preview</h2>
-          <span><%= pluralize(@evidences.size, "row") %></span>
+          <h2>4. Student Processed</h2>
+          <span><%= pluralize(@evidences.size, "matched competency row") %> ready for review</span>
         </summary>
+        <div class="c-callout c-callout--info u-m-md">
+          These rows are already matched to students. Review the processed values, then use the Edit tab if course, competency, assessed level, or course target values need correction.
+        </div>
         <% grouped_evidences = @evidences.group_by { |evidence| [evidence.student&.user&.name || "Unknown Student", evidence.student&.uin.presence || "No UIN"] } %>
         <% if grouped_evidences.empty? %>
           <div class="c-empty-state">
-            <p class="c-empty-state__body">No evidence rows were created for this batch.</p>
+            <p class="c-empty-state__body">No student processed rows were created for this batch.</p>
           </div>
         <% else %>
           <div class="u-stack u-stack--sm u-p-md">
-            <% grouped_evidences.each do |(student_name, student_uin), evidences| %>
+            <% grouped_evidences.each_with_index do |((student_name, student_uin), evidences), group_index| %>
+              <% course_codes = evidences.map(&:course_code).compact_blank.uniq.sort %>
+              <% edit_tab_id = "processed-#{group_index}-edit" %>
+              <% values_tab_id = "processed-#{group_index}-values" %>
               <details class="c-accordion">
                 <summary class="c-accordion__summary">
                   <span class="c-accordion__title"><%= student_name %></span>
-                  <span class="c-accordion__meta">UIN <%= student_uin %> · <%= pluralize(evidences.size, "grade row") %></span>
+                  <span class="c-accordion__meta">
+                    UIN <%= student_uin %> · <%= pluralize(evidences.size, "processed row") %>
+                    <% if course_codes.any? %>· <%= course_codes.to_sentence %><% end %>
+                  </span>
                 </summary>
-                <div class="c-table-wrapper">
-                  <table class="c-table c-table--sm">
-                    <thead>
-                      <tr>
-                        <th>Course</th>
-                        <th>Assignment</th>
-                        <th>Raw Grade</th>
-                        <th>% of Assignment</th>
-                        <th>Competency</th>
-                        <th>Actual Level</th>
-                        <th>Course Target</th>
-                        <th>Source</th>
-                        <th>Correction</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <% evidences.each do |evidence| %>
-                        <% points_possible = evidence.metadata["points_possible"] %>
-                        <% percent_of_assignment = if points_possible.present? && points_possible.to_f.positive?
-                          (evidence.raw_grade.to_f / points_possible.to_f) * 100.0
-                        elsif evidence.metadata["score_basis"] == "percent"
-                          evidence.metadata["score_for_mapping"].to_f
-                        end %>
-                        <tr>
-                          <td><%= evidence.course_code.presence || "—" %></td>
-                          <td><%= evidence.assignment_name %></td>
-                          <td><%= evidence.raw_grade %></td>
-                          <td><%= percent_of_assignment.present? ? "#{number_with_precision(percent_of_assignment, precision: 1, strip_insignificant_zeros: true)}%" : "—" %></td>
-                          <td class="c-table__title"><%= evidence.competency_title %></td>
-                          <td><span class="c-score-pill c-score-pill--course"><%= evidence.mapped_level %></span></td>
-                          <td><span class="c-score-pill c-score-pill--program <%= 'c-score-pill--empty' if evidence.course_target_level.blank? %>"><%= evidence.course_target_level.presence || "—" %></span></td>
-                          <td><%= evidence.grade_import_file&.file_name %></td>
-                          <td>
-                            <% if @batch.finalized? %>
-                              <span class="c-muted">Locked</span>
-                            <% else %>
-                              <details class="c-cell-details">
-                                <summary class="c-cell-details__summary">Edit</summary>
-                                <%= form_with url: evidence_admin_grade_import_batch_path(@batch, evidence),
-                                      method: :patch,
-                                      local: true,
-                                      data: { turbo: false },
-                                      class: "u-stack u-stack--sm u-mt-sm" do %>
-                                  <div class="c-field">
-                                    <%= label_tag "grade_competency_evidence_#{evidence.id}_competency_title", "Competency", class: "c-label" %>
-                                    <%= select_tag "grade_competency_evidence[competency_title]",
-                                          options_for_select(Reports::DataAggregator::COMPETENCY_TITLES, evidence.competency_title),
-                                          id: "grade_competency_evidence_#{evidence.id}_competency_title",
-                                          class: "c-select u-w-full" %>
-                                  </div>
-                                  <div class="c-field">
-                                    <%= label_tag "grade_competency_evidence_#{evidence.id}_course_code", "Course", class: "c-label" %>
-                                    <%= text_field_tag "grade_competency_evidence[course_code]", evidence.course_code, id: "grade_competency_evidence_#{evidence.id}_course_code", class: "c-input" %>
-                                  </div>
-                                  <div class="c-field">
-                                    <%= label_tag "grade_competency_evidence_#{evidence.id}_assignment_name", "Assignment", class: "c-label" %>
-                                    <%= text_field_tag "grade_competency_evidence[assignment_name]", evidence.assignment_name, id: "grade_competency_evidence_#{evidence.id}_assignment_name", class: "c-input" %>
-                                  </div>
-                                  <div class="u-grid" style="--u-grid-min: 110px">
-                                    <div class="c-field">
-                                      <%= label_tag "grade_competency_evidence_#{evidence.id}_mapped_level", "Competency score", class: "c-label" %>
-                                      <%= number_field_tag "grade_competency_evidence[mapped_level]", evidence.mapped_level, id: "grade_competency_evidence_#{evidence.id}_mapped_level", class: "c-input", min: 1, max: 5 %>
-                                    </div>
-                                    <div class="c-field">
-                                      <%= label_tag "grade_competency_evidence_#{evidence.id}_course_target_level", "Target", class: "c-label" %>
-                                      <%= number_field_tag "grade_competency_evidence[course_target_level]", evidence.course_target_level, id: "grade_competency_evidence_#{evidence.id}_course_target_level", class: "c-input", min: 1, max: 5 %>
-                                    </div>
-                                  </div>
-                                  <%= hidden_field_tag "grade_competency_evidence[raw_grade]", evidence.raw_grade %>
-                                  <%= submit_tag "Save", class: button_classes(:secondary, extra_classes: "btn-sm") %>
-                                <% end %>
-                              </details>
-                            <% end %>
-                          </td>
-                        </tr>
-                      <% end %>
-                    </tbody>
-                  </table>
+
+                <div class="u-stack u-stack--md u-p-md" data-controller="survey-tabs" data-survey-tabs-default-tab-value="<%= values_tab_id %>">
+                  <div class="u-responsive-split">
+                    <div class="u-stack u-stack--xs">
+                      <div class="c-table__title"><%= student_name %></div>
+                      <div class="c-table__meta">UIN <%= student_uin %></div>
+                    </div>
+                    <div class="c-tabs" role="tablist" aria-label="Processed student row tools">
+                      <button type="button"
+                              class="c-tab"
+                              role="tab"
+                              data-survey-tabs-target="tab"
+                              data-tab-id="<%= edit_tab_id %>"
+                              data-action="click->survey-tabs#switchTab keydown->survey-tabs#handleKeydown">
+                        Edit
+                      </button>
+                      <button type="button"
+                              class="c-tab is-active"
+                              role="tab"
+                              data-survey-tabs-target="tab"
+                              data-tab-id="<%= values_tab_id %>"
+                              data-action="click->survey-tabs#switchTab keydown->survey-tabs#handleKeydown">
+                        Processed values
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="hidden" data-survey-tabs-target="panel" data-tab-panel="<%= edit_tab_id %>" role="tabpanel">
+                    <% if @batch.finalized? %>
+                      <div class="c-callout c-callout--info">This batch is finalized and locked.</div>
+                    <% else %>
+                      <div class="u-stack u-stack--sm">
+                        <% evidences.each do |evidence| %>
+                          <%= form_with url: evidence_admin_grade_import_batch_path(@batch, evidence),
+                                method: :patch,
+                                local: true,
+                                data: { turbo: false },
+                                class: "c-review-step u-stack u-stack--sm" do %>
+                            <div class="u-responsive-split">
+                              <div>
+                                <div class="c-table__title"><%= evidence.competency_title %></div>
+                                <div class="c-table__meta">
+                                  Row <%= evidence.row_number.presence || "—" %> · <%= evidence.grade_import_file&.file_name || "Unknown file" %>
+                                </div>
+                              </div>
+                              <%= submit_tag "Save row", class: button_classes(:secondary, extra_classes: "btn-sm") %>
+                            </div>
+                            <div class="u-grid" style="--u-grid-min: 180px">
+                              <div class="c-field">
+                                <%= label_tag "grade_competency_evidence_#{evidence.id}_course_code", "Course", class: "c-label" %>
+                                <%= text_field_tag "grade_competency_evidence[course_code]", evidence.course_code, id: "grade_competency_evidence_#{evidence.id}_course_code", class: "c-input" %>
+                              </div>
+                              <div class="c-field">
+                                <%= label_tag "grade_competency_evidence_#{evidence.id}_assignment_name", "Assignment", class: "c-label" %>
+                                <%= text_field_tag "grade_competency_evidence[assignment_name]", evidence.assignment_name, id: "grade_competency_evidence_#{evidence.id}_assignment_name", class: "c-input" %>
+                              </div>
+                              <div class="c-field">
+                                <%= label_tag "grade_competency_evidence_#{evidence.id}_competency_title", "Competency", class: "c-label" %>
+                                <%= select_tag "grade_competency_evidence[competency_title]",
+                                      options_for_select(Reports::DataAggregator::COMPETENCY_TITLES, evidence.competency_title),
+                                      id: "grade_competency_evidence_#{evidence.id}_competency_title",
+                                      class: "c-select u-w-full" %>
+                              </div>
+                              <div class="c-field">
+                                <%= label_tag "grade_competency_evidence_#{evidence.id}_mapped_level", "Assessed level", class: "c-label" %>
+                                <%= number_field_tag "grade_competency_evidence[mapped_level]", evidence.mapped_level, id: "grade_competency_evidence_#{evidence.id}_mapped_level", class: "c-input", min: 1, max: 5 %>
+                              </div>
+                              <div class="c-field">
+                                <%= label_tag "grade_competency_evidence_#{evidence.id}_course_target_level", "Course target", class: "c-label" %>
+                                <%= number_field_tag "grade_competency_evidence[course_target_level]", evidence.course_target_level, id: "grade_competency_evidence_#{evidence.id}_course_target_level", class: "c-input", min: 1, max: 5 %>
+                              </div>
+                            </div>
+                            <%= hidden_field_tag "grade_competency_evidence[raw_grade]", evidence.raw_grade %>
+                          <% end %>
+                        <% end %>
+                      </div>
+                    <% end %>
+                  </div>
+
+                  <div data-survey-tabs-target="panel" data-tab-panel="<%= values_tab_id %>" role="tabpanel">
+                    <div class="c-table-wrapper">
+                      <table class="c-table c-table--sm">
+                        <thead>
+                          <tr>
+                            <th>File</th>
+                            <th>Status</th>
+                            <th>Identifier Type</th>
+                            <th>UIN</th>
+                            <th>Email</th>
+                            <th>Course</th>
+                            <th>Competency</th>
+                            <th>Raw</th>
+                            <th>Assessed level</th>
+                            <th>Course target</th>
+                            <th>Target status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% evidences.each do |evidence| %>
+                            <tr>
+                              <td><%= evidence.grade_import_file&.file_name %></td>
+                              <td>Processed</td>
+                              <td>Matched student</td>
+                              <td><%= evidence.student&.uin.presence || student_uin.presence || "—" %></td>
+                              <td><%= evidence.student&.user&.email.presence || "—" %></td>
+                              <td><%= evidence.course_code.presence || "—" %></td>
+                              <td class="c-table__title"><%= evidence.competency_title %></td>
+                              <td><%= evidence.raw_grade %></td>
+                              <td><span class="c-score-pill c-score-pill--course"><%= evidence.mapped_level %></span></td>
+                              <td><span class="c-score-pill c-score-pill--program <%= 'c-score-pill--empty' if evidence.course_target_level.blank? %>"><%= evidence.course_target_level.presence || "—" %></span></td>
+                              <td>
+                                <% target_status = target_met_label(evidence.mapped_level, evidence.course_target_level) %>
+                                <span class="c-score-pill <%= target_status == 'Met' ? 'c-score-pill--met' : target_status == 'Below target' ? 'c-score-pill--below' : 'c-score-pill--no-target c-score-pill--empty' %>"><%= target_status %></span>
+                              </td>
+                            </tr>
+                          <% end %>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </details>
             <% end %>

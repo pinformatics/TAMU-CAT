@@ -1,0 +1,8 @@
+<%= @notification.title %>
+
+<%= @notification.message %>
+
+<% if @target_path.present? %>
+View in TAMU Competency Assessment Tool:
+<%= @target_path %>
+<% end %>

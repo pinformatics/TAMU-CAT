@@ -39,6 +39,34 @@ class Admin::CourseGradeReleaseDatesControllerTest < ActionDispatch::Integration
     assert_nil @semester.reload.course_grade_release_date
   end
 
+  test "clearing an embargoed release date enqueues course result notifications" do
+    sign_in @admin
+    release = @semester.course_grade_release_date || @semester.build_course_grade_release_date
+    release.update!(release_date: 2.days.from_now)
+
+    assert_enqueued_with(job: CourseCompetencyReleaseNotificationJob, args: [ { program_semester_id: @semester.id, triggered_by_id: @admin.id } ]) do
+      delete admin_course_grade_release_date_path(release)
+    end
+
+    assert_redirected_to admin_course_grade_release_dates_path
+  end
+
+  test "bulk update from future embargo to visible enqueues course result notifications" do
+    sign_in @admin
+    release = @semester.course_grade_release_date || @semester.build_course_grade_release_date
+    release.update!(release_date: 2.days.from_now)
+
+    assert_enqueued_with(job: CourseCompetencyReleaseNotificationJob, args: [ { program_semester_id: @semester.id, triggered_by_id: @admin.id } ]) do
+      patch bulk_update_admin_course_grade_release_dates_path, params: {
+        release_dates: {
+          @semester.id => ""
+        }
+      }
+    end
+
+    assert_redirected_to admin_course_grade_release_dates_path
+  end
+
   test "admin can bulk update release dates and audit changes" do
     sign_in @admin
     release_at = 4.days.from_now.change(sec: 0)

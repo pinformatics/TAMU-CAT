@@ -100,9 +100,10 @@ Recommended workflow:
 1. upload as `dry run`
 2. inspect `File Results`
 3. inspect `Pending Student Matches`
-4. inspect `Derived Competency Ratings`
-5. inspect `Evidence Preview`
-6. commit only when correct
+4. inspect `Student Processed`
+5. inspect failed values, pending matches, missing mappings, invalid UINs, and duplicate warnings
+6. approve the preview when every listed item has been reviewed
+7. commit only when correct
 
 Important behaviors:
 
@@ -110,6 +111,7 @@ Important behaviors:
 - dry runs are hidden from downstream course-rating views
 - committed batches can be rolled back and recommitted
 - unmatched students can be stored as pending rows
+- course targets are imported separately from end-of-program targets
 
 If a batch shows no evidence:
 
@@ -160,6 +162,19 @@ Check that:
 - filters load
 - charts/cards render
 - exports still succeed
+- course competency reports show target-met, below-target, and release-status summaries
+
+## Student Overviews
+
+Use student overviews for advisor-facing student review.
+
+Check that:
+
+- admins can open any student
+- advisors can open only assigned advisees
+- imported course competency history is visible
+- one-student competency history CSV downloads
+- competency review notes appear when advisor notes exist
 
 ## Common admin mistakes
 

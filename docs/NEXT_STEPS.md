@@ -8,6 +8,18 @@ This list is intentionally short. It is meant to help the next owner choose usef
 
 No urgent release-blocking follow-up is currently known.
 
+## Recent phase completion
+
+The competency workflow phases through documentation and training are now represented in repo-local docs:
+
+- competency alias lookup and import diagnostics
+- course target-met reporting
+- import audit logging
+- reports and dashboards
+- notifications and email workflow
+- advisor and portfolio exports
+- Fall workflow and training guides
+
 ## Completed
 
 ### 1. Added smoke tests for grade imports

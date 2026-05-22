@@ -5,6 +5,7 @@ class ReportsController < ApplicationController
 
   def show
     @report_insights = Reports::CompetencyInsights.new(user: current_user, params: reports_filter_params).call
+    @course_competency_report = Reports::CourseCompetencyReport.new(params: reports_filter_params).call
   end
 
   def export_pdf
@@ -52,6 +53,21 @@ class ReportsController < ApplicationController
               type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   end
 
+  def export_course_competencies
+    report = Reports::CourseCompetencyReport.new(params: reports_filter_params)
+
+    record_export_audit!(
+      export_type: "course_competency_report_csv",
+      description: "Exported course competency report CSV.",
+      metadata: reports_filter_params.to_h
+    )
+
+    send_data report.csv,
+              filename: "course-competency-report-#{Time.current.strftime('%Y%m%d-%H%M')}.csv",
+              disposition: "attachment",
+              type: "text/csv"
+  end
+
   private
 
   def ensure_reports_access!
@@ -65,7 +81,24 @@ class ReportsController < ApplicationController
   end
 
   def reports_params
-    params.permit(:track, :semester, :survey_id, :category_id, :student_id, :advisor_id, :competency, :section, :y_axis)
+    params.permit(
+      :track,
+      :semester,
+      :survey_id,
+      :category_id,
+      :student_id,
+      :advisor_id,
+      :competency,
+      :section,
+      :y_axis,
+      :program_semester_id,
+      :course_program_semester_id,
+      :course_code,
+      :course_track,
+      :course_class_of,
+      :class_of,
+      :release_status
+    )
   end
 
   def reports_filter_params

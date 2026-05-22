@@ -141,6 +141,10 @@ export default class extends Controller {
   sectionsHtml() {
     return `
       <div class="c-modal__sections">
+        <div class="c-modal__issue-summary">
+          <strong>${this.escape(this.totalItemCountLabel())}</strong>
+          <span>Review all issues below before approving.</span>
+        </div>
         ${this.sections().map((section) => this.sectionHtml(section)).join("")}
       </div>
     `
@@ -198,6 +202,15 @@ export default class extends Controller {
 
   itemCountLabel(count) {
     return `${count} ${count === 1 ? "item" : "items"}`
+  }
+
+  totalItemCountLabel() {
+    const total = this.sections().reduce((sum, section) => {
+      const count = Number.isInteger(section.count) ? section.count : (Array.isArray(section.items) ? section.items.length : 0)
+      return sum + count
+    }, 0)
+
+    return `${total} total ${total === 1 ? "issue" : "issues"}`
   }
 
   eyebrowText() {

@@ -1043,6 +1043,31 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Lifecycle status updated for Student User"
   end
 
+  test "admin activities page labels grade import activity" do
+    sign_in @admin
+
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    AdminActivityLog.record!(
+      admin: @admin,
+      action: "grade_import_action",
+      description: "Committed grade import preview ##{batch.id}.",
+      subject: batch,
+      metadata: { import_action: "commit", batch_id: batch.id }
+    )
+
+    get admin_activities_path
+
+    assert_response :success
+    assert_includes response.body, "Grade Import"
+    assert_includes response.body, "Grade Import Action"
+    assert_includes response.body, "Committed grade import preview"
+    assert_includes response.body, admin_grade_import_batch_path(batch)
+  end
+
   test "update_roles reports failures when an update raises" do
     sign_in @admin
 

@@ -23,6 +23,8 @@ class StudentOverviewsController < ApplicationController
     @overview = overview_for(@student)
     @survey_rows = survey_rows_for(@student)
     @advisor_assignment_rows = advisor_assignment_rows_for(@student)
+    @course_history_rows = course_history_rows_for(@student)
+    @advisor_note_rows = advisor_note_rows_for(@student)
     @competency_payload = StudentCompetencyDashboard.new(
       student: @student,
       params: { semester: StudentCompetencyDashboard::ALL_SEMESTERS_VALUE }
@@ -31,6 +33,22 @@ class StudentOverviewsController < ApplicationController
     @below_target_competencies = below_target_competencies_for(@competency_payload)
 
     render "staff/student_overviews/show"
+  end
+
+  def competency_history
+    student = accessible_student_scope(include_historical: true).includes(:user).find(params[:id])
+    exporter = StudentCompetencyHistoryExporter.new(student: student)
+    record_export_audit!(
+      export_type: "student_competency_history_csv",
+      description: "Exported one student's competency history.",
+      subject: student,
+      metadata: { student_id: student.student_id }
+    )
+
+    send_data exporter.csv,
+              filename: "student-#{student.student_id}-competency-history-#{Time.current.strftime('%Y%m%d-%H%M')}.csv",
+              disposition: "attachment",
+              type: "text/csv"
   end
 
   private
@@ -159,6 +177,44 @@ class StudentOverviewsController < ApplicationController
           ends_on: assignment.ends_on,
           current: assignment.current?,
           assigned_by_name: assignment.assigned_by&.display_name || assignment.assigned_by&.email
+        }
+      end
+  end
+
+  def course_history_rows_for(student)
+    GradeCompetencyEvidence
+      .joins(:grade_import_batch)
+      .merge(GradeImportBatch.reportable)
+      .includes(:grade_import_file, grade_import_batch: :program_semester)
+      .where(student_id: student.student_id)
+      .order(Arel.sql("grade_import_batches.created_at DESC"), :course_code, :competency_title)
+      .limit(12)
+      .map do |evidence|
+        {
+          semester: evidence.grade_import_batch&.program_semester&.name || "No semester",
+          course_code: evidence.course_code,
+          competency_title: evidence.competency_title,
+          assessed_level: evidence.mapped_level,
+          target_level: evidence.course_target_level,
+          target_status: GradeImports::TargetAttainmentReport.ui_label(evidence.mapped_level, evidence.course_target_level),
+          source_file: evidence.grade_import_file&.file_name,
+          updated_at: evidence.updated_at
+        }
+      end
+  end
+
+  def advisor_note_rows_for(student)
+    ConfidentialAdvisorNote
+      .includes(:survey, advisor: :user)
+      .where(student_id: student.student_id)
+      .order(updated_at: :desc)
+      .limit(6)
+      .map do |note|
+        {
+          advisor_name: note.advisor&.display_name || "Advisor",
+          survey_title: note.survey&.title || "Survey",
+          body: note.body,
+          updated_at: note.updated_at
         }
       end
   end

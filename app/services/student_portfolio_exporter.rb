@@ -29,8 +29,10 @@ class StudentPortfolioExporter
   def rows
     @rows ||= begin
       answers = latest_portfolio_answers
+      summaries = competency_summaries_by_student
       students.map do |student|
         answer = answers[student.student_id]
+        competency_summary = summaries.fetch(student.student_id, empty_competency_summary)
         {
           student_id: student.student_id,
           name: student.user&.display_name,
@@ -41,15 +43,34 @@ class StudentPortfolioExporter
           advisor: student.advisor&.display_name,
           portfolio_url: answer&.response_value,
           submitted_at: answer&.updated_at
-        }
+        }.merge(competency_summary)
       end
+    end
+  end
+
+  def competency_summaries_by_student
+    @competency_summaries_by_student ||= grouped_evidence.transform_values do |evidence_rows|
+      statuses = evidence_rows.map { |row| GradeImports::TargetAttainmentReport.status_for(row.mapped_level, row.course_target_level) }
+      denominator = statuses.count(:met) + statuses.count(:below_target)
+      latest_row = evidence_rows.max_by(&:updated_at)
+
+      {
+        latest_course_semester: latest_row&.grade_import_batch&.program_semester&.name,
+        course_count: evidence_rows.map(&:course_code).compact_blank.uniq.size,
+        course_evidence_count: evidence_rows.size,
+        course_competency_count: evidence_rows.map(&:competency_title).compact_blank.uniq.size,
+        target_met_count: statuses.count(:met),
+        below_target_count: statuses.count(:below_target),
+        no_target_count: statuses.count(:no_target),
+        target_met_rate: denominator.positive? ? ((statuses.count(:met).to_f / denominator) * 100).round(1) : nil
+      }
     end
   end
 
   def workbook
     package = Axlsx::Package.new
     package.workbook.add_worksheet(name: "Portfolio URLs") do |sheet|
-      sheet.add_row [ "UIN", "Name", "Email", "Track", "Cohort", "Advisor", "Google Sites URL", "Submitted At" ]
+      sheet.add_row workbook_headers
       rows.each do |row|
         sheet.add_row [
           row[:uin].to_s,
@@ -59,17 +80,16 @@ class StudentPortfolioExporter
           row[:program_year],
           row[:advisor],
           row[:portfolio_url],
-          row[:submitted_at]
-        ], types: [
-          :string,
-          :string,
-          :string,
-          :string,
-          :string,
-          :string,
-          :string,
-          :string
-        ]
+          row[:submitted_at],
+          row[:latest_course_semester],
+          row[:course_count],
+          row[:course_evidence_count],
+          row[:course_competency_count],
+          row[:target_met_count],
+          row[:below_target_count],
+          row[:no_target_count],
+          row[:target_met_rate]
+        ], types: workbook_types
       end
     end
     package
@@ -99,5 +119,73 @@ class StudentPortfolioExporter
       .each_with_object({}) do |answer, lookup|
         lookup[answer.student_id] ||= answer
       end
+  end
+
+  def grouped_evidence
+    student_ids = students.map(&:student_id)
+    return {} if student_ids.empty?
+
+    GradeCompetencyEvidence
+      .joins(:grade_import_batch)
+      .merge(GradeImportBatch.reportable)
+      .includes(grade_import_batch: :program_semester)
+      .where(student_id: student_ids)
+      .to_a
+      .group_by(&:student_id)
+  end
+
+  def workbook_headers
+    [
+      "UIN",
+      "Name",
+      "Email",
+      "Track",
+      "Cohort",
+      "Advisor",
+      "Google Sites URL",
+      "Submitted At",
+      "Latest Course Semester",
+      "Courses With Evidence",
+      "Course Evidence Rows",
+      "Course Competencies",
+      "Course Targets Met",
+      "Below Course Target",
+      "No Course Target",
+      "Course Target Met Rate"
+    ]
+  end
+
+  def workbook_types
+    [
+      :string,
+      :string,
+      :string,
+      :string,
+      :string,
+      :string,
+      :string,
+      :string,
+      :string,
+      :integer,
+      :integer,
+      :integer,
+      :integer,
+      :integer,
+      :integer,
+      :float
+    ]
+  end
+
+  def empty_competency_summary
+    {
+      latest_course_semester: nil,
+      course_count: 0,
+      course_evidence_count: 0,
+      course_competency_count: 0,
+      target_met_count: 0,
+      below_target_count: 0,
+      no_target_count: 0,
+      target_met_rate: nil
+    }
   end
 end

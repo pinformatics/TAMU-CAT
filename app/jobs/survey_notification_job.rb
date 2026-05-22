@@ -66,12 +66,13 @@ class SurveyNotificationJob < ApplicationJob
 
     closes_in = ActionController::Base.helpers.distance_of_time_in_words(Time.current, assignment.available_until)
 
-    Notification.deliver!(
+    notification = Notification.deliver!(
       user: assignment.recipient_user,
       title: "Competency Survey Closing Soon",
       message: "Your competency survey '#{assignment.survey.title}' closes in #{closes_in}. Please complete it before it closes.",
       notifiable: assignment
     )
+    enqueue_notification_email(notification)
   end
 
   def handle_past_due_notification(survey_assignment_id)
@@ -216,5 +217,9 @@ class SurveyNotificationJob < ApplicationJob
     return unless user&.id
 
     bucket[user.id] = user
+  end
+
+  def enqueue_notification_email(notification)
+    NotificationEmailDeliveryJob.perform_later(notification_id: notification.id)
   end
 end

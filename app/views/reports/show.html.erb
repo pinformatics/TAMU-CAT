@@ -40,6 +40,174 @@
     <section class="c-card c-card--spacious u-stack u-stack--lg">
       <header class="c-panel-header">
         <div>
+          <p class="c-eyebrow">Course competency analytics</p>
+          <h2 class="c-section-title c-heading-inline">Course Target Attainment</h2>
+          <p class="c-help">Committed grade import batches only. These reports use uploaded course targets, not end-of-program targets.</p>
+        </div>
+        <%= link_to "Export CSV",
+              export_course_competency_reports_path(request.query_parameters.merge(format: :csv)),
+              class: button_classes(:secondary),
+              data: { turbo_confirm: "FERPA reminder: this export may include student-level course competency summaries. Continue only for a legitimate educational interest." } %>
+      </header>
+
+      <% course_filters = @course_competency_report[:filters] || {} %>
+      <% course_filter_options = @course_competency_report[:filter_options] || {} %>
+      <%= form_with url: reports_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
+        <div class="c-filter-bar__field">
+          <%= label_tag :course_program_semester_id, "Semester", class: "c-label" %>
+          <%= select_tag :course_program_semester_id,
+                options_for_select([["All semesters", ""]] + Array(course_filter_options[:semesters]), course_filters[:program_semester_id]),
+                class: "c-select u-w-full" %>
+        </div>
+        <div class="c-filter-bar__field">
+          <%= label_tag :course_code, "Course", class: "c-label" %>
+          <%= select_tag :course_code,
+                options_for_select([["All courses", ""]] + Array(course_filter_options[:courses]).map { |course| [course, course] }, course_filters[:course_code]),
+                class: "c-select u-w-full" %>
+        </div>
+        <div class="c-filter-bar__field">
+          <%= label_tag :course_track, "Track", class: "c-label" %>
+          <%= select_tag :course_track,
+                options_for_select([["All tracks", ""]] + Array(course_filter_options[:tracks]).map { |track| [track, track] }, course_filters[:track]),
+                class: "c-select u-w-full" %>
+        </div>
+        <div class="c-filter-bar__field">
+          <%= label_tag :course_class_of, "Class", class: "c-label" %>
+          <%= select_tag :course_class_of,
+                options_for_select([["All classes", ""]] + Array(course_filter_options[:class_years]).map { |year| ["Class of #{year}", year] }, course_filters[:class_of]),
+                class: "c-select u-w-full" %>
+        </div>
+        <div class="c-filter-bar__field">
+          <%= label_tag :release_status, "Release", class: "c-label" %>
+          <%= select_tag :release_status,
+                options_for_select(Array(course_filter_options[:release_statuses]), course_filters[:release_status]),
+                class: "c-select u-w-full" %>
+        </div>
+        <div class="u-actions u-actions--start">
+          <%= submit_tag "Apply", class: button_classes(:secondary) %>
+          <%= link_to "Clear", reports_path, class: button_classes(:subtle), data: { turbo: false } %>
+        </div>
+      <% end %>
+
+      <% summary = @course_competency_report[:summary] || {} %>
+      <div class="u-grid" style="--u-grid-min: 150px">
+        <div class="c-card c-card--tight c-stat">
+          <span class="c-eyebrow">Courses</span>
+          <strong class="c-value c-value--xl"><%= summary[:course_count] || 0 %></strong>
+        </div>
+        <div class="c-card c-card--tight c-stat">
+          <span class="c-eyebrow">Competencies</span>
+          <strong class="c-value c-value--xl"><%= summary[:competency_count] || 0 %></strong>
+        </div>
+        <div class="c-card c-card--tight c-stat">
+          <span class="c-eyebrow">Students</span>
+          <strong class="c-value c-value--xl"><%= summary[:student_count] || 0 %></strong>
+        </div>
+        <div class="c-card c-card--tight c-stat">
+          <span class="c-eyebrow">Evidence Rows</span>
+          <strong class="c-value c-value--xl"><%= summary[:evidence_count] || 0 %></strong>
+        </div>
+        <div class="c-card c-card--tight c-stat">
+          <span class="c-eyebrow">Met Rate</span>
+          <strong class="c-value c-value--xl"><%= summary[:met_rate] ? "#{summary[:met_rate]}%" : "—" %></strong>
+          <p class="c-help"><%= summary[:below_count] || 0 %> below target</p>
+        </div>
+      </div>
+
+      <section class="u-stack u-stack--sm">
+        <h3 class="c-heading-inline">Course Contribution Report</h3>
+        <% if @course_competency_report[:course_contributions].present? %>
+          <div class="c-table-wrapper">
+            <table class="c-table c-table--sm">
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Competency</th>
+                  <th>Semesters</th>
+                  <th>Track</th>
+                  <th>Class</th>
+                  <th>Students</th>
+                  <th>Rows</th>
+                  <th>Actual Avg</th>
+                  <th>Course Target Avg</th>
+                  <th>Met Rate</th>
+                  <th>Release</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @course_competency_report[:course_contributions].first(100).each do |row| %>
+                  <tr>
+                    <td class="c-table__title"><%= row[:course_code] %></td>
+                    <td><%= row[:competency_title] %></td>
+                    <td><%= row[:semester_names].presence || "—" %></td>
+                    <td><%= row[:tracks].presence || "—" %></td>
+                    <td><%= row[:class_years].presence || "—" %></td>
+                    <td><%= row[:student_count] %></td>
+                    <td><%= row[:evidence_count] %></td>
+                    <td><%= row[:assessed_average] ? number_with_precision(row[:assessed_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
+                    <td><%= row[:course_target_average] ? number_with_precision(row[:course_target_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
+                    <td><%= row[:met_rate] ? "#{row[:met_rate]}%" : "—" %></td>
+                    <td><%= row[:release_statuses].presence || "—" %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% else %>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No course competency rows match the selected filters.</p>
+          </div>
+        <% end %>
+      </section>
+
+      <section class="u-stack u-stack--sm">
+        <h3 class="c-heading-inline">Student/Course Heatmap</h3>
+        <% if @course_competency_report[:student_course_heatmap].present? %>
+          <div class="c-table-wrapper">
+            <table class="c-table c-table--sm">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Course</th>
+                  <th>Track</th>
+                  <th>Class</th>
+                  <th>Average</th>
+                  <th>Rows</th>
+                  <th>Below Target</th>
+                  <th>No Target</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @course_competency_report[:student_course_heatmap].each do |row| %>
+                  <tr>
+                    <td class="c-table__title"><%= row[:student_name] %></td>
+                    <td><%= row[:course_code] %></td>
+                    <td><%= row[:track].presence || "—" %></td>
+                    <td><%= row[:class_of].present? ? "Class of #{row[:class_of]}" : "—" %></td>
+                    <td>
+                      <span class="c-heatmap-cell c-heatmap-cell--<%= row[:status] %>">
+                        <%= row[:average] ? number_with_precision(row[:average], precision: 2, strip_insignificant_zeros: true) : "—" %>
+                      </span>
+                    </td>
+                    <td><%= row[:evidence_count] %></td>
+                    <td><%= row[:below_count] %></td>
+                    <td><%= row[:no_target_count] %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% else %>
+          <div class="c-empty-state">
+            <p class="c-empty-state__body">No student/course heatmap rows match the selected filters.</p>
+          </div>
+        <% end %>
+      </section>
+    </section>
+
+    <section class="c-card c-card--spacious u-stack u-stack--lg">
+      <header class="c-panel-header">
+        <div>
           <p class="c-eyebrow">Program review</p>
           <h2 class="c-section-title c-heading-inline">Cohort Comparison</h2>
           <p class="c-help">Averages use the same student/advisor/course visibility rules as the competency matrix.</p>

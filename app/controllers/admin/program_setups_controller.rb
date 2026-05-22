@@ -31,8 +31,7 @@ class Admin::ProgramSetupsController < Admin::BaseController
     @post_save_warning = session.delete(:target_levels_post_save_warning)
     @semesters = ProgramSemester.order(Arel.sql("current DESC"), Arel.sql("LOWER(name) ASC"))
     @tracks = Student.tracks.values
-    class_years = Student.where.not(program_year: nil).distinct.order(:program_year).pluck(:program_year)
-    @class_of_options = [ [ "All classes", "" ] ] + class_years.map { |year| [ "Class of #{year}", year.to_s ] }
+    @class_of_options = [ [ "Select a cohort", "" ] ] + ProgramYear.options_for_select.map { |label, value| [ label, value.to_s ] }
 
     requested_semester_id = params[:program_semester_id].to_s.presence
     @selected_semester_id = requested_semester_id&.to_i
@@ -46,9 +45,10 @@ class Admin::ProgramSetupsController < Admin::BaseController
   end
 
   def load_targets
-    unless @selected_semester_id.present? && @selected_track.present?
+    unless @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present?
       @competencies = []
       @targets_by_title = {}
+      @target_coverage_summary = nil
       return
     end
 
@@ -61,11 +61,78 @@ class Admin::ProgramSetupsController < Admin::BaseController
     )
 
     exact = scoped.where(class_of: @selected_class_of).index_by(&:competency_title)
-    fallback = @selected_class_of.nil? ? {} : scoped.where(class_of: nil).index_by(&:competency_title)
+    legacy = legacy_target_records(scoped, @selected_class_of).index_by(&:competency_title)
+    fallback = {}
 
     @targets_by_title = @competencies.index_with do |title|
-      (exact[title] || fallback[title])&.target_level
+      (exact[title] || legacy[title] || fallback[title])&.target_level
     end
+    @target_coverage_summary = target_coverage_summary(exact: exact, legacy: legacy, fallback: fallback)
+  end
+
+  def target_coverage_summary(exact:, legacy:, fallback:)
+    rows = @competencies.map do |title|
+      exact_record = exact[title]
+      legacy_record = legacy[title]
+      fallback_record = fallback[title]
+      record = exact_record || legacy_record || fallback_record
+
+      {
+        title: title,
+        target_level: record&.target_level,
+        source: exact_record.present? ? "class" : (legacy_record.present? ? "legacy_program_year" : "missing")
+      }
+    end
+
+    missing = rows.select { |row| row[:target_level].blank? }
+    class_specific = rows.count { |row| row[:source] == "class" }
+    legacy_program_year = rows.count { |row| row[:source] == "legacy_program_year" }
+
+    {
+      total: rows.size,
+      populated: rows.size - missing.size,
+      missing_count: missing.size,
+      missing_titles: missing.map { |row| row[:title] },
+      class_specific_count: class_specific,
+      legacy_program_year_count: legacy_program_year
+    }
+  end
+
+  def legacy_program_year_candidates(class_of)
+    year = class_of.to_i
+    candidates = [ year ]
+    candidates << 2 if year == 2026
+    candidates << 1 if year == 2027
+    candidates.uniq
+  end
+
+  def legacy_program_year_order_sql(class_of)
+    year = class_of.to_i
+    mapped_year = { 2026 => 2, 2027 => 1 }[year]
+    return "program_year = #{year} DESC" if mapped_year.blank?
+
+    "CASE program_year WHEN #{year} THEN 0 WHEN #{mapped_year} THEN 1 ELSE 2 END"
+  end
+
+  def legacy_class_of_candidates(class_of)
+    year = class_of.to_i
+    candidates = []
+    candidates << 2 if year == 2026
+    candidates << 1 if year == 2027
+    candidates
+  end
+
+  def legacy_target_records(scoped, class_of)
+    program_year_records = scoped
+      .where(class_of: nil, program_year: legacy_program_year_candidates(class_of))
+      .order(Arel.sql(legacy_program_year_order_sql(class_of)))
+      .to_a
+
+    old_class_records = scoped
+      .where(program_year: nil, class_of: legacy_class_of_candidates(class_of))
+      .to_a
+
+    program_year_records + old_class_records
   end
 
   def submitted_students_count_for_selected_context

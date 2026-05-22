@@ -16,8 +16,8 @@ class Admin::TargetLevelsController < Admin::BaseController
   def update
     load_selector_options
 
-    unless @selected_semester_id.present? && @selected_track.present?
-      redirect_to admin_program_setup_path(tab: "targets"), alert: "Select a semester and track before updating target levels."
+    unless @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present?
+      redirect_to admin_program_setup_path(tab: "targets"), alert: "Select a semester, track, and cohort before updating target levels."
       return
     end
 
@@ -90,6 +90,10 @@ class Admin::TargetLevelsController < Admin::BaseController
       if submitted_students.positive?
         semester_label = @semesters.find { |s| s.id == @selected_semester_id }&.name || "selected semester"
         session[:target_levels_post_save_warning] = "Target levels changed. #{submitted_students} student(s) have already submitted surveys for #{@selected_track} (#{semester_label}); reports may reflect the updated targets."
+        notify_admins_target_levels_changed_after_submissions!(
+          semester_label: semester_label,
+          submitted_students: submitted_students
+        )
       end
     end
 
@@ -108,13 +112,41 @@ class Admin::TargetLevelsController < Admin::BaseController
     ), alert: e.record.errors.full_messages.to_sentence
   end
 
+  def fill_defaults
+    load_selector_options
+
+    unless @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present?
+      redirect_to admin_program_setup_path(tab: "targets"), alert: "Select a semester, track, and cohort before filling default target levels."
+      return
+    end
+
+    result = TargetLevels::DefaultApplier.new(
+      program_semester_id: @selected_semester_id,
+      track: @selected_track,
+      class_of: @selected_class_of
+    ).call
+
+    redirect_to admin_program_setup_path(
+      tab: "targets",
+      program_semester_id: @selected_semester_id,
+      track: @selected_track,
+      class_of: @selected_class_of
+    ), notice: "Default target levels filled: #{result.created_count} added, #{result.skipped_count} already set."
+  rescue ArgumentError => e
+    redirect_to admin_program_setup_path(
+      tab: "targets",
+      program_semester_id: @selected_semester_id,
+      track: @selected_track,
+      class_of: @selected_class_of
+    ), alert: e.message
+  end
+
   private
 
   def load_selector_options
     @semesters = ProgramSemester.order(Arel.sql("current DESC"), Arel.sql("LOWER(name) ASC"))
     @tracks = Student.tracks.values
-    class_years = Student.where.not(program_year: nil).distinct.order(:program_year).pluck(:program_year)
-    @class_of_options = [ [ "All classes", "" ] ] + class_years.map { |year| [ "Class of #{year}", year.to_s ] }
+    @class_of_options = [ [ "Select a cohort", "" ] ] + ProgramYear.options_for_select.map { |label, value| [ label, value.to_s ] }
 
     requested_semester_id = params[:program_semester_id].to_s.presence
     @selected_semester_id = requested_semester_id&.to_i
@@ -125,7 +157,7 @@ class Admin::TargetLevelsController < Admin::BaseController
   end
 
   def load_targets
-    unless @selected_semester_id.present? && @selected_track.present?
+    unless @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present?
       @competencies = []
       @targets_by_title = {}
       return
@@ -140,10 +172,11 @@ class Admin::TargetLevelsController < Admin::BaseController
     )
 
     exact = scoped.where(class_of: @selected_class_of).index_by(&:competency_title)
-    fallback = @selected_class_of.nil? ? {} : scoped.where(class_of: nil).index_by(&:competency_title)
+    legacy = legacy_target_records(scoped, @selected_class_of).index_by(&:competency_title)
+    fallback = {}
 
     @targets_by_title = @competencies.index_with do |title|
-      (exact[title] || fallback[title])&.target_level
+      (exact[title] || legacy[title] || fallback[title])&.target_level
     end
   end
 
@@ -163,5 +196,56 @@ class Admin::TargetLevelsController < Admin::BaseController
     end
 
     submitted_scope.select(:student_id).distinct.count
+  end
+
+  def notify_admins_target_levels_changed_after_submissions!(semester_label:, submitted_students:)
+    message = "Program target levels changed for #{@selected_track}, Class of #{@selected_class_of}, #{semester_label} after #{submitted_students} student(s) had already submitted surveys."
+
+    User.admins.find_each do |admin_user|
+      notification = Notification.deliver!(
+        user: admin_user,
+        title: "Target Levels Changed After Submissions",
+        message: message,
+        notifiable: ProgramSemester.find_by(id: @selected_semester_id)
+      )
+      NotificationEmailDeliveryJob.perform_later(notification_id: notification.id)
+    end
+  end
+
+  def legacy_program_year_candidates(class_of)
+    year = class_of.to_i
+    candidates = [ year ]
+    candidates << 2 if year == 2026
+    candidates << 1 if year == 2027
+    candidates.uniq
+  end
+
+  def legacy_program_year_order_sql(class_of)
+    year = class_of.to_i
+    mapped_year = { 2026 => 2, 2027 => 1 }[year]
+    return "program_year = #{year} DESC" if mapped_year.blank?
+
+    "CASE program_year WHEN #{year} THEN 0 WHEN #{mapped_year} THEN 1 ELSE 2 END"
+  end
+
+  def legacy_class_of_candidates(class_of)
+    year = class_of.to_i
+    candidates = []
+    candidates << 2 if year == 2026
+    candidates << 1 if year == 2027
+    candidates
+  end
+
+  def legacy_target_records(scoped, class_of)
+    program_year_records = scoped
+      .where(class_of: nil, program_year: legacy_program_year_candidates(class_of))
+      .order(Arel.sql(legacy_program_year_order_sql(class_of)))
+      .to_a
+
+    old_class_records = scoped
+      .where(program_year: nil, class_of: legacy_class_of_candidates(class_of))
+      .to_a
+
+    program_year_records + old_class_records
   end
 end

@@ -27,6 +27,121 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_match(/access denied/i, flash[:alert].to_s)
   end
 
+  test "index filters batch history by course semester uploader status and workflow" do
+    semester = program_semesters(:fall_2025)
+    matched_batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: semester,
+      status: "completed",
+      summary: { "dry_run" => false, "import_notes" => "PHPM 601 faculty template" }
+    )
+    matched_batch.grade_import_files.create!(
+      file_name: "Outcomes-26S-PHPM-601.csv",
+      file_checksum: "checksum-index-filter-match",
+      status: "processed"
+    )
+    other_batch = GradeImportBatch.create!(
+      uploaded_by: @advisor,
+      status: "rolled_back",
+      summary: { "dry_run" => false, "import_notes" => "Different upload" }
+    )
+    other_batch.grade_import_files.create!(
+      file_name: "Outcomes-26S-PHPM-681.csv",
+      file_checksum: "checksum-index-filter-other",
+      status: "processed"
+    )
+
+    get admin_grade_import_batches_path(
+      q: "PHPM-601",
+      program_semester_id: semester.id,
+      uploaded_by_id: @admin.id,
+      status: "completed",
+      workflow: "committed"
+    )
+
+    assert_response :success
+    assert_includes response.body, "Course, file, or notes"
+    assert_includes response.body, "Workflow"
+    assert_includes response.body, "Uploader"
+    assert_includes response.body, "Outcomes-26S-PHPM-601.csv"
+    assert_includes response.body, "##{matched_batch.id}"
+    refute_includes response.body, "##{other_batch.id}"
+    refute_includes response.body, "Outcomes-26S-PHPM-681.csv"
+  end
+
+  test "index summarizes committed course semester target performance" do
+    semester = program_semesters(:fall_2025)
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: semester,
+      status: "completed",
+      summary: { "dry_run" => false, "import_notes" => "Target performance summary" }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "target-performance.csv",
+      file_checksum: "checksum-index-target-performance",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Final",
+      course_code: "PHPM-601",
+      competency_title: "Policy Analysis",
+      raw_grade: 5,
+      mapped_level: 5,
+      course_target_level: 4,
+      source_key: "index-target-performance",
+      import_fingerprint: "fingerprint-index-target-performance"
+    )
+
+    get admin_grade_import_batches_path(program_semester_id: semester.id)
+
+    assert_response :success
+    assert_includes response.body, "Course/Semester Target Performance"
+    assert_includes response.body, semester.name
+    assert_includes response.body, "PHPM-601"
+    assert_includes response.body, "Policy Analysis"
+    assert_includes response.body, "100.0%"
+  end
+
+  test "new page links current template files" do
+    get new_admin_grade_import_batch_path
+
+    assert_response :success
+    assert_includes response.body, "Template files"
+    assert_includes response.body, "Canvas grade template"
+    assert_includes response.body, "Canvas competency template"
+    assert_includes response.body, "Faculty competency template"
+    assert_includes response.body, "Example%20Faculty%20Competency%20Export%2026S%20PHPM%20601.csv"
+    refute_includes response.body, "Sample import files"
+  end
+
+  test "upload records grade import audit activity" do
+    upload = direct_competency_csv_upload(
+      "audit-upload.csv",
+      [
+        [ @student.user.name, @student.student_id, @student.uin, 4, 3, 5, 4 ]
+      ]
+    )
+
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      post admin_grade_import_batches_path, params: {
+        dry_run: "1",
+        import_notes: "Audit upload test",
+        files: [ upload ]
+      }
+    end
+
+    batch = GradeImportBatch.order(created_at: :desc).first
+    assert_redirected_to admin_grade_import_batch_path(batch)
+    activity = AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first
+    assert_equal "upload", activity.metadata["import_action"]
+    assert_equal batch, activity.subject
+    assert_equal [ "audit-upload.csv" ], activity.metadata["file_names"]
+    assert_equal true, activity.metadata["dry_run"]
+  end
+
   test "commit flips a completed dry run into a reportable batch" do
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,
@@ -34,12 +149,19 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       summary: { "dry_run" => true }
     )
 
-    post commit_admin_grade_import_batch_path(batch)
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      post commit_admin_grade_import_batch_path(batch)
+    end
 
     assert_redirected_to admin_grade_import_batch_path(batch)
     assert batch.reload.reportable?
     assert_equal false, ActiveModel::Type::Boolean.new.cast(batch.summary["dry_run"])
     assert_equal @admin.email, batch.summary["committed_by"]
+    activity = AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first
+    assert_equal @admin, activity.admin
+    assert_equal batch, activity.subject
+    assert_equal "commit", activity.metadata["import_action"]
+    assert_equal batch.id, activity.metadata["batch_id"]
   end
 
   test "preview with failed or pending rows must be approved before commit" do
@@ -64,13 +186,18 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert batch.reload.dry_run?
     assert_match "approve", flash[:alert].to_s.downcase
 
-    post approve_admin_grade_import_batch_path(batch)
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      post approve_admin_grade_import_batch_path(batch)
+    end
 
     assert_redirected_to admin_grade_import_batch_path(batch)
     assert batch.reload.admin_approved?
     assert_equal @admin.email, batch.summary["admin_approved_by"]
+    assert_equal "approve", AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first.metadata["import_action"]
 
-    post commit_admin_grade_import_batch_path(batch)
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      post commit_admin_grade_import_batch_path(batch)
+    end
 
     assert_redirected_to admin_grade_import_batch_path(batch)
     assert batch.reload.reportable?
@@ -101,16 +228,22 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       import_fingerprint: "fingerprint-1"
     )
 
-    post rollback_admin_grade_import_batch_path(batch)
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      post rollback_admin_grade_import_batch_path(batch)
+    end
     assert_redirected_to admin_grade_import_batch_path(batch)
     assert batch.reload.rolled_back?
     refute batch.reportable?
+    assert_equal "rollback", AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first.metadata["import_action"]
 
-    post recommit_admin_grade_import_batch_path(batch)
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      post recommit_admin_grade_import_batch_path(batch)
+    end
     assert_redirected_to admin_grade_import_batch_path(batch)
     assert_equal "completed", batch.reload.status
     assert batch.reportable?
     assert_equal @admin.email, batch.summary["recommitted_by"]
+    assert_equal "recommit", AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first.metadata["import_action"]
   end
 
   test "semester action assigns legacy batch to a program semester" do
@@ -120,13 +253,18 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       summary: { "dry_run" => false }
     )
 
-    patch semester_admin_grade_import_batch_path(batch), params: {
-      program_semester_id: program_semesters(:fall_2025).id
-    }
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      patch semester_admin_grade_import_batch_path(batch), params: {
+        program_semester_id: program_semesters(:fall_2025).id
+      }
+    end
 
     assert_redirected_to admin_grade_import_batch_path(batch)
     assert_equal program_semesters(:fall_2025), batch.reload.program_semester
     assert_match "Batch semester updated", flash[:notice]
+    activity = AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first
+    assert_equal "semester_change", activity.metadata["import_action"]
+    assert_equal program_semesters(:fall_2025).id, activity.metadata["new_program_semester_id"]
   end
 
   test "export ratings returns formatted csv only" do
@@ -149,6 +287,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       competency_title: "Policy Analysis",
       raw_grade: 95,
       mapped_level: 5,
+      course_target_level: 4,
       row_number: 3,
       source_key: "source-csv-format",
       import_fingerprint: "fingerprint-csv-format"
@@ -178,6 +317,8 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       "Course Codes",
       "Assignments",
       "Source Files",
+      "Course Target Levels",
+      "Target Met Status",
       "Provenance Details"
     ], parsed.headers
 
@@ -188,11 +329,76 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "PHPM-700-001", first_row["Course Codes"]
     assert_equal "Case Study", first_row["Assignments"]
     assert_equal "sample.xlsx", first_row["Source Files"]
+    assert_equal "4", first_row["Course Target Levels"]
+    assert_equal "Met", first_row["Target Met Status"]
     assert_includes first_row["Provenance Details"], "raw=95.0"
+    assert_includes first_row["Provenance Details"], "target=4"
+    assert_includes first_row["Provenance Details"], "target_status=Met"
     assert_equal evidence.updated_at.iso8601, first_row["Latest Evidence Updated At"]
 
     get export_ratings_admin_grade_import_batch_path(batch, format: :xlsx)
     assert_response :not_acceptable
+  end
+
+  test "export evidence rows includes course target attainment status" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "row-export.csv",
+      file_checksum: "checksum-row-export",
+      status: "processed"
+    )
+    evidence = batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Final Project",
+      course_code: "PHPM-601-700",
+      competency_title: "Policy Analysis",
+      raw_grade: 88,
+      mapped_level: 3,
+      course_target_level: 4,
+      row_number: 9,
+      source_key: "source-row-export",
+      import_fingerprint: "fingerprint-row-export"
+    )
+
+    get export_evidence_admin_grade_import_batch_path(batch, format: :csv)
+
+    assert_response :success
+    parsed = CSV.parse(response.body, headers: true)
+    assert_equal [
+      "Student Name",
+      "Student UIN",
+      "Student ID",
+      "Student Email",
+      "Course Code",
+      "Competency",
+      "Assessed Level",
+      "Course Target Level",
+      "Target Met?",
+      "Raw Score",
+      "Assignment",
+      "Source File",
+      "Source Row",
+      "Last Updated"
+    ], parsed.headers
+
+    first_row = parsed.first
+    assert_equal @student.uin, first_row["Student UIN"]
+    assert_equal @student.student_id.to_s, first_row["Student ID"]
+    assert_equal "PHPM-601-700", first_row["Course Code"]
+    assert_equal "Policy Analysis", first_row["Competency"]
+    assert_equal "3", first_row["Assessed Level"]
+    assert_equal "4", first_row["Course Target Level"]
+    assert_equal "No - below target", first_row["Target Met?"]
+    assert_equal "88.0", first_row["Raw Score"]
+    assert_equal "Final Project", first_row["Assignment"]
+    assert_equal "row-export.csv", first_row["Source File"]
+    assert_equal "9", first_row["Source Row"]
+    assert_equal evidence.updated_at.strftime("%Y-%m-%d %H:%M:%S"), first_row["Last Updated"]
   end
 
   test "show displays course target levels for evidence rows" do
@@ -231,11 +437,67 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Detected Format"
-    assert_includes response.body, "Course Target"
+    assert_includes response.body, "4. Student Processed"
+    assert_includes response.body, "Processed student row tools"
+    assert_includes response.body, "Processed values"
+    assert_includes response.body, "Assessed level"
+    assert_includes response.body, "Course target"
+    assert_includes response.body, "Target status"
+    assert_includes response.body, "Below target"
+    assert_includes response.body, "Export rows CSV"
+    assert_includes response.body, "Correction file"
+    refute_includes response.body, ">Export CSV<"
+    refute_includes response.body, ">Error report<"
     assert_includes response.body, "PHPM-701-001"
     assert_includes response.body, "UIN #{@student.uin}"
     refute_includes response.body, "ID #{@student.student_id}"
     assert_select ".c-score-pill--program", text: "4"
+  end
+
+  test "show summarizes target attainment by course" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "target-attainment.csv",
+      file_checksum: "checksum-target-attainment",
+      status: "processed"
+    )
+    [
+      [ "source-target-met", 5, 4 ],
+      [ "source-target-below", 2, 4 ],
+      [ "source-target-missing", 3, nil ]
+    ].each_with_index do |(source_key, level, target), index|
+      batch.grade_competency_evidences.create!(
+        grade_import_file: file,
+        student: @student,
+        assignment_name: "Target Attainment #{index}",
+        course_code: "PHPM-701-001",
+        competency_title: "Performance Improvement",
+        raw_grade: 80 + index,
+        mapped_level: level,
+        course_target_level: target,
+        row_number: index + 2,
+        source_key: source_key,
+        import_fingerprint: "fingerprint-#{source_key}"
+      )
+    end
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "Target Performance by Course"
+    assert_includes response.body, "Actual vs Course Target by Competency"
+    assert_includes response.body, "PHPM-701-001"
+    assert_includes response.body, "Performance Improvement"
+    assert_includes response.body, "Actual avg"
+    assert_includes response.body, "Course target avg"
+    assert_includes response.body, "Processed rows"
+    assert_includes response.body, "Below target"
+    assert_includes response.body, "No target"
+    assert_includes response.body, "50.0%"
   end
 
   test "show explains semester scope and duplicate diagnostics" do
@@ -336,7 +598,9 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Correction file"
     assert_includes response.body, "Admin approval required:"
     refute_includes response.body, "Preview validation:"
-    assert_includes response.body, "Import Review"
+    assert_includes response.body, "Review in this order"
+    assert_includes response.body, "1. File Summary"
+    assert_includes response.body, "2. File Diagnostics"
     assert_includes response.body, "Detected format"
     assert_includes response.body, "Course detected"
     assert_includes response.body, "Student rows scanned"
@@ -347,16 +611,117 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Policy Analysis"
     assert_includes response.body, "Unknown competency_title"
     assert_includes response.body, "Approve this preview?"
-    assert_includes response.body, "Review these items before approving"
+    assert_includes response.body, "Review every listed item before approving"
     assert_includes response.body, "mapping-preview.xlsx: Unknown competency_title"
     assert_includes response.body, 'data-controller="modal-confirm"'
     assert_includes response.body, "modal-confirm-message-value"
     assert_includes response.body, "modal-confirm-sections-value"
     assert_includes response.body, "Failed Values"
-    assert_includes response.body, "Pending Student Matches"
+    assert_includes response.body, "3. Pending Student Matching"
+    assert_includes response.body, "4. Student Processed"
     assert_includes response.body, "Missing Student (UIN 123456789) | PHPM-631-600 | Policy Analysis"
-    assert_includes response.body, "&quot;collapsed&quot;:true"
+    refute_includes response.body, "&quot;overflow_message&quot;"
+    refute_includes response.body, "&quot;collapsed&quot;:true"
     assert_includes response.body, "Keep reviewing"
+  end
+
+  test "approval modal includes every failed value without truncating" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => true }
+    )
+    errors = 25.times.map do |index|
+      {
+        "row" => index + 2,
+        "column" => "Competency #{index + 1} ASSESSED LEVEL",
+        "type" => "invalid_value",
+        "message" => "Invalid test value #{index + 1}"
+      }
+    end
+    batch.grade_import_files.create!(
+      file_name: "many-errors.csv",
+      file_checksum: "checksum-many-errors",
+      status: "processed",
+      error_rows: errors.size,
+      parse_errors: errors
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "25"
+    assert_includes response.body, "Invalid test value 1"
+    assert_includes response.body, "Invalid test value 20"
+    assert_includes response.body, "Invalid test value 21"
+    assert_includes response.body, "Invalid test value 25"
+    refute_includes response.body, "...and 5 more"
+    refute_includes response.body, "&quot;overflow_message&quot;"
+  end
+
+  test "approval modal surfaces invalid uin values from pending rows" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => true }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "bad-uin.csv",
+      file_checksum: "checksum-bad-uin",
+      status: "processed",
+      pending_rows: 1
+    )
+    batch.grade_import_pending_rows.create!(
+      grade_import_file: file,
+      student_identifier: "12345",
+      student_identifier_type: "uin",
+      student_name: "Bad UIN Student",
+      student_uin: "12345",
+      assignment_name: "Final Project",
+      course_code: "PHPM-601-700",
+      competency_title: "Policy Analysis",
+      raw_grade: 88,
+      mapped_level: 3,
+      course_target_level: 4,
+      row_number: 9,
+      source_key: "source-bad-uin",
+      import_fingerprint: "fingerprint-bad-uin"
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "bad-uin.csv, column Student UIN"
+    assert_includes response.body, "Invalid UIN"
+    assert_includes response.body, "Student UIN must be exactly 9 digits; received 12345"
+    assert_includes response.body, "Bad UIN Student"
+  end
+
+  test "approval modal normalizes old assessed level wording" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => true }
+    )
+    batch.grade_import_files.create!(
+      file_name: "old-message.csv",
+      file_checksum: "checksum-old-message",
+      status: "processed",
+      error_rows: 1,
+      parse_errors: [
+        {
+          "type" => "invalid_value",
+          "column" => "Systems Thinking ASSESSED LEVEL",
+          "message" => "Systems Thinking mastery points must be an integer between 1 and 5; received blank"
+        }
+      ]
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "Systems Thinking assessed level must be an integer between 1 and 5; received blank"
+    refute_includes response.body, "Systems Thinking mastery points must be an integer"
   end
 
   test "sample action downloads guided import examples" do
@@ -364,14 +729,23 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "text/csv", response.media_type
-    assert_includes response.body, "Policy Analysis result"
-    assert_includes response.body, "Policy Analysis mastery points"
+    assert_includes response.body, "Policy Analysis COURSE TARGET"
+    assert_includes response.body, "Policy Analysis ASSESSED LEVEL"
+    refute_includes response.body, "Unmatched Canvas Student"
 
     get sample_admin_grade_import_batches_path(kind: "pending_match")
 
     assert_response :success
     assert_equal "text/csv", response.media_type
     assert_includes response.body, "Unmatched Canvas Student"
+
+    get sample_admin_grade_import_batches_path(kind: "bad_values")
+
+    assert_response :success
+    assert_equal "text/csv", response.media_type
+    assert_includes response.body, "Invalid UIN Student"
+    assert_includes response.body, "12345"
+    assert_includes response.body, "two"
 
     get sample_admin_grade_import_batches_path(kind: "bad_mapping")
 
@@ -413,8 +787,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "Target Warnings Before Commit"
     assert_includes response.body, "Missing Uploaded Course Targets"
-    refute_includes response.body, "Imported Target Mismatches"
-    refute_includes response.body, "Configured Target"
+    refute_includes response.body, "Uploaded Targets Differ From Configured Targets"
 
     post commit_admin_grade_import_batch_path(batch)
 
@@ -473,6 +846,54 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert batch.reload.reportable?
   end
 
+  test "uploaded course targets are not compared to program-wide targets" do
+    competency_title = "Policy Analysis"
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: { "dry_run" => true }
+    )
+    CompetencyTargetLevel.create!(
+      program_semester: program_semesters(:fall_2025),
+      track: @student.track,
+      class_of: @student.program_year,
+      competency_title: competency_title,
+      target_level: 4
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "target-mismatch.csv",
+      file_checksum: "checksum-target-mismatch",
+      status: "processed",
+      imported_rows: 1
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Final Project",
+      course_code: "PHPM-631-600",
+      competency_title: competency_title,
+      raw_grade: 91,
+      mapped_level: 4,
+      course_target_level: 5,
+      row_number: 2,
+      source_key: "source-target-mismatch",
+      import_fingerprint: "fingerprint-target-mismatch"
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    refute_includes response.body, "Target Warnings Before Commit"
+    refute_includes response.body, "Uploaded Targets Differ From Configured Targets"
+    refute_includes response.body, "configured target"
+
+    post commit_admin_grade_import_batch_path(batch)
+
+    assert_redirected_to admin_grade_import_batch_path(batch)
+    assert batch.reload.reportable?
+  end
+
   test "show renders pending student matches with manual correction controls" do
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,
@@ -502,13 +923,18 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     get admin_grade_import_batch_path(batch)
 
     assert_response :success
-    assert_includes response.body, "Pending Student Matches"
+    assert_includes response.body, "3. Pending Student Matching"
     assert_includes response.body, "Missing Student"
     assert_includes response.body, "123456789"
     assert_includes response.body, "Hidden Assignment"
     assert_includes response.body, "PHPM-701-001"
     assert_includes response.body, "Match all rows to student"
     assert_includes response.body, "Processed values"
+    assert_includes response.body, "Identifier Type"
+    assert_includes response.body, "Identifier"
+    assert_includes response.body, "Assessed level"
+    assert_includes response.body, "Course target"
+    assert_includes response.body, "Pending student match"
     assert_includes response.body, "Save grouped correction"
     assert_includes response.body, pending_row_group_admin_grade_import_batch_path(batch)
   end
@@ -739,7 +1165,9 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       evidence_count: 99
     )
 
-    post rebuild_ratings_admin_grade_import_batch_path(batch)
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      post rebuild_ratings_admin_grade_import_batch_path(batch)
+    end
 
     assert_redirected_to admin_grade_import_batch_path(batch)
     refute GradeCompetencyRating.exists?(stale_rating.id)
@@ -747,6 +1175,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 2, rating.aggregated_level.to_i
     assert_equal 1, rating.evidence_count
     assert_equal @admin.email, batch.reload.summary["ratings_rebuilt_by"]
+    assert_equal "rebuild_ratings", AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first.metadata["import_action"]
   end
 
   test "evidence correction rebuilds ratings from edited row values" do
@@ -781,16 +1210,18 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       evidence_count: 1
     )
 
-    patch evidence_admin_grade_import_batch_path(batch, evidence), params: {
-      grade_competency_evidence: {
-        assignment_name: "Corrected Assignment",
-        course_code: "PHPM-701-002",
-        competency_title: "Performance Improvement",
-        raw_grade: 93,
-        mapped_level: 5,
-        course_target_level: 5
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      patch evidence_admin_grade_import_batch_path(batch, evidence), params: {
+        grade_competency_evidence: {
+          assignment_name: "Corrected Assignment",
+          course_code: "PHPM-701-002",
+          competency_title: "Performance Improvement",
+          raw_grade: 93,
+          mapped_level: 5,
+          course_target_level: 5
+        }
       }
-    }
+    end
 
     assert_redirected_to admin_grade_import_batch_path(batch)
     assert_equal "Corrected Assignment", evidence.reload.assignment_name
@@ -800,6 +1231,9 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     rating = batch.grade_competency_ratings.find_by!(student: @student, competency_title: "Performance Improvement")
     assert_equal 5, rating.aggregated_level.to_i
     assert_equal @admin.email, batch.reload.summary["ratings_rebuilt_by"]
+    activity = AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first
+    assert_equal "correct_evidence", activity.metadata["import_action"]
+    assert_equal evidence.id, activity.metadata["evidence_id"]
   end
 
   test "reupload corrected file replaces matching preview file and clears approval" do
@@ -848,8 +1282,10 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       ]
     )
 
-    assert_no_difference "GradeImportFile.count" do
-      post reupload_admin_grade_import_batch_path(batch), params: { files: [ upload ] }
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      assert_no_difference "GradeImportFile.count" do
+        post reupload_admin_grade_import_batch_path(batch), params: { files: [ upload ] }
+      end
     end
 
     assert_redirected_to admin_grade_import_batch_path(batch)
@@ -870,6 +1306,9 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, file.error_rows
     assert_equal 2, batch.grade_competency_evidences.count
     assert_equal 2, batch.grade_competency_ratings.count
+    activity = AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first
+    assert_equal "reupload", activity.metadata["import_action"]
+    assert_equal [ "corrected_outcomes.csv" ], activity.metadata["file_names"]
   end
 
   test "finalize locks batch review actions" do
@@ -897,11 +1336,14 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       import_fingerprint: "fingerprint-finalize"
     )
 
-    post finalize_admin_grade_import_batch_path(batch)
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      post finalize_admin_grade_import_batch_path(batch)
+    end
 
     assert_redirected_to admin_grade_import_batch_path(batch)
     assert batch.reload.finalized?
     assert_equal @admin.email, batch.summary["finalized_by"]
+    assert_equal "finalize", AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first.metadata["import_action"]
 
     patch semester_admin_grade_import_batch_path(batch), params: {
       program_semester_id: program_semesters(:fall_2025).id
@@ -943,7 +1385,21 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       file_name: "corrections.xlsx",
       file_checksum: "checksum-corrections",
       status: "processed",
-      parse_errors: [ { "row" => 5, "message" => "grade is not numeric" } ],
+      parse_errors: [
+        {
+          "row" => 5,
+          "type" => "missing_competency_mapping",
+          "column" => "competency_title",
+          "value" => "Polciy Analysis",
+          "expected" => "known competency alias",
+          "received" => "Polciy Analysis",
+          "suggested_canonical_competency_title" => "Policy Analysis",
+          "suggested_alias_string" => "Policy Analysis",
+          "suggestion_score" => 0.87,
+          "message" => "Missing competency mapping for 'Polciy Analysis'. Did you mean 'Policy Analysis'?",
+          "correction_hint" => "Add this string to db/data/competency_aliases.csv."
+        }
+      ],
       error_rows: 1
     )
     batch.grade_import_pending_rows.create!(
@@ -969,7 +1425,9 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     parsed = CSV.parse(response.body, headers: true)
 
     assert_equal "failed", parsed[0]["Row Type"]
-    assert_equal "grade is not numeric", parsed[0]["Message"]
+    assert_equal "Missing competency mapping for 'Polciy Analysis'. Did you mean 'Policy Analysis'?", parsed[0]["Message"]
+    assert_equal "Policy Analysis", parsed[0]["Suggested Canonical Competency"]
+    assert_equal "Add this string to db/data/competency_aliases.csv.", parsed[0]["Suggested Fix"]
     assert_equal "pending_student_match", parsed[1]["Row Type"]
     assert_equal "Missing Student", parsed[1]["Student Name"]
     assert_equal "PHPM-631-600", parsed[1]["Course Code"]
@@ -1008,14 +1466,19 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       evidence_count: 1
     )
 
-    assert_difference "GradeImportBatch.count", -1 do
-      delete admin_grade_import_batch_path(batch)
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      assert_difference "GradeImportBatch.count", -1 do
+        delete admin_grade_import_batch_path(batch)
+      end
     end
 
     assert_redirected_to admin_grade_import_batches_path
     refute GradeImportFile.exists?(file.id)
     refute GradeCompetencyEvidence.exists?(evidence.id)
     refute GradeCompetencyRating.exists?(rating.id)
+    activity = AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first
+    assert_equal "delete", activity.metadata["import_action"]
+    assert_equal batch.id, activity.metadata["batch_id"]
 
     replacement_batch = GradeImportBatch.create!(
       uploaded_by: @admin,

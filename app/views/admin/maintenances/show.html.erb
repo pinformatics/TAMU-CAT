@@ -139,6 +139,24 @@
               </table>
             </div>
           <% end %>
+
+          <% legacy_target_issue_count = health_checks.select { |check| %i[target_levels_using_legacy_program_year target_levels_using_old_class_codes].include?(check.key) }.sum { |check| check.count.to_i } %>
+          <% if legacy_target_issue_count.positive? %>
+            <div class="c-callout c-callout--warning">
+              <div class="c-callout__title">Legacy target level storage detected</div>
+              <p>
+                Normalize these rows after confirming the target values look right in Program Configuration.
+                This copies them into cohort-specific target records and removes the legacy duplicates.
+              </p>
+              <div class="u-actions u-actions--start u-mt-sm">
+                <%= button_to "Normalize target levels",
+                              normalize_target_levels_admin_maintenance_path,
+                              method: :post,
+                              class: button_classes(:secondary),
+                              data: { turbo_confirm: "Normalize legacy target levels into cohort-specific records? This removes only the legacy duplicate rows after replacements exist." } %>
+              </div>
+            </div>
+          <% end %>
         </section>
       <% end %>
     </section>

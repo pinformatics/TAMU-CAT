@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "csv"
 
 class ReportsControllerTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
@@ -24,9 +25,87 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_response :success
+    assert_includes response.body, "Course Target Attainment"
+    assert_includes response.body, "Course Contribution Report"
+    assert_includes response.body, "Student/Course Heatmap"
     assert_includes response.body, "Cohort Comparison"
     assert_includes response.body, "Student by Domain Heatmap"
     assert_includes response.body, "FERPA reminder"
+  end
+
+  test "show renders course competency report rows with filters" do
+    sign_in @admin
+    semester = program_semesters(:fall_2025)
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: semester,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "reports-course.csv",
+      file_checksum: "checksum-reports-course",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: students(:student),
+      assignment_name: "Final",
+      course_code: "PHPM-601",
+      competency_title: "Policy Analysis",
+      raw_grade: 5,
+      mapped_level: 5,
+      course_target_level: 4,
+      source_key: "reports-course",
+      import_fingerprint: "fingerprint-reports-course"
+    )
+
+    get reports_path(course_code: "PHPM-601")
+
+    assert_response :success
+    assert_includes response.body, "PHPM-601"
+    assert_includes response.body, "Policy Analysis"
+    assert_includes response.body, "100.0%"
+    assert_includes response.body, "Export CSV"
+  end
+
+  test "export_course_competencies returns csv and records audit" do
+    sign_in @admin
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "reports-course-export.csv",
+      file_checksum: "checksum-reports-course-export",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: students(:student),
+      assignment_name: "Final",
+      course_code: "PHPM-601",
+      competency_title: "Policy Analysis",
+      raw_grade: 5,
+      mapped_level: 5,
+      course_target_level: 4,
+      source_key: "reports-course-export",
+      import_fingerprint: "fingerprint-reports-course-export"
+    )
+
+    assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+      get export_course_competency_reports_path(format: :csv, course_code: "PHPM-601")
+    end
+
+    assert_response :success
+    assert_equal "text/csv", response.media_type
+    parsed = CSV.parse(response.body, headers: true)
+    assert_equal "PHPM-601", parsed.first["Course"]
+    assert_equal "Policy Analysis", parsed.first["Competency"]
+    activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
+    assert_equal "course_competency_report_csv", activity.metadata["export_type"]
+    assert_equal "PHPM-601", activity.metadata["course_code"]
   end
 
   test "show allows advisor access" do

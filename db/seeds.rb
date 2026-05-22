@@ -295,11 +295,17 @@ if ActiveRecord::Base.connection.data_source_exists?("competency_target_levels")
         end
 
         program_years_to_seed.each do |program_year|
+          class_of = if program_year <= 10
+            program_year == 2 ? 2026 : 2027
+          else
+            program_year
+          end
+
           competency_titles.each_with_index do |title, idx|
             rows << {
               program_semester_id: program_semester.id,
               track: track_name,
-              program_year: program_year,
+              class_of: class_of,
               competency_title: title,
               target_level: levels[idx],
               created_at: now,

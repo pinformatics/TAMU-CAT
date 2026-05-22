@@ -68,6 +68,9 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Advisor History"
     assert_includes response.body, "Survey Responses"
     assert_includes response.body, "Domain Snapshot"
+    assert_includes response.body, "Competency History"
+    assert_includes response.body, "Competency Review Notes"
+    assert_includes response.body, competency_history_student_overview_path(@student)
     assert_includes response.body, "Competency Comparison"
     assert_includes response.body, "<th>Self</th>"
     assert_includes response.body, "<th>Advisor</th>"
@@ -82,6 +85,28 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     sign_in @advisor
 
     get student_overview_path(@other_student)
+
+    assert_response :not_found
+  end
+
+  test "staff can export one student competency history" do
+    create_course_evidence_for(@student)
+    sign_in @admin
+
+    get competency_history_student_overview_path(@student)
+
+    assert_response :success
+    assert_equal "text/csv", response.media_type
+    assert_includes response.body, "Course evidence"
+    assert_includes response.body, "PHPM-601"
+    assert_includes response.body, "Yes"
+  end
+
+  test "advisor cannot export another advisor student competency history" do
+    create_course_evidence_for(@other_student)
+    sign_in @advisor
+
+    get competency_history_student_overview_path(@other_student)
 
     assert_response :not_found
   end
@@ -123,6 +148,35 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
       aggregated_level: 4,
       aggregation_rule: "max",
       evidence_count: 1
+    )
+  end
+
+  def create_course_evidence_for(student)
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = GradeImportFile.create!(
+      grade_import_batch: batch,
+      file_name: "Outcomes-26S-PHPM-601.csv",
+      file_checksum: "student-overview-history-#{student.student_id}",
+      status: "processed"
+    )
+    GradeCompetencyEvidence.create!(
+      grade_import_batch: batch,
+      grade_import_file: file,
+      student: student,
+      competency_title: competency_title,
+      course_code: "PHPM-601",
+      assignment_name: "Course outcome",
+      raw_grade: 4,
+      mapped_level: 4,
+      course_target_level: 3,
+      source_key: "student-overview-history-#{student.student_id}",
+      import_fingerprint: "student-overview-history-#{student.student_id}"
     )
   end
 end

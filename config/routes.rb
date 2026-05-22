@@ -33,7 +33,9 @@ Rails.application.routes.draw do
 
   get "student_records", to: "student_records#index", as: :student_records
   get "student_records/export_excel", to: "student_records#export_excel", as: :export_student_records_excel
-  resources :student_overviews, only: %i[index show]
+  resources :student_overviews, only: %i[index show] do
+    get :competency_history, on: :member
+  end
   resource :student_competencies, only: :show
   get "student_portfolio_export", to: "student_portfolio_exports#index", as: :student_portfolio_export
   get "student_portfolio_export/download", to: "student_portfolio_exports#show", as: :download_student_portfolio_export
@@ -45,6 +47,7 @@ Rails.application.routes.draw do
   # Reporting hub shared by admins and advisors
   get "reports", to: "reports#show", as: :reports
   get "reports/export_excel", to: "reports#export_excel", as: :export_reports_excel
+  get "reports/course_competencies.csv", to: "reports#export_course_competencies", as: :export_course_competency_reports
   get "reports/:section/export_pdf", to: "reports#export_pdf", as: :export_reports_pdf
 
   # Admin-specific management routes
@@ -61,7 +64,9 @@ Rails.application.routes.draw do
   resource :advisor_impersonation, only: %i[new create destroy]
 
   namespace :admin do
-    resource :maintenance, only: %i[show update]
+    resource :maintenance, only: %i[show update] do
+      post :normalize_target_levels
+    end
     get "program_setup", to: "program_setups#show", as: :program_setup
     resources :competencies, only: %i[index show] do
       collection do
@@ -71,6 +76,7 @@ Rails.application.routes.draw do
     end
     get "target_levels", to: "target_levels#index", as: :target_levels
     patch "target_levels", to: "target_levels#update"
+    post "target_levels/fill_defaults", to: "target_levels#fill_defaults", as: :fill_default_target_levels
     resources :course_grade_release_dates, only: %i[index new create edit update destroy] do
       collection do
         patch :bulk_update
@@ -90,6 +96,7 @@ Rails.application.routes.draw do
         post :finalize
         patch :semester
         get :export_ratings
+        get :export_evidence
         get :error_report
         get :correction_file
         patch :pending_row_group, to: "grade_import_batches#update_pending_row_group"
@@ -195,8 +202,6 @@ Rails.application.routes.draw do
   get "faq",   to: "pages#faq",   as: :faq
 
   get "maintenance", to: "pages#maintenance", as: :maintenance
-
-  
 
   # User settings page (accessible to any authenticated user)
   get "settings", to: "settings#edit", as: :settings

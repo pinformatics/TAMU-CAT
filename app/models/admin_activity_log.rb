@@ -8,6 +8,7 @@ class AdminActivityLog < ApplicationRecord
     track_update
     student_lifecycle_update
     course_release_date_update
+    grade_import_action
     student_data_export
     member_removal
     other

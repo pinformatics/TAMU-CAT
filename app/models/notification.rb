@@ -62,6 +62,8 @@ class Notification < ApplicationRecord
       question_path(notifiable)
     when Feedback
       feedback_path(notifiable)
+    when ProgramSemester
+      resolve_program_semester_path(viewer)
     else
       nil
     end
@@ -96,6 +98,17 @@ class Notification < ApplicationRecord
       assignments_survey_path(survey)
     else
       survey_path(survey)
+    end
+  end
+
+  def resolve_program_semester_path(viewer)
+    return reports_path unless viewer
+
+    case viewer.role
+    when "student"
+      student_competencies_path
+    else
+      reports_path
     end
   end
 

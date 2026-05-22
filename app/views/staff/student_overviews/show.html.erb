@@ -12,6 +12,7 @@
           </div>
 
           <div class="u-actions">
+            <%= link_to "Export history CSV", competency_history_student_overview_path(@student), class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." } %>
             <%= link_to "Detailed competencies", admin_competency_path(@student), class: button_classes(:secondary), data: { turbo: false } %>
             <%= link_to "Back to overviews", student_overviews_path, class: button_classes(:secondary), data: { turbo: false } %>
           </div>
@@ -160,6 +161,78 @@
             <% else %>
               <div class="c-empty-state c-empty-state--compact">
                 <p class="c-empty-state__body">No completed surveys recorded.</p>
+              </div>
+            <% end %>
+          </section>
+
+          <section class="c-card c-card--compact u-stack u-stack--md">
+            <header class="c-panel-header">
+              <div>
+                <p class="c-eyebrow">Imported course results</p>
+                <h2 class="c-section-title c-heading-inline">Competency History</h2>
+              </div>
+              <%= link_to "Download CSV", competency_history_student_overview_path(@student), class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." } %>
+            </header>
+
+            <% if @course_history_rows.present? %>
+              <div class="c-table-wrapper">
+                <table class="c-table">
+                  <thead>
+                    <tr>
+                      <th>Semester</th>
+                      <th>Course</th>
+                      <th>Competency</th>
+                      <th>Assessed</th>
+                      <th>Course Target</th>
+                      <th>Status</th>
+                      <th>Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% @course_history_rows.each do |row| %>
+                      <tr>
+                        <td><%= row[:semester] %></td>
+                        <td><%= row[:course_code].presence || "-" %></td>
+                        <td><%= row[:competency_title] %></td>
+                        <td><%= row[:assessed_level] %></td>
+                        <td><%= row[:target_level].presence || "-" %></td>
+                        <td><%= row[:target_status] %></td>
+                        <td><%= row[:source_file].presence || "Import" %></td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            <% else %>
+              <div class="c-empty-state c-empty-state--compact">
+                <p class="c-empty-state__body">No imported course competency history recorded yet.</p>
+              </div>
+            <% end %>
+          </section>
+
+          <section class="c-card c-card--compact u-stack u-stack--md">
+            <header class="c-panel-header">
+              <div>
+                <p class="c-eyebrow">Advisor notes</p>
+                <h2 class="c-section-title c-heading-inline">Competency Review Notes</h2>
+              </div>
+            </header>
+
+            <% if @advisor_note_rows.present? %>
+              <div class="c-record-list">
+                <% @advisor_note_rows.each do |row| %>
+                  <article class="c-record-list__item">
+                    <div>
+                      <h3><%= row[:survey_title] %></h3>
+                      <p><%= row[:advisor_name] %> &middot; <%= row[:updated_at].present? ? l(row[:updated_at], format: :short) : "-" %></p>
+                      <div class="u-stack u-stack--xs"><%= simple_format(row[:body]) %></div>
+                    </div>
+                  </article>
+                <% end %>
+              </div>
+            <% else %>
+              <div class="c-empty-state c-empty-state--compact">
+                <p class="c-empty-state__body">No advisor review notes recorded yet.</p>
               </div>
             <% end %>
           </section>

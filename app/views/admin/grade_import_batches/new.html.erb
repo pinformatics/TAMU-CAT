@@ -77,35 +77,20 @@
           </div>
 
           <div class="c-card c-card--tight u-stack u-stack--xs">
-            <p class="c-table__title">Sample import files</p>
+            <p class="c-table__title">Template files</p>
             <div class="u-stack u-stack--sm">
-              <%= link_to "Success sample",
-                          sample_admin_grade_import_batches_path(kind: "success"),
-                          class: button_classes(:secondary),
-                          data: { turbo: false },
-                          download: true %>
-              <%= link_to "Duplicate sample",
-                          sample_admin_grade_import_batches_path(kind: "duplicate"),
-                          class: button_classes(:secondary),
-                          data: { turbo: false },
-                          download: true %>
-              <%= link_to "Pending match sample",
-                          sample_admin_grade_import_batches_path(kind: "pending_match"),
-                          class: button_classes(:secondary),
-                          data: { turbo: false },
-                          download: true %>
-              <%= link_to "Bad mapping sample",
-                          sample_admin_grade_import_batches_path(kind: "bad_mapping"),
-                          class: button_classes(:secondary),
-                          data: { turbo: false },
-                          download: true %>
-              <%= link_to "Legacy grade export",
+              <%= link_to "Canvas grade template",
                           "/grade-import-examples/Example%20Canvas%20Grade%20Export.xlsx",
                           class: button_classes(:secondary),
                           data: { turbo: false },
                           download: true %>
-              <%= link_to "Legacy competency export",
+              <%= link_to "Canvas competency template",
                           "/grade-import-examples/Example%20Canvas%20Competency%20Export.csv",
+                          class: button_classes(:secondary),
+                          data: { turbo: false },
+                          download: true %>
+              <%= link_to "Faculty competency template",
+                          "/grade-import-examples/Example%20Faculty%20Competency%20Export%2026S%20PHPM%20601.csv",
                           class: button_classes(:secondary),
                           data: { turbo: false },
                           download: true %>
@@ -128,9 +113,11 @@
   - `min_score`, `max_score`, `competency_level`
 
 ## Option 2: Canvas competency export
-- Keep Student ID plus competency mastery-points and result columns
-- Mastery points are the student's competency score
-- Result columns are the course target
+- Keep Student name and Student UIN/Student ID plus competency columns
+- Use `[Competency Title] COURSE TARGET` for the course target
+- Use `[Competency Title] ASSESSED LEVEL` for the student's assessed competency level
+- Legacy Canvas `result` columns are also treated as the course target
+- Legacy Canvas `mastery points` columns are also treated as the assessed level
 - Course code derived from file/sheet name
 - No mapping sheet required
 

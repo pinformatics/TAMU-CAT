@@ -24,9 +24,96 @@
           <p class="c-lede">Review previews, committed imports, and the evidence and ratings generated from each batch.</p>
         </div>
 
+        <%= form_with url: admin_grade_import_batches_path, method: :get, local: true, class: "c-filter-bar" do %>
+          <div class="c-filter-bar__field c-filter-bar__field--wide">
+            <%= label_tag :q, "Course, file, or notes", class: "c-label" %>
+            <%= text_field_tag :q, @batch_filters["q"], class: "c-input", placeholder: "PHPM-601, Outcomes, Canvas export" %>
+          </div>
+
+          <div class="c-filter-bar__field">
+            <%= label_tag :workflow, "Workflow", class: "c-label" %>
+            <%= select_tag :workflow,
+                  options_for_select([["All workflows", ""]] + @workflow_filter_options.map { |value, label| [label, value] }, @batch_filters["workflow"]),
+                  class: "c-select u-w-full" %>
+          </div>
+
+          <div class="c-filter-bar__field">
+            <%= label_tag :status, "Status", class: "c-label" %>
+            <%= select_tag :status,
+                  options_for_select([["All statuses", ""]] + @status_filter_options.map { |value, label| [label, value] }, @batch_filters["status"]),
+                  class: "c-select u-w-full" %>
+          </div>
+
+          <div class="c-filter-bar__field">
+            <%= label_tag :program_semester_id, "Semester", class: "c-label" %>
+            <%= select_tag :program_semester_id,
+                  options_for_select(
+                    [["All semesters", ""], ["No semester", "none"]] + @semester_filter_options.map { |semester| [semester.name, semester.id] },
+                    @batch_filters["program_semester_id"]
+                  ),
+                  class: "c-select u-w-full" %>
+          </div>
+
+          <div class="c-filter-bar__field">
+            <%= label_tag :uploaded_by_id, "Uploader", class: "c-label" %>
+            <%= select_tag :uploaded_by_id,
+                  options_for_select([["All uploaders", ""]] + @uploader_filter_options.map { |user| [user.email, user.id] }, @batch_filters["uploaded_by_id"]),
+                  class: "c-select u-w-full" %>
+          </div>
+
+          <div class="u-actions u-actions--start">
+            <%= submit_tag "Apply filters", class: button_classes(:secondary) %>
+            <%= link_to "Clear", admin_grade_import_batches_path, class: button_classes(:subtle) %>
+          </div>
+        <% end %>
+
+        <% if @target_attainment_by_semester_course.any? %>
+          <section class="c-card c-card--tight u-stack u-stack--md">
+            <div>
+              <p class="c-eyebrow">Course target attainment</p>
+              <h2 class="c-heading-inline">Course/Semester Target Performance</h2>
+              <p class="c-help">Committed, reportable rows only. Met rate uses rows with both an assessed level and an uploaded course target.</p>
+            </div>
+            <div class="c-table-wrapper">
+              <table class="c-table c-table--sm">
+                <thead>
+                  <tr>
+                    <th>Semester</th>
+                    <th>Course</th>
+                    <th>Competency</th>
+                    <th>Rows</th>
+                    <th>Actual avg</th>
+                    <th>Course target avg</th>
+                    <th>Met</th>
+                    <th>Below</th>
+                    <th>No target</th>
+                    <th>Met rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @target_attainment_by_semester_course.each do |summary| %>
+                    <tr>
+                      <td><%= summary[:semester_name] %></td>
+                      <td class="c-table__title"><%= summary[:course_code] %></td>
+                      <td><%= summary[:competency_title] %></td>
+                      <td><%= summary[:total_count] %></td>
+                      <td><%= summary[:assessed_average] ? number_with_precision(summary[:assessed_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
+                      <td><%= summary[:course_target_average] ? number_with_precision(summary[:course_target_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
+                      <td><span class="c-score-pill c-score-pill--met"><%= summary[:met_count] %></span></td>
+                      <td><span class="c-score-pill c-score-pill--below"><%= summary[:below_count] %></span></td>
+                      <td><span class="c-score-pill c-score-pill--no-target c-score-pill--empty"><%= summary[:no_target_count] %></span></td>
+                      <td><%= summary[:met_rate] ? "#{summary[:met_rate]}%" : "—" %></td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        <% end %>
+
         <div class="c-card c-card--flush u-overflow-hidden">
         <%= render TableComponent.new(
-          headers: ["Batch", "Status", "Mode", "Semester", "Uploaded By", "Notes", "Files", "Evidence", "Pending", "Ratings", "Created", ""]
+          headers: ["Batch", "Status", "Mode", "Semester", "Uploaded By", "Notes", "Source Files", "Files", "Evidence", "Pending", "Ratings", "Created", ""]
         ) do %>
           <% @batches.each do |batch| %>
             <% batch_modes = batch.grade_import_files.filter_map { |file| file.parsed_content["mode"].presence || file.parsed_content.dig("grade_sheet_debug", "mode").presence }.uniq %>
@@ -44,6 +131,7 @@
               <td><%= batch.program_semester&.name || "—" %></td>
               <td><%= batch.uploaded_by&.email %></td>
               <td><%= truncate(batch.summary["import_notes"].to_s, length: 48).presence || "—" %></td>
+              <td><%= batch.grade_import_files.map(&:file_name).first(2).to_sentence.presence || "—" %></td>
               <td><%= "#{batch.processed_files}/#{batch.total_files}" %></td>
               <td><%= batch.evidence_count %></td>
               <td><%= batch.pending_count %></td>

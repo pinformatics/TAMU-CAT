@@ -31,6 +31,11 @@ class Admin::CourseGradeReleaseDatesController < Admin::BaseController
         new_release_date: @release_date.release_date,
         source: "single"
       )
+      enqueue_course_release_notifications_if_released!(
+        semester: @release_date.program_semester,
+        previous_release_date: previous_release_date,
+        new_release_date: @release_date.release_date
+      )
       redirect_to admin_course_grade_release_dates_path, notice: "Course grade release date updated."
     else
       render :edit
@@ -53,6 +58,11 @@ class Admin::CourseGradeReleaseDatesController < Admin::BaseController
         previous_release_date: nil,
         new_release_date: @release_date.release_date,
         source: "single"
+      )
+      enqueue_course_release_notifications_if_released!(
+        semester: @release_date.program_semester,
+        previous_release_date: nil,
+        new_release_date: @release_date.release_date
       )
       redirect_to admin_course_grade_release_dates_path, notice: "Course grade release date created."
     else
@@ -87,6 +97,11 @@ class Admin::CourseGradeReleaseDatesController < Admin::BaseController
         new_release_date: new_value,
         source: "bulk"
       )
+      enqueue_course_release_notifications_if_released!(
+        semester: semester,
+        previous_release_date: previous,
+        new_release_date: new_value
+      )
     end
 
     message = changed_count.positive? ? "Updated #{changed_count} release date#{'s' if changed_count != 1}." : "No release date changes were submitted."
@@ -104,6 +119,11 @@ class Admin::CourseGradeReleaseDatesController < Admin::BaseController
       previous_release_date: previous_release_date,
       new_release_date: nil,
       source: "single"
+    )
+    enqueue_course_release_notifications_if_released!(
+      semester: semester,
+      previous_release_date: previous_release_date,
+      new_release_date: nil
     )
     redirect_to admin_course_grade_release_dates_path, notice: "Course grade release date cleared."
   end
@@ -152,6 +172,19 @@ class Admin::CourseGradeReleaseDatesController < Admin::BaseController
         source: source
       }
     )
+  end
+
+  def enqueue_course_release_notifications_if_released!(semester:, previous_release_date:, new_release_date:)
+    return unless transitioned_to_released?(previous_release_date, new_release_date)
+
+    CourseCompetencyReleaseNotificationJob.perform_later(program_semester_id: semester.id, triggered_by_id: current_user.id)
+  end
+
+  def transitioned_to_released?(previous_release_date, new_release_date)
+    previously_embargoed = previous_release_date.present? && previous_release_date > Time.current
+    now_released = new_release_date.blank? || new_release_date <= Time.current
+
+    previously_embargoed && now_released
   end
 
   def release_date_label(value)

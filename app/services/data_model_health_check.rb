@@ -20,6 +20,7 @@ class DataModelHealthCheck
       student_section,
       advisor_assignment_section,
       competency_reference_section,
+      target_level_consistency_section,
       course_reference_section
     ]
 
@@ -73,6 +74,17 @@ class DataModelHealthCheck
     )
   end
 
+  def target_level_consistency_section
+    Section.new(
+      key: :target_level_consistency,
+      label: "Program target levels",
+      checks: [
+        check(:target_levels_using_legacy_program_year, "Target levels stored with legacy program year", legacy_program_year_target_count, :warning),
+        check(:target_levels_using_old_class_codes, "Target levels stored with old class codes", old_class_code_target_count, :warning)
+      ]
+    )
+  end
+
   def course_reference_section
     Section.new(
       key: :course_references,
@@ -112,6 +124,18 @@ class DataModelHealthCheck
     return 0 unless model.column_names.include?("competency_id")
 
     model.where.not(competency_title: [ nil, "" ]).where(competency_id: nil).count
+  end
+
+  def legacy_program_year_target_count
+    return 0 unless CompetencyTargetLevel.column_names.include?("program_year")
+
+    CompetencyTargetLevel.where.not(program_year: nil).count
+  end
+
+  def old_class_code_target_count
+    return 0 unless CompetencyTargetLevel.column_names.include?("class_of")
+
+    CompetencyTargetLevel.where(class_of: [ 1, 2 ]).count
   end
 
   def parseable_missing_offering_count(model)

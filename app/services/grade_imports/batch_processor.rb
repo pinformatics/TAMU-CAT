@@ -80,12 +80,14 @@ module GradeImports
     ].freeze
 
     DIRECT_COMPETENCY_PREFIXES = %w[emha rmha].freeze
-    COURSE_CODE_PATTERN = /([A-Z]{2,5})[\s_-]*(\d{3})(?:[\s_-]*(\d{3}))?/i.freeze
-
-    COMPETENCY_TITLE_SYNONYMS = {
-      "legal and ethical bases for health services and health systems" => "Legal & Ethical Bases for Health Services and Health Systems",
-      "legal & ethical bases for health services and health systems" => "Legal & Ethical Bases for Health Services and Health Systems"
+    DIRECT_STUDENT_HEADER_ALIASES = {
+      student_name: %w[student_name],
+      student_id: %w[student_id],
+      student_sis_id: %w[student_sis_id student_uin uin]
     }.freeze
+    DIRECT_TARGET_SUFFIXES = %w[result course_target].freeze
+    DIRECT_LEVEL_SUFFIXES = %w[mastery_points assessed_level level].freeze
+    COURSE_CODE_PATTERN = /([A-Z]{2,5})[\s_-]*(\d{3})(?:[\s_-]*(\d{3}))?/i.freeze
 
     def initialize(batch:, files:, dry_run: false, replace_existing_files: false)
       @batch = batch
@@ -352,9 +354,9 @@ module GradeImports
     end
 
     def process_direct_competency_rows!(grade_file:, rows:, headers:, source_name:, fallback_source_name:)
-      student_name_header = headers.find { |header| normalize_key(header) == "student_name" }
-      student_id_header = headers.find { |header| normalize_key(header) == "student_id" }
-      student_sis_id_header = headers.find { |header| normalize_key(header) == "student_sis_id" }
+      student_name_header = direct_student_header_for(headers, :student_name)
+      student_id_header = direct_student_header_for(headers, :student_id)
+      student_sis_id_header = direct_student_header_for(headers, :student_sis_id)
       direct_mapping = direct_competency_column_mapping(headers)
       competency_columns = direct_mapping[:columns]
       course_code = normalized_direct_course_code(source_name.presence || fallback_source_name)
@@ -396,6 +398,12 @@ module GradeImports
           next
         end
 
+        if row[student_sis_id_header].present? && invalid_uin?(student_sis_id)
+          error_rows += 1
+          errors << invalid_uin_error(row_number, column: student_sis_id_header, value: row[student_sis_id_header])
+          next
+        end
+
         student = find_student_by_uin(student_sis_id)
         student ||= find_student_by_canvas_identifier(student_id_token)
         matched_students << student.student_id if student
@@ -413,12 +421,20 @@ module GradeImports
             if result_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
               row_had_value = true
               error_rows += 1
-              errors << row_error(
+              errors << invalid_direct_level_error(
                 row_number,
-                "#{column[:competency_title]} result target must be an integer between 1 and 5",
-                type: "invalid_value",
+                label: direct_target_label(column),
                 column: column[:result_header],
                 value: result_value
+              )
+            elsif result_value.present?
+              row_had_value = true
+              error_rows += 1
+              errors << invalid_direct_level_error(
+                row_number,
+                label: direct_assessed_level_label(column),
+                column: column[:mastery_points_header],
+                value: mastery_value
               )
             end
             next
@@ -427,10 +443,9 @@ module GradeImports
           row_had_value = true
           if mastery_level.nil? || !(1..5).cover?(mastery_level)
             error_rows += 1
-            errors << row_error(
+            errors << invalid_direct_level_error(
               row_number,
-              "#{column[:competency_title]} mastery points must be an integer between 1 and 5",
-              type: mastery_value.blank? ? "missing_value" : "invalid_value",
+              label: direct_assessed_level_label(column),
               column: column[:mastery_points_header],
               value: mastery_value
             )
@@ -439,10 +454,9 @@ module GradeImports
 
           if result_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
             error_rows += 1
-            errors << row_error(
+            errors << invalid_direct_level_error(
               row_number,
-              "#{column[:competency_title]} result target must be an integer between 1 and 5",
-              type: "invalid_value",
+              label: direct_target_label(column),
               column: column[:result_header],
               value: result_value
             )
@@ -584,9 +598,8 @@ module GradeImports
     end
 
     def detect_direct_competency_headers!(headers)
-      normalized = headers.map { |header| normalize_key(header) }
-      has_student_id = normalized.include?("student_id")
-      has_student_sis_id = normalized.include?("student_sis_id")
+      has_student_id = direct_student_header_for(headers, :student_id).present?
+      has_student_sis_id = direct_student_header_for(headers, :student_sis_id).present?
       direct_columns_present = direct_competency_result_headers(headers).any?
 
       unless (has_student_id || has_student_sis_id) && direct_columns_present
@@ -610,13 +623,7 @@ module GradeImports
         competency_title = normalized_competency_title(competency_token)
 
         if competency_title.blank? || !COMPETENCY_TITLES.include?(competency_title)
-          errors << row_error(
-            1,
-            "Unknown direct competency column '#{header_text}'. Check the competency name against the configured competency list.",
-            type: "mapping",
-            column: header_text,
-            value: competency_token
-          )
+          errors << missing_competency_mapping_error(1, competency_token, column: header_text, context: "uploaded header")
           next
         end
 
@@ -624,7 +631,7 @@ module GradeImports
         if mastery_header.blank?
           errors << row_error(
             1,
-            "Missing mastery points column for '#{competency_title}'. Direct competency imports use mastery points as the student competency score and result as the course target.",
+            "Missing mastery points/assessed level column for '#{competency_title}'. Direct competency imports use mastery points or assessed level as the student competency score and result or course target as the course target.",
             type: "mapping",
             column: header_text,
             value: competency_title
@@ -647,23 +654,61 @@ module GradeImports
 
         header_text = header.to_s.strip
         normalized = normalize_key(header_text)
-        next unless DIRECT_COMPETENCY_PREFIXES.any? { |prefix| normalized.start_with?("#{prefix}_competencies_") }
-        next unless normalized.end_with?("_result")
+        next unless direct_competency_header?(normalized)
+        next unless DIRECT_TARGET_SUFFIXES.any? { |suffix| normalized.end_with?("_#{suffix}") }
 
         header_text
       end
     end
 
     def direct_mastery_header_for(headers, result_header)
-      expected = normalize_key(result_header).sub(/_result\z/, "_mastery_points")
-      headers.find { |header| normalize_key(header) == expected }
+      target_prefix = direct_competency_header_prefix(result_header, DIRECT_TARGET_SUFFIXES)
+      return if target_prefix.blank?
+
+      headers.find do |header|
+        normalized = normalize_key(header)
+        DIRECT_LEVEL_SUFFIXES.any? { |suffix| normalized == "#{target_prefix}_#{suffix}" }
+      end
     end
 
     def extract_direct_competency_title(header_text)
+      normalized = normalize_key(header_text)
+      if (suffix = (DIRECT_TARGET_SUFFIXES + DIRECT_LEVEL_SUFFIXES).find { |candidate| normalized.end_with?("_#{candidate}") })
+        return header_text.to_s.sub(/\s+#{suffix.tr("_", " ")}\z/i, "").split(">").map(&:strip).last.to_s
+      end
+
       segments = header_text.to_s.split(">").map(&:strip)
       return "" if segments.size < 2
 
-      segments.last.sub(/\s+(result|mastery points)\z/i, "").strip
+      segments.last.sub(/\s+(result|mastery points|course target|assessed level|level)\z/i, "").strip
+    end
+
+    def direct_student_header_for(headers, canonical)
+      aliases = DIRECT_STUDENT_HEADER_ALIASES.fetch(canonical)
+      headers.find { |header| aliases.include?(normalize_key(header)) }
+    end
+
+    def direct_competency_header?(normalized_header)
+      return true if DIRECT_COMPETENCY_PREFIXES.any? { |prefix| normalized_header.start_with?("#{prefix}_competencies_") }
+      return false if normalized_header.start_with?("hpmc_")
+
+      DIRECT_TARGET_SUFFIXES.any? { |suffix| normalized_header.end_with?("_#{suffix}") }
+    end
+
+    def direct_competency_header_prefix(header_text, suffixes)
+      normalized = normalize_key(header_text)
+      suffix = suffixes.find { |candidate| normalized.end_with?("_#{candidate}") }
+      return if suffix.blank?
+
+      normalized.sub(/_#{Regexp.escape(suffix)}\z/, "")
+    end
+
+    def direct_target_label(column)
+      "#{column[:competency_title]} course target"
+    end
+
+    def direct_assessed_level_label(column)
+      "#{column[:competency_title]} assessed level"
     end
 
     def normalized_direct_course_code(source_name)
@@ -864,7 +909,7 @@ module GradeImports
         end
 
         unless COMPETENCY_TITLES.include?(competency)
-          errors << row_error(row_number, "Unknown competency_title '#{competency}'", type: "mapping", column: "competency_title", value: row[:competency_title])
+          errors << missing_competency_mapping_error(row_number, row[:competency_title], column: "competency_title", context: "mapping sheet")
           next
         end
 
@@ -873,12 +918,28 @@ module GradeImports
         level = parse_integer(row[:competency_level])
 
         if min_grade.nil? || max_grade.nil?
-          errors << row_error(row_number, "min_grade and max_grade must be numeric", type: "mapping_value")
+          errors << row_error(
+            row_number,
+            "min_grade and max_grade must be numeric",
+            type: "mapping_value",
+            expected: "numeric min_grade and max_grade",
+            received: [ row[:min_grade], row[:max_grade] ].compact_blank.join(" / "),
+            correction_hint: "Enter numeric grade range endpoints, such as 0 and 79.99."
+          )
           next
         end
 
         if level.nil? || !(1..5).include?(level)
-          errors << row_error(row_number, "competency_level must be an integer between 1 and 5", type: "mapping_value", column: "competency_level", value: row[:competency_level])
+          errors << row_error(
+            row_number,
+            "competency_level must be an integer between 1 and 5",
+            type: "mapping_value",
+            column: "competency_level",
+            value: row[:competency_level],
+            expected: "whole number 1-5",
+            received: row[:competency_level],
+            correction_hint: "Enter one of: 1, 2, 3, 4, or 5."
+          )
           next
         end
 
@@ -1086,6 +1147,12 @@ module GradeImports
           next
         end
 
+        if row[:student_uin].present? && invalid_uin?(row[:student_uin])
+          error_rows += 1
+          errors << invalid_uin_error(row_number, column: "student_uin", value: row[:student_uin])
+          next
+        end
+
         student = find_student(row)
         unless student
           applied.each do |applied_mapping|
@@ -1264,6 +1331,12 @@ module GradeImports
                       raw_section.presence
         if identifier.blank?
           debug_rows_skipped_blank_identifier += 1
+          next
+        end
+
+        if canvas_identifier_requires_uin?(normalized_headers, id_index[:student_identifier]) && invalid_uin?(identifier)
+          error_rows += 1
+          errors << invalid_uin_error(row_number, column: grade_sheet.row(header_row_number)[id_index[:student_identifier]], value: row_values[id_index[:student_identifier]])
           next
         end
 
@@ -1851,6 +1924,17 @@ module GradeImports
       token
     end
 
+    def invalid_uin?(value)
+      normalized = normalize_numeric_identifier(value)
+      normalized.present? && !normalized.match?(/\A\d{9}\z/)
+    end
+
+    def canvas_identifier_requires_uin?(normalized_headers, index)
+      return false if index.nil?
+
+      %w[sis_user_id sis_login_id sis_login login_id].include?(normalized_headers[index].to_s)
+    end
+
     def parse_boolean(value)
       token = value.to_s.strip.downcase
       return nil if token.blank?
@@ -1864,17 +1948,75 @@ module GradeImports
       title = value.to_s.strip
       return title if COMPETENCY_TITLES.include?(title)
 
-      synonym = COMPETENCY_TITLE_SYNONYMS[title.downcase]
-      return synonym if synonym.present?
+      alias_title = CompetencyAliasLookup.resolve(title)
+      return alias_title if alias_title.present?
 
       normalized = normalize_competency_token(title)
-      synonym = COMPETENCY_TITLE_SYNONYMS[normalized]
-      return synonym if synonym.present?
-
       COMPETENCY_TITLES.find { |known| normalize_competency_token(known) == normalized }
     end
 
-    def row_error(row_number, message, type: nil, severity: nil, column: nil, value: nil)
+    def invalid_direct_level_error(row_number, label:, column:, value:)
+      parsed_level = parse_level_value(value)
+      received_value = display_cell_value(value)
+      message = "#{label} must be an integer between 1 and 5; received #{received_value}"
+      hint = if parsed_level.nil?
+        "Enter a whole number from 1 to 5."
+      else
+        "Use the proficiency scale range only: 1, 2, 3, 4, or 5."
+      end
+
+      row_error(
+        row_number,
+        message,
+        type: value.blank? ? "missing_value" : "invalid_value",
+        column: column,
+        value: value,
+        expected: "whole number 1-5",
+        received: received_value,
+        correction_hint: hint
+      )
+    end
+
+    def invalid_uin_error(row_number, column:, value:)
+      received_value = display_cell_value(value)
+      row_error(
+        row_number,
+        "Student UIN must be exactly 9 digits; received #{received_value}",
+        type: "invalid_uin",
+        column: column,
+        value: value,
+        expected: "9 digits",
+        received: received_value,
+        correction_hint: "Correct the Student UIN to exactly 9 digits before re-uploading."
+      )
+    end
+
+    def display_cell_value(value)
+      token = value.to_s.strip
+      token.present? ? token : "blank"
+    end
+
+    def missing_competency_mapping_error(row_number, raw_value, column:, context:)
+      suggestions = CompetencyAliasLookup.suggestions(raw_value)
+      suggestion = suggestions.first
+      suggestion_text = suggestion ? " Did you mean '#{suggestion[:canonical_competency_title]}'?" : ""
+
+      row_error(
+        row_number,
+        "Missing competency mapping for '#{raw_value}'.#{suggestion_text} Add this string to db/data/competency_aliases.csv or correct the #{context}.",
+        type: "missing_competency_mapping",
+        column: column,
+        value: raw_value,
+        expected: "known competency alias",
+        received: raw_value,
+        suggested_canonical_competency_title: suggestion&.dig(:canonical_competency_title),
+        suggested_alias_string: suggestion&.dig(:raw_string),
+        suggestion_score: suggestion&.dig(:score)&.round(3),
+        correction_hint: "Add raw_string='#{raw_value}' with the correct canonical_competency_title in db/data/competency_aliases.csv, or rename the uploaded column."
+      )
+    end
+
+    def row_error(row_number, message, type: nil, severity: nil, column: nil, value: nil, **details)
       error = {
         row: row_number,
         message: message
@@ -1883,6 +2025,9 @@ module GradeImports
       error[:severity] = severity if severity.present?
       error[:column] = column if column.present?
       error[:value] = value if value.present?
+      details.each do |key, detail_value|
+        error[key] = detail_value if detail_value.present?
+      end
       error
     end
 
@@ -2003,13 +2148,7 @@ module GradeImports
     end
 
     def normalize_competency_token(value)
-      value.to_s
-           .downcase
-           .gsub("&", " and ")
-           .gsub(/\band\b/, " and ")
-           .gsub(/[^\p{Alnum}]+/, " ")
-           .squeeze(" ")
-           .strip
+      CompetencyAliasLookup.normalize(value)
     end
 
     def normalize_key(value)

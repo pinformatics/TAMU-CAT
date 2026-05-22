@@ -5,7 +5,7 @@
         <div>
           <p class="c-eyebrow">Exports</p>
           <h1 class="c-page-title c-page-title--brand">Portfolio Export</h1>
-          <p class="c-page-subtitle">Download student Google Sites portfolio URLs with student and advisor details.</p>
+          <p class="c-page-subtitle">Download student Google Sites portfolio URLs with competency summary and course target attainment.</p>
         </div>
 
         <div class="u-actions">
@@ -64,6 +64,10 @@
                 <th>Cohort</th>
                 <th>Advisor</th>
                 <th>Google Sites URL</th>
+                <th>Course Evidence</th>
+                <th>Targets Met</th>
+                <th>Below Target</th>
+                <th>Met Rate</th>
               </tr>
             </thead>
             <tbody>
@@ -76,6 +80,10 @@
                   <td><%= row[:program_year] %></td>
                   <td><%= row[:advisor] %></td>
                   <td class="u-break-anywhere"><%= row[:portfolio_url].presence || "—" %></td>
+                  <td><%= row[:course_evidence_count] %></td>
+                  <td><%= row[:target_met_count] %></td>
+                  <td><%= row[:below_target_count] %></td>
+                  <td><%= row[:target_met_rate].present? ? "#{row[:target_met_rate]}%" : "—" %></td>
                 </tr>
               <% end %>
             </tbody>

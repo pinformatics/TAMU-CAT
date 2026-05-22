@@ -155,7 +155,9 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     @assignment.update!(available_until: 3.days.from_now)
 
     assert_difference -> { Notification.count }, 1 do
-      SurveyNotificationJob.perform_now(event: :due_soon, survey_assignment_id: @assignment.id)
+      assert_enqueued_jobs 1, only: NotificationEmailDeliveryJob do
+        SurveyNotificationJob.perform_now(event: :due_soon, survey_assignment_id: @assignment.id)
+      end
     end
 
     notification = Notification.last

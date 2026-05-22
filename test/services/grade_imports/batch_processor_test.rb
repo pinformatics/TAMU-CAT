@@ -168,6 +168,173 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 0, evidences.count { |evidence| evidence.competency_title.include?("HPMC") }
   end
 
+  test "faculty direct competency csv imports shortened course target and assessed level columns" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student UIN",
+        "Public and Population Health Assessment COURSE TARGET",
+        "Public and Population Health Assessment ASSESSED LEVEL",
+        "Policy Analysis COURSE TARGET",
+        "Policy Analysis LEVEL"
+      ],
+      rows: [
+        [ @student.user.name, @student.uin, 4, 3, 5, 4 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 2 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-601.csv") ],
+        dry_run: true
+      ).call
+    end
+
+    evidences = batch.reload.grade_competency_evidences.order(:competency_title)
+    public_health = evidences.find { |evidence| evidence.competency_title == "Public and Population Health Assessment" }
+    policy = evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }
+
+    assert_equal "completed", batch.status
+    assert_equal [ "PHPM-601" ], evidences.map(&:course_code).uniq
+    assert_equal 3, public_health.mapped_level
+    assert_equal 4, public_health.course_target_level
+    assert_equal 4, policy.mapped_level
+    assert_equal 5, policy.course_target_level
+  end
+
+  test "direct competency csv resolves faculty shorthand through competency alias lookup" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student UIN",
+        "Public Health Assessment COURSE TARGET",
+        "Public Health Assessment ASSESSED LEVEL"
+      ],
+      rows: [
+        [ @student.user.name, @student.uin, 4, 3 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-601.csv") ],
+        dry_run: true
+      ).call
+    end
+
+    evidence = batch.reload.grade_competency_evidences.first
+
+    assert_equal "completed", batch.status
+    assert_equal "Public and Population Health Assessment", evidence.competency_title
+    assert_equal 3, evidence.mapped_level
+    assert_equal 4, evidence.course_target_level
+  end
+
+  test "faculty direct competency csv invalid assessed levels name assessed level in errors" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student UIN",
+        "Public and Population Health Assessment COURSE TARGET",
+        "Public and Population Health Assessment ASSESSED LEVEL"
+      ],
+      rows: [
+        [ @student.user.name, @student.uin, 4, -99 ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-601.csv") ],
+      dry_run: true
+    ).call
+
+    issue = batch.reload.grade_import_files.first.parse_errors.first
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal "invalid_value", issue["type"]
+    assert_equal "Public and Population Health Assessment ASSESSED LEVEL", issue["column"]
+    assert_includes issue["message"], "Public and Population Health Assessment assessed level"
+    assert_includes issue["message"], "received -99"
+    refute_includes issue["message"], "mastery points"
+  end
+
+  test "faculty direct competency csv invalid blank assessed level says blank" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student UIN",
+        "Public and Population Health Assessment COURSE TARGET",
+        "Public and Population Health Assessment ASSESSED LEVEL"
+      ],
+      rows: [
+        [ @student.user.name, @student.uin, 4, " " ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-601.csv") ],
+      dry_run: true
+    ).call
+
+    issue = batch.reload.grade_import_files.first.parse_errors.first
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal "missing_value", issue["type"]
+    assert_equal "blank", issue["received"]
+    assert_includes issue["message"], "Public and Population Health Assessment assessed level"
+    assert_includes issue["message"], "received blank"
+    refute_includes issue["message"], "mastery points"
+  end
+
+  test "faculty direct competency csv rejects invalid student uin values" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student UIN",
+        "Public and Population Health Assessment COURSE TARGET",
+        "Public and Population Health Assessment ASSESSED LEVEL"
+      ],
+      rows: [
+        [ @student.user.name, "12345", 4, 3 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_no_difference -> { GradeCompetencyEvidence.count } do
+      assert_no_difference -> { GradeImportPendingRow.count } do
+        GradeImports::BatchProcessor.new(
+          batch: batch,
+          files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-601.csv") ],
+          dry_run: true
+        ).call
+      end
+    end
+
+    file = batch.reload.grade_import_files.first
+    issue = file.parse_errors.first
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal 1, file.error_rows
+    assert_equal "invalid_uin", issue["type"]
+    assert_equal "Student UIN", issue["column"]
+    assert_equal "12345", issue["value"]
+    assert_equal "9 digits", issue["expected"]
+    assert_includes issue["message"], "Student UIN must be exactly 9 digits"
+  end
+
   test "direct competency csv flags invalid mastery values as typed review issues" do
     path = build_direct_competency_csv(
       headers: [
@@ -192,13 +359,17 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     ).call
 
     file = batch.reload.grade_import_files.first
-    invalid_issue = file.parse_errors.find { |error| error["message"].include?("mastery points") }
+    invalid_issue = file.parse_errors.find { |error| error["message"].include?("assessed level") }
 
     assert_equal "completed_with_errors", batch.status
     assert_equal 1, file.imported_rows
     assert_equal 1, file.error_rows
     assert_equal "invalid_value", invalid_issue["type"]
+    assert_includes invalid_issue["message"], "Policy Analysis assessed level"
     assert_equal "five", invalid_issue["value"]
+    assert_equal "whole number 1-5", invalid_issue["expected"]
+    assert_equal "five", invalid_issue["received"]
+    assert_includes invalid_issue["correction_hint"], "whole number"
     assert batch.needs_admin_approval?
   end
 
@@ -227,13 +398,16 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     ).call
 
     file = batch.reload.grade_import_files.first
-    mapping_issue = file.parse_errors.find { |error| error["message"].include?("Unknown direct competency column") }
+    mapping_issue = file.parse_errors.find { |error| error["type"] == "missing_competency_mapping" }
 
     assert_equal "completed_with_errors", batch.status
     assert_equal 1, file.imported_rows
     assert_equal 1, file.error_rows
-    assert_equal "mapping", mapping_issue["type"]
+    assert_equal "missing_competency_mapping", mapping_issue["type"]
     assert_equal "Polciy Analysis", mapping_issue["value"]
+    assert_equal "Policy Analysis", mapping_issue["suggested_canonical_competency_title"]
+    assert_includes mapping_issue["message"], "Did you mean 'Policy Analysis'?"
+    assert_includes mapping_issue["correction_hint"], "db/data/competency_aliases.csv"
     assert_equal 1, file.parsed_content["direct_mapping_issue_count"]
     assert batch.needs_admin_approval?
   end
@@ -518,7 +692,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 1, file.imported_rows
     assert_equal 1, file.error_rows
     assert_equal 1, batch.grade_competency_evidences.count
-    assert_includes file.parse_errors.first["message"], "result target must be an integer between 1 and 5"
+    assert_includes file.parse_errors.first["message"], "course target must be an integer between 1 and 5"
   end
 
   test "replace existing files reprocesses corrected upload without duplicating evidence" do
