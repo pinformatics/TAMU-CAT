@@ -118,10 +118,10 @@
       </div>
 
       <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
-        <%= link_to student_portfolio_export_path, class: "c-tile__link" do %>
+        <%= link_to reports_path(report_tab: "portfolio_export"), class: "c-tile__link" do %>
           <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-portfolio"></use></svg></div>
-          <div class="c-tile__title">Portfolio Export</div>
-          <div class="c-tile__description">Export student Google Sites portfolio URLs</div>
+          <div class="c-tile__title">Student Profile</div>
+          <div class="c-tile__description">Open student profile data in Reports</div>
         <% end %>
       </div>
 

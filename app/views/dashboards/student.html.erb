@@ -1,11 +1,22 @@
 <!-- app/views/dashboards/student.html.erb -->
-<main class="c-main">
+<main class="c-main c-main--dashboard u-stack u-stack--md">
   <%= render "shared/role_switcher" %>
-  
+
+  <section class="c-card c-card--compact c-card--brand">
+    <header class="c-page-header c-page-header--compact">
+      <div>
+        <p class="c-eyebrow">Student workspace</p>
+        <h1 class="c-page-title c-page-title--brand">Student Dashboard</h1>
+        <p class="c-page-subtitle">Review surveys, notifications, and competency progress.</p>
+      </div>
+      <%= link_to "My Competencies", student_competencies_path, class: button_classes(:secondary), data: { turbo: false } %>
+    </header>
+  </section>
+
   <div class="c-dashboard-grid c-dashboard-grid--2">
     <div class="c-dashboard-column">
       <!-- To-Do Section -->
-      <section class="c-card c-card--hover">
+      <section class="c-card c-card--compact c-card--hover">
         <h2 class="c-section-title c-heading-inline">
           <div class="c-icon--survey" aria-hidden="true"></div>
           To-do
@@ -25,7 +36,7 @@
       </section>
 
       <!-- Completed Surveys Section -->
-      <section class="c-card c-card--hover">
+      <section class="c-card c-card--compact c-card--hover">
         <h2 class="c-section-title c-heading-inline">
           <div class="c-icon--survey" aria-hidden="true"></div>
           Completed Surveys
@@ -46,7 +57,7 @@
     </div>
 
     <!-- Notifications Section -->
-    <section class="c-card c-card--hover">
+    <section class="c-card c-card--compact c-card--hover">
       <h2 class="c-section-title c-heading-inline">
         <div class="c-section-icon"></div>
         Notifications

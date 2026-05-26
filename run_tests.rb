@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-# Test runner script for Health Professions Rails application
+# Test runner script for TAMU Competency Assessment Tool
 # This script runs different test suites and provides comprehensive test reporting
 
 require 'optparse'
@@ -42,7 +42,7 @@ class TestRunner
   def run
     parse_options
 
-    puts "🧪 Health Professions Test Suite Runner"
+    puts "TAMU Competency Assessment Tool Test Suite Runner"
     puts "=" * 50
 
     setup_environment
@@ -53,7 +53,7 @@ class TestRunner
   private
 
   def setup_environment
-    puts "📋 Setting up test environment..."
+    puts "Setting up test environment..."
 
     # Set test environment
     ENV['RAILS_ENV'] = 'test'
@@ -65,32 +65,32 @@ class TestRunner
     ENV['PGUSER'] ||= 'dev_user'
     ENV['PGPASSWORD'] ||= 'dev_pass'
 
-    puts "🔗 Database connection configured for Docker PostgreSQL (localhost:5433)"
+    puts "Database connection configured for Docker PostgreSQL (localhost:5433)"
 
     # Add coverage tracking if requested
     if @options[:coverage]
-      puts "📊 Coverage tracking enabled"
+      puts "Coverage tracking enabled"
       # Coverage will be started inside the test process (test/test_helper.rb).
       # Export a flag so the test process knows to start SimpleCov.
       ENV['COVERAGE'] = '1'
     end
 
-    puts "✅ Environment ready"
+    puts "Environment ready"
   end
 
   def run_tests
     test_command = build_test_command
 
-    puts "🚀 Running tests..."
+    puts "Running tests..."
     puts "Command: #{test_command}"
     puts "-" * 50
 
     success = system(test_command)
 
     if success
-      puts "✅ All tests passed!"
+      puts "All tests passed!"
     else
-      puts "❌ Some tests failed. Check output above."
+      puts "Some tests failed. Check output above."
       exit(1)
     end
   end
@@ -119,11 +119,11 @@ class TestRunner
   end
 
   def generate_report
-    puts "\n📊 Test Report"
+    puts "\nTest Report"
     puts "=" * 50
 
     # Test counts by type
-    puts "📈 Test Statistics:"
+    puts "Test Statistics:"
 
     test_files = {
       'Models' => Dir['test/models/*_test.rb'].length,
@@ -141,11 +141,11 @@ class TestRunner
 
     # Coverage report if enabled
     if @options[:coverage]
-      puts "\n📊 Coverage report will be generated in coverage/ directory"
+      puts "\nCoverage report will be generated in coverage/ directory"
     end
 
-    puts "\n🎉 Test run complete!"
-    puts "💡 Tips:"
+    puts "\nTest run complete!"
+    puts "Tips:"
     puts "  - Run specific test types with -t option"
     puts "  - Enable coverage tracking with -c option"
     puts "  - Use -v for verbose output"

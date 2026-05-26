@@ -27,7 +27,7 @@ Need deeper walkthroughs for environment variables, setup screenshots, or deploy
 | Layer | Requirements |
 | --- | --- |
 | **Internal components** | Ruby `3.4.6`, Rails `8.0.3`, Bundler, all gems in [`Gemfile`](Gemfile), Node.js (optional for tooling), Minitest, RuboCop. |
-| **External components** | PostgreSQL `14`, Redis (Solid Queue/Cable), Docker Desktop, Git, optional Heroku account for deployment & review apps. |
+| **External components** | PostgreSQL `17` for the Docker dev stack, Docker Desktop, Git, optional Heroku account for deployment & review apps. |
 
 ## External Dependencies
 
@@ -308,4 +308,4 @@ Repo-local handoff docs:
 - **Faculty advisor**: Pauline Wade — <paulinewade@tamu.edu>
 - **Issues & pull requests**: please open items directly in this GitHub repository.
 
-Last updated: 2026-05-07
+Last updated: 2026-05-26

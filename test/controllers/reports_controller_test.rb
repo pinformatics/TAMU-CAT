@@ -27,14 +27,118 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "Course Target Attainment"
     assert_includes response.body, "Course Contribution Report"
-    assert_includes response.body, "Student/Course Heatmap"
     assert_includes response.body, "Cohort Comparison"
-    assert_includes response.body, "Student by Domain Heatmap"
+    assert_includes response.body, "Heatmaps"
     assert_includes response.body, "FERPA reminder"
+  end
+
+  test "show uses report module tabs" do
+    sign_in @admin
+
+    get reports_path
+
+    assert_response :success
+    assert_download_href export_course_competency_reports_path, label: "Download CSV"
+
+    get reports_path(report_tab: "cohort_comparison")
+
+    assert_response :success
+    assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Cohort Comparison/
+    assert_download_href export_report_tab_path(report_tab: "cohort_comparison", format: :csv), label: "Download CSV"
+    assert_select "input[name='course_code']", count: 0
+    refute_includes response.body, "Course Contribution Report"
+
+    get reports_path(report_tab: "domain_heatmap")
+
+    assert_response :success
+    assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Heatmaps/
+    assert_download_href export_report_tab_path(report_tab: "domain_heatmap", format: :csv), label: "Download CSV"
+    assert_includes response.body, "Student/Course Heatmap"
+    assert_includes response.body, "Student by Domain Heatmap"
+    refute_includes response.body, "Course Contribution Report"
+
+    get reports_path(report_tab: "portfolio_export")
+
+    assert_response :success
+    assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Student Profile/
+    assert_download_href export_reports_portfolio_path, label: "Download Excel"
+    assert_select "input[name='q']"
+
+    get reports_path(report_tab: "dashboard")
+
+    assert_response :success
+    assert_download_href export_reports_excel_path(section: "dashboard"), label: "Download Excel"
+    assert_select ".c-analytics-root[data-controller='reports']"
+  end
+
+  test "show renders student profile rows in report style" do
+    sign_in @admin
+    student = students(:student)
+    question = Question.create!(
+      category: categories(:clinical_skills),
+      question_text: StudentPortfolioExporter::PORTFOLIO_QUESTION_TEXT,
+      question_order: 25,
+      question_type: "evidence",
+      is_required: true
+    )
+    StudentQuestion.create!(
+      student: student,
+      question: question,
+      response_value: "https://sites.google.com/example/profile-export"
+    )
+    semester = program_semesters(:fall_2025)
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: semester,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "student-profile-course.csv",
+      file_checksum: "checksum-student-profile-course",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: student,
+      assignment_name: "Course Evidence",
+      course_code: "PHPM-601",
+      competency_title: "Policy Analysis",
+      raw_grade: 5,
+      mapped_level: 5,
+      course_target_level: 4,
+      source_key: "student-profile-course",
+      import_fingerprint: "fingerprint-student-profile-course"
+    )
+
+    get reports_path(report_tab: "portfolio_export", q: student.user.display_name)
+
+    assert_response :success
+    assert_includes response.body, "Student Profile"
+    assert_includes response.body, "https://sites.google.com/example/profile-export"
+    assert_includes response.body, "Open profile"
+    assert_select ".c-filter-bar input[name='q']"
+    assert_select ".c-stats-grid .c-eyebrow", text: "Tracks"
+    assert_select ".c-stats-grid .c-eyebrow", text: "Cohorts"
+    assert_select ".c-stats-grid .c-eyebrow", text: "Course Evidence", count: 0
+    assert_select ".c-stats-grid .c-eyebrow", text: "Below Target", count: 0
+    assert_select ".c-table th", text: "UIN"
+    assert_select ".c-table th", text: "Name"
+    assert_select ".c-table th", text: "Email"
+    assert_select ".c-table th", text: "Year"
+    assert_select ".c-table th", text: "Google Sites"
+    assert_select ".c-table th", text: "Course Evidence", count: 0
+    assert_select ".c-table th", text: "Targets Met", count: 0
+    assert_select ".c-table th", text: "Below Target", count: 0
+    assert_select ".c-table th", text: "Met Rate", count: 0
+    assert_select ".c-table td", text: student.uin
+    assert_select ".c-table td", text: student.user.email
+    assert_select ".c-table td", text: student.program_year.to_s
   end
 
   test "show renders course competency report rows with filters" do
     sign_in @admin
+    student = students(:student)
     semester = program_semesters(:fall_2025)
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,
@@ -49,7 +153,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     )
     batch.grade_competency_evidences.create!(
       grade_import_file: file,
-      student: students(:student),
+      student: student,
       assignment_name: "Final",
       course_code: "PHPM-601",
       competency_title: "Policy Analysis",
@@ -66,7 +170,17 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "PHPM-601"
     assert_includes response.body, "Policy Analysis"
     assert_includes response.body, "100.0%"
-    assert_includes response.body, "Export CSV"
+    assert_includes response.body, "Download CSV"
+    assert_select "details.c-accordion summary", text: /PHPM-601/
+    assert_select "details.c-accordion summary", text: /1 competency/
+
+    get reports_path(report_tab: "domain_heatmap", course_code: "PHPM-601")
+
+    assert_response :success
+    assert_select "details.c-accordion summary", text: /#{Regexp.escape(student.user.name)}/
+    assert_select "details.c-accordion summary", text: /1 course/
+    assert_select "details.c-accordion summary .c-accordion__action", text: /Show details/
+    assert_select "details.c-accordion table th", text: "Course"
   end
 
   test "export_course_competencies returns csv and records audit" do
@@ -106,6 +220,55 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
     assert_equal "course_competency_report_csv", activity.metadata["export_type"]
     assert_equal "PHPM-601", activity.metadata["course_code"]
+  end
+
+  test "export_tab_csv downloads cohort comparison csv" do
+    sign_in @admin
+
+    assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+      get export_report_tab_path(report_tab: "cohort_comparison", format: :csv)
+    end
+
+    assert_response :success
+    assert_equal "text/csv", response.media_type
+    assert_includes response.body, "Cohort,Students,Self Avg,Advisor Avg,Course Avg,Below Target"
+    activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
+    assert_equal "cohort_comparison_report_csv", activity.metadata["export_type"]
+  end
+
+  test "export_tab_csv downloads combined heatmaps csv" do
+    sign_in @admin
+
+    get export_report_tab_path(report_tab: "domain_heatmap", format: :csv)
+
+    assert_response :success
+    assert_equal "text/csv", response.media_type
+    assert_includes response.body, "Student/Course Heatmap"
+    assert_includes response.body, "Student by Domain Heatmap"
+  end
+
+  test "export_tab_csv downloads dashboard summary csv" do
+    sign_in @admin
+
+    get export_report_tab_path(report_tab: "dashboard", format: :csv)
+
+    assert_response :success
+    assert_equal "text/csv", response.media_type
+    assert_includes response.body, "Metric,Value,Change,Description,Sample Size"
+  end
+
+  test "export_portfolio downloads student profile workbook" do
+    sign_in @admin
+
+    assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+      get export_reports_portfolio_path
+    end
+
+    assert_response :success
+    assert_includes response.headers["Content-Disposition"], ".xlsx"
+    assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
+    activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
+    assert_equal "student_profile_portfolio_excel", activity.metadata["export_type"]
   end
 
   test "show allows advisor access" do
@@ -685,5 +848,15 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     assert_not_nil flash[:alert]
+  end
+
+  private
+
+  def assert_download_href(expected_path, label:)
+    hrefs = css_select("a")
+      .select { |link| link.text.squish == label }
+      .map { |link| link["href"] }
+
+    assert_includes hrefs, expected_path, "Expected #{label} link to #{expected_path}; found #{hrefs.inspect}"
   end
 end

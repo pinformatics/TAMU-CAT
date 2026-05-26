@@ -27,35 +27,28 @@ class StudentPortfolioExportsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
-  test "admin can view portfolio export page" do
+  test "legacy portfolio export page redirects into reports" do
     sign_in @admin
 
     get student_portfolio_export_path
 
-    assert_response :success
-    assert_includes response.body, "Portfolio Export"
-    assert_includes response.body, "https://sites.google.com/example/student"
-    assert_includes response.body, "https://sites.google.com/example/other"
+    assert_redirected_to reports_path(report_tab: "portfolio_export")
   end
 
-  test "advisor sees only assigned advisees" do
+  test "advisor legacy portfolio export page redirects into reports" do
     sign_in @advisor
 
     get student_portfolio_export_path
 
-    assert_response :success
-    assert_includes response.body, "https://sites.google.com/example/student"
-    refute_includes response.body, "https://sites.google.com/example/other"
+    assert_redirected_to reports_path(report_tab: "portfolio_export")
   end
 
-  test "export downloads xlsx" do
+  test "legacy export download redirects to reports export" do
     sign_in @admin
 
     get download_student_portfolio_export_path
 
-    assert_response :success
-    assert_includes response.headers["Content-Disposition"], ".xlsx"
-    assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
+    assert_redirected_to export_reports_portfolio_path
   end
 
   test "student cannot access portfolio export" do

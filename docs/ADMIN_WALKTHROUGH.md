@@ -98,7 +98,7 @@ Supported formats:
 Recommended workflow:
 
 1. upload as `dry run`
-2. inspect `File Results`
+2. inspect `File diagnostics`
 3. inspect `Pending Student Matches`
 4. inspect `Student Processed`
 5. inspect failed values, pending matches, missing mappings, invalid UINs, and duplicate warnings
@@ -208,3 +208,12 @@ When something looks wrong, check these first:
 3. Are student identifiers present?
 4. Are there row-level parse errors?
 5. Is the batch `rolled_back`?
+
+## Local cleanup checklist
+
+Use this when the repo feels noisy after local development or test runs:
+
+1. Check `git status --short` before cleanup.
+2. Leave ignored `log/`, `tmp/`, and generated asset files out of commits.
+3. Run tests through Docker when host Ruby is unavailable: `docker compose run --rm -T -e RAILS_ENV=test web ruby run_tests.rb`.
+4. Use `docker compose stop db` when you are done with the local database container.

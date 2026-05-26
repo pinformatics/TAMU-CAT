@@ -47,6 +47,8 @@ Rails.application.routes.draw do
   # Reporting hub shared by admins and advisors
   get "reports", to: "reports#show", as: :reports
   get "reports/export_excel", to: "reports#export_excel", as: :export_reports_excel
+  get "reports/export_tab", to: "reports#export_tab_csv", as: :export_report_tab
+  get "reports/profile_export.xlsx", to: "reports#export_portfolio", as: :export_reports_portfolio
   get "reports/course_competencies.csv", to: "reports#export_course_competencies", as: :export_course_competency_reports
   get "reports/:section/export_pdf", to: "reports#export_pdf", as: :export_reports_pdf
 

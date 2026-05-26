@@ -2,209 +2,85 @@
 
 ## Overview
 
-This document provides comprehensive information about the test suite for the Health Professions Rails application. The test suite includes unit tests, integration tests, and system tests to ensure the application works correctly across all components.
+This document summarizes the test suite for TAMU Competency Assessment Tool. The suite covers model behavior, controller access rules, integration workflows, system-level UI checks, and high-risk Fall competency workflows such as imports, reports, exports, release dates, and student/advisor competency views.
 
 ## Test Structure
 
-```
-test/
-├── models/                 # Unit tests for model classes
-│   ├── admin_test.rb      # Admin model tests (OAuth, roles, permissions)
-│   ├── advisor_test.rb    # Advisor model tests (validations, associations)
-│   ├── student_test.rb    # Student model tests (enum, associations)
-│   ├── survey_test.rb     # Survey model tests (associations, dependencies)
-│   ├── competency_test.rb # Competency model tests (associations, validations)
-│   ├── question_test.rb   # Question model tests (types, answer options)
-│   ├── survey_response_test.rb     # Survey response tests (enum, scopes)
-│   ├── question_response_test.rb   # Question response tests (associations)
-│   ├── feedback_test.rb            # Feedback model tests
-│   └── evidence_upload_test.rb     # Evidence upload tests
-├── controllers/           # Controller action tests
-│   ├── surveys_controller_test.rb  # CRUD operations, authorization
-│   ├── competencies_controller_test.rb # CRUD operations, validation
-│   ├── students_controller_test.rb     # Student management
-│   └── ...other controller tests
-├── integration/          # Integration tests for user workflows
-│   ├── survey_workflow_test.rb        # Complete survey lifecycle
-│   └── user_authentication_test.rb    # OAuth and permission flows
-├── system/              # End-to-end browser tests
-│   ├── surveys_test.rb               # UI interactions for surveys
-│   ├── complete_survey_workflow_test.rb # Full workflow testing
-│   └── ...other system tests
-├── fixtures/            # Test data
-│   ├── admins.yml      # Admin test data
-│   ├── students.yml    # Student test data
-│   ├── surveys.yml     # Survey test data
-│   └── ...other fixtures
-└── test_helper.rb      # Test configuration and utilities
-```
-
-## Test Types
-
-### 1. Model Tests (Unit Tests)
-
-Model tests ensure that your ActiveRecord models work correctly in isolation:
-
-- **Validations**: Test required fields, format validations, uniqueness constraints
-- **Associations**: Test relationships between models (belongs_to, has_many, etc.)
-- **Enums**: Test enum values and prefix methods
-- **Custom Methods**: Test any custom model methods
-- **Scopes**: Test model scopes and class methods
-
-Example model test structure:
-```ruby
-class StudentTest < ActiveSupport::TestCase
-  def setup
-    @student = students(:one)
-  end
-
-  test "should be valid with valid attributes" do
-    assert @student.valid?
-  end
-
-  test "should validate track enum" do
-    assert @student.track_residential?
-    @student.track = "Executive"
-    assert @student.track_executive?
-  end
-end
-```
-
-### 2. Controller Tests (Functional Tests)
-
-Controller tests verify that your controllers handle HTTP requests correctly:
-
-- **HTTP Methods**: Test GET, POST, PATCH, DELETE requests
-- **Response Codes**: Verify correct HTTP status codes (200, 302, 404, etc.)
-- **Authorization**: Test access control and permissions
-- **Parameter Handling**: Test valid and invalid parameter combinations
-- **Redirects**: Verify correct redirections after actions
-
-Example controller test structure:
-```ruby
-class SurveysControllerTest < ActionDispatch::IntegrationTest
-  setup do
-    @admin = admins(:one)
-    sign_in @admin
-  end
-
-  test "should create survey with valid params" do
-    assert_difference("Survey.count") do
-      post surveys_url, params: { survey: valid_survey_params }
-    end
-    assert_redirected_to survey_url(Survey.last)
-  end
-end
-```
-
-### 3. Integration Tests
-
-Integration tests verify that different parts of your application work together:
-
-- **User Workflows**: Test complete user journeys
-- **Multi-Model Interactions**: Test interactions across multiple models
-# Test Suite Documentation
-
-## Overview
-
-This document provides comprehensive information about the test suite for the Health Professions Rails application. The test suite includes unit tests, integration tests, and system tests that ensure the application works correctly across components.
-
-## Test structure
-
 The `test/` directory is organized into:
 
-- `models/` — unit tests for ActiveRecord models
-- `controllers/` — controller tests (functional / integration style)
-- `integration/` — multi-step workflows and higher-level interactions
-- `system/` — browser-driven system tests (Capybara)
-- `fixtures/` — YAML fixtures used across tests
-- `test_helper.rb` — test configuration and shared helpers
+- `models/`: Active Record validations, associations, lifecycle behavior, and scopes.
+- `controllers/`: request/response behavior, redirects, authorization, exports, and admin workflows.
+- `integration/`: multi-step user workflows that cross controllers and models.
+- `system/`: browser-driven UI checks through Capybara.
+- `services/`: import processing, reports, dashboards, notifications, and export helpers.
+- `fixtures/`: stable YAML records shared across tests.
+- `test_helper.rb`: test configuration and shared helpers.
 
-## Test types and where to use them
+## Running Tests
 
-- Model tests: validations, associations, enums, scopes, and custom methods.
-- Controller tests: request/response behavior, redirects, parameter handling, and authorization.
-- Integration tests: full user workflows that exercise multiple controllers/models.
-- System tests: end-to-end browser tests for UI and JavaScript behavior.
-
-## Running tests
-
-Basic commands:
+Run all tests locally when Ruby is available:
 
 ```bash
-# Run all tests
-rails test
-
-# Run tests by folder
-rails test test/models
-rails test test/controllers
-rails test test/integration
-rails test test/system
-
-# Run a specific file or test
-rails test test/models/student_test.rb
-rails test test/models/student_test.rb:test_should_validate_track_enum
-```
-
-Custom test runner:
-
-```bash
-# Use the provided helper runner
 ruby run_tests.rb
+```
 
-# Run with coverage
+Run all tests through Docker, which is the preferred onboarding path:
+
+```bash
+docker compose run --rm -T -e RAILS_ENV=test web ruby run_tests.rb
+```
+
+Run a focused file or folder:
+
+```bash
+bin/rails test test/models
+bin/rails test test/controllers/admin/grade_import_batches_controller_test.rb
+bin/rails test test/services/student_competency_dashboard_test.rb
+```
+
+Run with coverage:
+
+```bash
 ruby run_tests.rb -c
-
-# Run a specific type
-ruby run_tests.rb -t controllers
 ```
 
-Tip: When running tests in Docker, run commands inside the `web` service, e.g. `docker compose run --rm web bin/rails test`.
+## High-Value Smoke Slices
 
-## Fixtures & test data
+For competency/import changes, run this focused slice before the full suite:
 
-Fixtures provide stable records for tests. Key fixture files include:
-
-- `admins.yml`, `students.yml`, `surveys.yml`, `competencies.yml`, `questions.yml`, `survey_responses.yml`.
-
-Ensure fixture associations exist and use consistent primary keys (some models use non-standard PKs like `student_id`).
-
-## Helpers & common patterns
-
-- Include `Devise::Test::IntegrationHelpers` in integration tests to use `sign_in`.
-- Use `setup` blocks for common fixtures and `teardown` or cleanup helpers when creating records dynamically.
-- Prefer focused tests (one behavior per test) and descriptive test names.
-
-Example model test:
-
-```ruby
-class StudentTest < ActiveSupport::TestCase
-  setup do
-    @student = students(:one)
-  end
-
-  test "valid with valid attributes" do
-    assert @student.valid?
-  end
-end
+```bash
+bin/rails test \
+  test/services/student_competency_dashboard_test.rb \
+  test/controllers/student_competencies_controller_test.rb \
+  test/controllers/admin/grade_import_batches_controller_test.rb \
+  test/services/grade_imports/batch_processor_test.rb \
+  test/services/reports/course_competency_report_test.rb \
+  test/services/course_competency_release_notifier_test.rb
 ```
 
-## Coverage & CI
+For role/access changes, prioritize:
 
-- The project supports generating coverage reports via SimpleCov when tests run with the coverage flag (see `run_tests.rb -c`).
-- Configure CI to run `bundle exec rails test` and collect coverage artifacts.
+```bash
+bin/rails test test/controllers/dashboards_controller_test.rb test/controllers/admin
+```
 
-## Troubleshooting
+## Test Data Notes
 
-- Fixture loading errors: validate YAML syntax and association names.
-- Devise auth errors: ensure `sign_in` helper is used in Integration tests and that fixtures create the expected user/advisor records.
-- Test data pollution: wrap database-modifying tests in transactions or clean up created records.
+- Some models use nonstandard primary keys, especially `students.student_id`, `advisors.advisor_id`, and `admins.admin_id`.
+- Import tests often create temporary workbooks and CSVs; keep cleanup in `teardown`.
+- Production-like import validation is strongest against a sanitized production clone because student matching depends on real UINs, accounts, and course naming patterns.
+- Keep fixtures small and predictable. Prefer factories or explicit records inside tests when a scenario needs special state.
 
-## Contributing to tests
+## Common Failure Areas
 
-1. Add model/controller/integration/system tests for new features.
-2. Update or add fixtures where necessary.
-3. Run the test suite and include passing tests with your PR.
+- Missing or mismatched fixture associations.
+- Devise authentication helpers omitted from controller/integration tests.
+- Course import rows missing canonical competency links after parser changes.
+- Semester filters that include self/advisor data but accidentally omit reportable course imports.
+- Tests relying on host Ruby when Docker should be used.
 
----
-Updated: 2025-10-20
+## CI Expectations
+
+CI should run Rails tests, RuboCop, Brakeman, and importmap audit before merge. Locally, the Docker command above is the fastest way to confirm the Rails suite without installing Ruby on the host.
+
+Updated: 2026-05-26

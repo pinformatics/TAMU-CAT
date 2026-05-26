@@ -1,6 +1,6 @@
 # Technical Handoff
 
-Generated: 2026-05-07
+Last reviewed: 2026-05-26
 
 This document summarizes the current operating state of TAMU Competency Assessment Tool for the next technical lead, maintainer, or production administrator. It is based on the repository code, local documentation, and deployment/configuration files currently present in the project.
 
@@ -46,7 +46,7 @@ This document summarizes the current operating state of TAMU Competency Assessme
 - Production currently sets `config.active_job.queue_adapter = :inline` in `config/environments/production.rb`. This avoids a separate queue dependency but means background jobs run synchronously in request flow.
 - `config/recurring.yml` defines a Solid Queue hourly cleanup task, but production is not currently wired to run Solid Queue as the Active Job adapter. Treat recurring Solid Queue behavior as inactive unless production queue configuration is restored.
 - `Procfile` only defines `release` and `web`; there is no Heroku worker process.
-- `config.action_mailer.default_url_options` still uses `example.com`, and SMTP settings are commented out. Email delivery should be considered unconfigured until production SMTP and host settings are set.
+- Production SMTP is configured through environment variables. Confirm `APP_HOST`, `APP_PROTOCOL`, `MAILER_FROM`, and the `SMTP_*` settings before relying on email delivery.
 - `config.active_storage.service = :local` in production. On Heroku this is not persistent across dyno restarts, so uploads should be moved to S3/GCS/Azure or another durable service before relying on long-term uploaded file retention.
 - `config/deploy.yml` is still a Kamal template with placeholder values such as `your-user`, `192.168.0.1`, and `app.example.com`. Do not treat it as production-ready without replacing those values.
 - Development Google OAuth credentials are hard-coded in `config/environments/development.rb`. Rotate them if they are real credentials, and prefer local credentials or environment variables going forward.
@@ -267,7 +267,7 @@ After rotating Google OAuth credentials:
 - Legacy course-derived ratings without an import batch semester should be assigned a semester before relying on semester-filtered views.
 - Production background jobs need a deliberate decision: keep inline for simplicity or restore Solid Queue with worker capacity.
 - Production Active Storage needs durable object storage or explicit persistent volume management.
-- Mailer host and SMTP settings need production values before depending on email delivery.
+- Mailer host and SMTP settings should be confirmed in production before depending on email delivery.
 - Development OAuth credentials should be removed from committed config and moved to environment/local credentials.
 - Admin UI remains the densest surface and needs continued smoke coverage.
 - Documentation is split between repo docs and the GitHub wiki; keep both updated when workflows change.
@@ -278,7 +278,7 @@ After rotating Google OAuth credentials:
 
 - Ruby `3.4.6`
 - Rails `~> 8.0.3`
-- PostgreSQL, documented locally as version `14`; CI uses PostgreSQL `15`
+- PostgreSQL `17` in the Docker development stack; CI uses PostgreSQL `15`
 - Puma
 - Linux packages for production image:
   - PostgreSQL client
@@ -321,7 +321,12 @@ Required or commonly used:
 | `DATABASE_URL` | Production database URL, especially on Heroku. |
 | `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth app client ID. |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth app client secret. |
+| `APP_HOST` | Host used in generated mailer links. |
+| `APP_PROTOCOL` | Protocol used in generated mailer links, usually `https`. |
 | `APP_TIME_ZONE` | Defaults to `Central Time (US & Canada)`. |
+| `MAILER_FROM` | Sender address for app and Devise emails. |
+| `SMTP_ADDRESS`, `SMTP_PORT`, `SMTP_DOMAIN` | SMTP host settings for production email delivery. |
+| `SMTP_USER_NAME`, `SMTP_PASSWORD`, `SMTP_AUTHENTICATION`, `SMTP_ENABLE_STARTTLS_AUTO` | Optional SMTP authentication and TLS settings. |
 | `PORT` | Puma port, default `3000`; Heroku sets this automatically. |
 | `RAILS_MAX_THREADS` | Puma and Active Record pool sizing. |
 | `RAILS_LOG_LEVEL` | Production log level, default `info`. |
@@ -348,7 +353,7 @@ Required or commonly used:
 - GitHub Actions for CI.
 - Docker registry and host infrastructure if using Docker/Kamal.
 - Optional future durable object storage for Active Storage uploads.
-- Optional future SMTP service for email delivery.
+- TAMU SMTP or another production SMTP service for email delivery.
 
 ## Admin Access
 

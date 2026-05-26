@@ -2,7 +2,7 @@ require "test_helper"
 
 class ApplicationMailerTest < ActiveSupport::TestCase
   test "default sender configured" do
-    assert_equal "from@example.com", ApplicationMailer.default_params[:from]
+    assert_equal "noreply@tamu.edu", ApplicationMailer.default_params[:from]
   end
 
   test "mailer uses application layout" do
