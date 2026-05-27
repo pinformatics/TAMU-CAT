@@ -21,7 +21,7 @@
       <div class="u-actions u-actions--split u-mt-sm">
         <div>
           <p class="c-eyebrow">1. Target context</p>
-          <h3 class="c-heading-inline">Choose who these program targets apply to</h3>
+          <h3 class="c-h3 c-heading-inline">Choose who these program targets apply to</h3>
           <p class="c-panel-subtitle">Load a context first, then review coverage and edit the 17 competency targets below.</p>
         </div>
         <% if @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present? %>
@@ -79,7 +79,7 @@
         <div class="u-actions u-actions--split">
           <div>
             <p class="c-eyebrow">2. Program target coverage</p>
-            <h3 class="c-heading-inline">
+            <h3 class="c-h3 c-heading-inline">
               <%= coverage[:populated] %> of <%= coverage[:total] %> end-of-program targets set
             </h3>
             <p class="c-panel-subtitle">
@@ -148,7 +148,7 @@
       <div class="u-actions u-actions--split">
         <div>
           <p class="c-eyebrow">3. Edit targets</p>
-          <h3 class="c-heading-inline">Set end-of-program target levels</h3>
+          <h3 class="c-h3 c-heading-inline">Set end-of-program target levels</h3>
           <p class="c-panel-subtitle">Blank values mean the target is not configured for this context.</p>
         </div>
       </div>

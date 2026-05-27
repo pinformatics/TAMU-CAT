@@ -68,7 +68,7 @@
         <%= form_with model: @user, url: account_path, method: :patch, local: true, class: "u-stack u-stack--lg" do |form| %>
           <% if @user.errors.any? %>
             <div class="c-card c-card--tight border border-rose-200 bg-rose-50 text-rose-800 shadow-none">
-              <h3 class="font-semibold text-rose-900">
+              <h3 class="c-h3 u-danger">
                 <%= pluralize(@user.errors.count, "error") %> need your attention before saving
               </h3>
               <ul class="mt-2 list-disc pl-5">

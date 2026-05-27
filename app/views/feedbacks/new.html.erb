@@ -57,7 +57,7 @@
           <% default_idx = Array(@confidential_note_tabs).find_index { |t| t[:editable] } || 0 %>
           <section class="c-card c-card--tight space-y-3" data-controller="tabs" data-tabs-default-id-value="note-tab-<%= default_idx %>">
             <div class="space-y-1">
-              <h3 class="text-sm font-semibold tracking-tight text-slate-900">Confidential advisor notes</h3>
+              <h3 class="c-h3">Confidential advisor notes</h3>
               <p class="text-xs text-slate-600">Visible only to the assigned advisor.</p>
             </div>
 
@@ -157,6 +157,23 @@
       return ((numerator / denominator) * 100).toFixed(1) + "%";
     }
 
+    function showModalAlert(title, message) {
+      if (window.AppModal && typeof window.AppModal.alert === 'function') {
+        return window.AppModal.alert({ title: title, message: message });
+      }
+
+      alert(message);
+      return Promise.resolve(true);
+    }
+
+    function showModalConfirm(title, message) {
+      if (window.AppModal && typeof window.AppModal.confirm === 'function') {
+        return window.AppModal.confirm({ title: title, message: message });
+      }
+
+      return Promise.resolve(window.confirm(message));
+    }
+
     function updateAdvisorFeedbackSummary() {
       var summary = document.querySelector('[data-advisor-feedback-summary]');
       if (!summary) return;
@@ -249,7 +266,7 @@
       var baseline = form ? serializeForm(form) : null;
 
       if (form && form.dataset.savePopup === '1') {
-        alert('Work saved. The student will not be able to see the content yet.');
+        showModalAlert('Work saved', 'The student will not be able to see the content yet.');
         form.dataset.savePopup = '0';
       }
 
@@ -292,8 +309,9 @@
             var missingRatings = markMissingRequiredRatings(form);
             if (missingRatings.length > 0) {
               event.preventDefault();
-              alert('Please complete all required Advisor Rating fields before submitting.');
-              missingRatings[0].focus();
+              showModalAlert('Required ratings missing', 'Please complete all required Advisor Rating fields before submitting.').then(function() {
+                missingRatings[0].focus();
+              });
               return;
             }
           }
@@ -330,13 +348,13 @@
           link.addEventListener('click', function(event) {
             if (!isDirty()) return;
 
-            var confirmed = window.confirm('Are you sure you want to leave? Any unsaved progress will be lost.');
-            if (!confirmed) {
-              event.preventDefault();
-              return;
-            }
+            event.preventDefault();
+            showModalConfirm('Leave without saving?', 'Are you sure you want to leave? Any unsaved progress will be lost.').then(function(confirmed) {
+              if (!confirmed) return;
 
-            bypassBeforeUnload = true;
+              bypassBeforeUnload = true;
+              window.location.href = link.href;
+            });
           });
         });
       }

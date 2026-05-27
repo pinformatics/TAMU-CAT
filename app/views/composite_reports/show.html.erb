@@ -157,7 +157,7 @@
 
     <div class="category-block">
       <div class="category-header">
-        <h3 class="category-title"><%= category.name %></h3>
+        <h3 class="c-h3"><%= category.name %></h3>
         <% if category.description.present? %>
           <div class="category-description"><%= simple_format(category.description.to_s) %></div>
         <% end %>
@@ -383,7 +383,7 @@
 
       <div class="feedback-category">
         <div class="category-header">
-          <h3 class="category-title"><%= category.name %></h3>
+          <h3 class="c-h3"><%= category.name %></h3>
         </div>
 
         <% feedback_entries.each do |feedback| %>

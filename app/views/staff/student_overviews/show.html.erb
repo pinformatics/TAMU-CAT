@@ -70,7 +70,7 @@
                 <% @advisor_assignment_rows.each do |row| %>
                   <article class="c-record-list__item">
                     <div>
-                      <h3><%= row[:advisor_name] %></h3>
+                      <h3 class="c-h3"><%= row[:advisor_name] %></h3>
                       <p>
                         <%= row[:starts_on].present? ? l(row[:starts_on], format: :long) : "Unknown start" %>
                         -
@@ -137,7 +137,7 @@
                 <% @survey_rows.each do |row| %>
                   <article class="c-record-list__item">
                     <div>
-                      <h3><%= row[:survey].title %></h3>
+                      <h3 class="c-h3"><%= row[:survey].title %></h3>
                       <p><%= row[:semester] %></p>
                       <p>
                         Completed <%= row[:completed_at].present? ? l(row[:completed_at], format: :short) : "-" %>
@@ -223,7 +223,7 @@
                 <% @advisor_note_rows.each do |row| %>
                   <article class="c-record-list__item">
                     <div>
-                      <h3><%= row[:survey_title] %></h3>
+                      <h3 class="c-h3"><%= row[:survey_title] %></h3>
                       <p><%= row[:advisor_name] %> &middot; <%= row[:updated_at].present? ? l(row[:updated_at], format: :short) : "-" %></p>
                       <div class="u-stack u-stack--xs"><%= simple_format(row[:body]) %></div>
                     </div>

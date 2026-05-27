@@ -10,9 +10,10 @@ export { application }
 
 // Simple handler to convert <a data-method="delete"> or data-turbo-method into a form POST with _method override.
 // This is a tiny replacement for rails-ujs's data-method handling when that library isn't loaded.
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
 	const el = event.target.closest && event.target.closest('a')
 	if (!el) return
+	if (event.defaultPrevented) return
 
 	// Support both rails-ujs style `data-method` and Turbo `data-turbo-method`
 	const rawMethod = el.getAttribute('data-method') || el.getAttribute('data-turbo-method')
@@ -20,6 +21,15 @@ document.addEventListener("click", (event) => {
 	if (!method || method === 'GET') return
 
 	event.preventDefault()
+
+	const message = el.getAttribute('data-turbo-confirm') || el.getAttribute('data-confirm')
+	if (message) {
+		const confirmed = window.AppModal && typeof window.AppModal.confirm === 'function'
+			? await window.AppModal.confirm({ message: message, title: 'Confirm action' })
+			: window.confirm(message)
+
+		if (!confirmed) return
+	}
 
 	const form = document.createElement('form')
 	form.method = 'post'

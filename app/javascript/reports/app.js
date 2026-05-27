@@ -31,6 +31,14 @@ const STATUS_COLOR_MAP = {
   not_assessed: COLORS.notAssessed
 }
 
+function confirmWithAppModal(message, options = {}) {
+  if (window.AppModal && typeof window.AppModal.confirm === "function") {
+    return window.AppModal.confirm({ message, ...options })
+  }
+
+  return Promise.resolve(window.confirm(message))
+}
+
 let percentagePluginRegistered = false
 
 const percentageLabelPlugin = {
@@ -1259,8 +1267,12 @@ const ReportsApp = ({ exportUrls = {} }) => {
     loadData(DEFAULT_FILTERS)
   }, [ loadData ])
 
-  const handleExport = useCallback((format, sectionKey) => {
-    if (!window.confirm(FERPA_EXPORT_CONFIRMATION)) return
+  const handleExport = useCallback(async (format, sectionKey) => {
+    const confirmed = await confirmWithAppModal(FERPA_EXPORT_CONFIRMATION, {
+      title: "Confirm FERPA export",
+      confirmLabel: "Download"
+    })
+    if (!confirmed) return
 
     if (format === "pdf") {
       const base = resolvedExportUrls.pdf

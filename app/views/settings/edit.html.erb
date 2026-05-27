@@ -194,7 +194,14 @@
       }).catch(function() {
         // network failure - re-enable submit and show a simple alert
         if (submit) submit.disabled = false;
-        alert('Failed to save settings. Please try again.');
+        if (window.AppModal && typeof window.AppModal.alert === 'function') {
+          window.AppModal.alert({
+            title: 'Settings not saved',
+            message: 'Failed to save settings. Please try again.'
+          });
+        } else {
+          alert('Failed to save settings. Please try again.');
+        }
       });
     });
   })();

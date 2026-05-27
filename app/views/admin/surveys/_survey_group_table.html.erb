@@ -1,0 +1,61 @@
+<% show_assign = local_assigns.fetch(:show_assign, false) %>
+<% archived = local_assigns.fetch(:archived, false) %>
+<% sortable = local_assigns.fetch(:sortable, false) %>
+
+<div class="c-table-wrapper">
+  <table class="c-table c-table--zebra">
+    <thead>
+      <tr>
+        <th scope="col"><%= sortable ? sortable_header("Survey", "title") : "Survey" %></th>
+        <th scope="col">Available Date / Due Date</th>
+        <th scope="col">Tracks</th>
+        <th scope="col" class="u-text-right"><%= sortable ? sortable_header("Updated", "updated_at") : "Updated" %></th>
+        <th scope="col" class="u-text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% surveys.each do |survey| %>
+        <% tracks = survey.track_list %>
+        <tr>
+          <td>
+            <div class="c-table__title"><%= survey.title %></div>
+          </td>
+          <td>
+            <div class="u-stack u-stack--xs">
+              <span><strong>Available:</strong> <%= survey.available_from.present? ? format_calendar_date(survey.available_from) : "No start date" %></span>
+              <span><strong>Due:</strong> <%= survey.available_until.present? ? format_calendar_date(survey.available_until) : "No due date" %></span>
+            </div>
+          </td>
+          <td>
+            <% if tracks.present? %>
+              <div class="u-actions u-actions--start u-gap-xs">
+                <% tracks.each do |track| %>
+                  <span class="c-pill c-pill--muted"><%= track %></span>
+                <% end %>
+              </div>
+            <% else %>
+              <span class="c-status-pill c-status-pill--warning">Unassigned</span>
+            <% end %>
+          </td>
+          <td class="u-whitespace-nowrap u-text-right"><%= time_ago_in_words(survey.updated_at) %> ago</td>
+          <td class="u-whitespace-nowrap">
+            <div class="u-actions u-actions--nowrap">
+              <% if show_assign %>
+                <%= link_to "Assign", assignments_survey_path(survey), class: button_classes(:primary, extra_classes: "btn-sm"), data: { turbo: false } %>
+              <% end %>
+              <%= link_to "Preview", preview_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+              <%= link_to "Copy", copy_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+              <% unless archived %>
+                <%= link_to "Edit", edit_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+                <%= button_to "Archive", archive_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Archive '#{survey.title}' and remove it from advisors?" }, class: button_classes(:secondary) %>
+              <% else %>
+                <%= button_to "Activate", activate_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Activate '#{survey.title}' for advisors?" }, class: button_classes(:primary) %>
+              <% end %>
+              <%= button_to "Delete", admin_survey_path(survey), method: :delete, data: { turbo_confirm: "Delete '#{survey.title}' permanently?" }, class: button_classes(:danger) %>
+            </div>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

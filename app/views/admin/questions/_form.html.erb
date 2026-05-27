@@ -1,7 +1,7 @@
 <%= form_with(model: [:admin, question], class: "survey-form", data: { controller: "markdown-editor" }) do |form| %>
   <% if question.errors.any? %>
     <div class="form-errors">
-      <h2><%= pluralize(question.errors.count, "error") %> prevented the question from being saved:</h2>
+      <h2 class="c-panel-title"><%= pluralize(question.errors.count, "error") %> prevented the question from being saved:</h2>
       <ul>
         <% question.errors.full_messages.each do |message| %>
           <li><%= message %></li>
@@ -16,7 +16,7 @@
         <header class="c-form-card__header">
           <span class="c-step-pill">Question Details</span>
           <div>
-            <h2 class="section-heading">Prompt content</h2>
+            <h2 class="c-section-title">Prompt content</h2>
             <p class="c-help">Define the prompt, type, and ordering so it appears correctly in surveys.</p>
           </div>
         </header>
@@ -85,7 +85,7 @@
         <header class="c-form-card__header">
           <span class="c-step-pill">Configuration</span>
           <div>
-            <h2 class="section-heading">Answer options & tags</h2>
+            <h2 class="c-section-title">Answer options & tags</h2>
             <p class="c-help">Add category tags and optional predefined answers for multiple choice prompts.</p>
           </div>
         </header>

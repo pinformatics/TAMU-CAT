@@ -4,6 +4,194 @@ import "controllers"
 // Accessibility helpers for high contrast mode and text-to-speech support.
 
 // -----------------------------
+// App modal dialogs
+// -----------------------------
+
+let appModalId = 0
+let turboFalseConfirmFallbackInstalled = false
+
+function escapeModalText(value) {
+  const element = document.createElement("span")
+  element.textContent = value == null ? "" : String(value)
+  return element.innerHTML
+}
+
+function modalBodyHtml(message) {
+  const lines = String(message || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (lines.length === 0) {
+    return "<p>Continue?</p>"
+  }
+
+  const parts = []
+  let listItems = []
+
+  lines.forEach((line) => {
+    if (line.startsWith("- ")) {
+      listItems.push(line.slice(2))
+      return
+    }
+
+    if (listItems.length > 0) {
+      parts.push(`
+        <ul class="c-modal__review-list">
+          ${listItems.map((item) => `<li>${escapeModalText(item)}</li>`).join("")}
+        </ul>
+      `)
+      listItems = []
+    }
+
+    parts.push(`<p>${escapeModalText(line)}</p>`)
+  })
+
+  if (listItems.length > 0) {
+    parts.push(`
+      <ul class="c-modal__review-list">
+        ${listItems.map((item) => `<li>${escapeModalText(item)}</li>`).join("")}
+      </ul>
+    `)
+  }
+
+  return parts.join("")
+}
+
+function showAppModal(options = {}) {
+  const title = options.title || (options.showCancel === false ? "Notice" : "Confirm action")
+  const message = options.message || "Are you sure you want to continue?"
+  const confirmLabel = options.confirmLabel || (options.showCancel === false ? "OK" : "Continue")
+  const cancelLabel = options.cancelLabel || "Cancel"
+  const showCancel = options.showCancel !== false
+  const id = `app-modal-${++appModalId}`
+
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div")
+    let closed = false
+    backdrop.className = "c-modal-backdrop"
+    backdrop.innerHTML = `
+      <section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="${id}-title">
+        <header class="c-modal__header">
+          <div>
+            <p class="c-eyebrow">${escapeModalText(options.eyebrow || (showCancel ? "Confirm action" : "Message"))}</p>
+            <h2 id="${id}-title" class="c-modal__title">${escapeModalText(title)}</h2>
+          </div>
+          <button type="button" class="c-icon-button c-modal__close" data-app-modal-close aria-label="Close">&times;</button>
+        </header>
+        <div class="c-modal__body">
+          ${modalBodyHtml(message)}
+        </div>
+        <footer class="c-modal__footer">
+          ${showCancel ? `<button type="button" class="btn btn-secondary" data-app-modal-cancel>${escapeModalText(cancelLabel)}</button>` : ""}
+          <button type="button" class="btn btn-primary" data-app-modal-confirm>${escapeModalText(confirmLabel)}</button>
+        </footer>
+      </section>
+    `
+
+    const finish = (value) => {
+      if (closed) return
+      closed = true
+      document.removeEventListener("keydown", escapeHandler)
+      backdrop.remove()
+      document.body.classList.remove("is-modal-open")
+      resolve(value)
+    }
+
+    const escapeHandler = (event) => {
+      if (event.key === "Escape") finish(!showCancel)
+    }
+
+    backdrop.querySelector("[data-app-modal-confirm]")?.addEventListener("click", () => finish(true))
+    backdrop.querySelector("[data-app-modal-cancel]")?.addEventListener("click", () => finish(false))
+    backdrop.querySelector("[data-app-modal-close]")?.addEventListener("click", () => finish(!showCancel))
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) finish(!showCancel)
+    })
+    document.addEventListener("keydown", escapeHandler)
+
+    document.body.appendChild(backdrop)
+    document.body.classList.add("is-modal-open")
+
+    const initialFocus = showCancel
+      ? backdrop.querySelector("[data-app-modal-cancel]")
+      : backdrop.querySelector("[data-app-modal-confirm]")
+    initialFocus?.focus()
+  })
+}
+
+function appModalConfirm(options) {
+  const config = typeof options === "string" ? { message: options } : (options || {})
+  return showAppModal({ ...config, showCancel: true })
+}
+
+function appModalAlert(options) {
+  const config = typeof options === "string" ? { message: options } : (options || {})
+  return showAppModal({ confirmLabel: "OK", ...config, showCancel: false })
+}
+
+function confirmWithAppModal(message, options = {}) {
+  if (window.AppModal && typeof window.AppModal.confirm === "function") {
+    return window.AppModal.confirm({ message, ...options })
+  }
+
+  return Promise.resolve(window.confirm(message))
+}
+
+function alertWithAppModal(message, options = {}) {
+  if (window.AppModal && typeof window.AppModal.alert === "function") {
+    return window.AppModal.alert({ message, ...options })
+  }
+
+  window.alert(message)
+  return Promise.resolve(true)
+}
+
+function installTurboModalConfirm() {
+  if (!window.Turbo || typeof window.Turbo.setConfirmMethod !== "function") return
+  if (window.Turbo.appModalConfirmInstalled) return
+
+  window.Turbo.setConfirmMethod((message) => {
+    return appModalConfirm({
+      title: "Confirm action",
+      message,
+      confirmLabel: "Continue",
+      cancelLabel: "Cancel"
+    })
+  })
+  window.Turbo.appModalConfirmInstalled = true
+}
+
+function initTurboFalseConfirmFallback() {
+  if (turboFalseConfirmFallbackInstalled) return
+  turboFalseConfirmFallbackInstalled = true
+
+  document.addEventListener("click", async (event) => {
+    const trigger = event.target.closest && event.target.closest("a[data-turbo-confirm][data-turbo='false']")
+    if (!trigger) return
+    if (trigger.dataset.appModalConfirmed === "true") {
+      delete trigger.dataset.appModalConfirmed
+      return
+    }
+
+    event.preventDefault()
+    const confirmed = await confirmWithAppModal(trigger.dataset.turboConfirm || "Are you sure you want to continue?")
+    if (!confirmed) return
+
+    trigger.dataset.appModalConfirmed = "true"
+    trigger.click()
+  }, true)
+}
+
+window.AppModal = {
+  show: showAppModal,
+  confirm: appModalConfirm,
+  alert: appModalAlert
+}
+
+installTurboModalConfirm()
+
+// -----------------------------
 // High-contrast mode
 // -----------------------------
 
@@ -254,7 +442,9 @@ function stopReading() {
 
 function startReading() {
   if (!("speechSynthesis" in window)) {
-    alert("Text-to-speech is not supported in this browser.")
+    alertWithAppModal("Text-to-speech is not supported in this browser.", {
+      title: "Read Aloud unavailable"
+    })
     stopReading()
     return
   }
@@ -267,7 +457,9 @@ function startReading() {
   ttsHighlightState.text = text
 
   if (!text || !text.trim()) {
-    alert("There is no readable content on this page.")
+    alertWithAppModal("There is no readable content on this page.", {
+      title: "Nothing to read"
+    })
     stopReading()
     return
   }
@@ -564,7 +756,7 @@ function initToggleSwitches() {
     input.dataset.togglePrev = input.checked ? "true" : "false"
     input.setAttribute("aria-checked", input.checked ? "true" : "false")
 
-    input.addEventListener("change", (e) => {
+    input.addEventListener("change", async () => {
       const nextChecked = input.checked
       const prevChecked = input.dataset.togglePrev === "true"
 
@@ -572,7 +764,17 @@ function initToggleSwitches() {
       const confirmOff = input.getAttribute("data-confirm-off")
       const message = nextChecked ? confirmOn : confirmOff
 
-      if (message && !window.confirm(message)) {
+      if (message) {
+        const confirmed = await confirmWithAppModal(message)
+        if (!confirmed) {
+          // Revert to previous value and do not submit.
+          input.checked = prevChecked
+          input.setAttribute("aria-checked", prevChecked ? "true" : "false")
+          return
+        }
+      }
+
+      if (message && input.checked !== nextChecked) {
         // Revert to previous value and do not submit.
         input.checked = prevChecked
         input.setAttribute("aria-checked", prevChecked ? "true" : "false")
@@ -942,6 +1144,8 @@ function initServerMarkdownPreviews() {
 // -----------------------------
 
 function initAccessibilityFeatures() {
+  installTurboModalConfirm()
+  initTurboFalseConfirmFallback()
   initHighContrastToggle()
   initTTSToggle()
   initSurveyBranching()

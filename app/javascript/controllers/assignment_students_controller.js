@@ -85,13 +85,13 @@ export default class extends Controller {
     this.refreshSelectionState()
   }
 
-  prepareAssignGroup(event) {
+  async prepareAssignGroup(event) {
     this.syncBulkFormFields()
 
     const selectedIds = this.selectedStudentIds()
     if (selectedIds.length === 0) {
       event.preventDefault()
-      window.alert("Select at least one student to assign.")
+      this.alert("Select at least one student to assign.", "No students selected")
       return
     }
 
@@ -103,18 +103,16 @@ export default class extends Controller {
     const surveyLabel = surveyNumber ? `Survey #${surveyNumber}` : "This survey"
     const summary = `You are about to assign ${surveyLabel} to ${selectedIds.length} student${selectedIds.length === 1 ? "" : "s"} in ${scope}. Proceed?`
 
-    if (!window.confirm(summary)) {
-      event.preventDefault()
-    }
+    await this.confirmSubmit(event, summary, "Assign students")
   }
 
-  prepareExtendDeadline(event) {
+  async prepareExtendDeadline(event) {
     this.syncBulkFormFields()
 
     const selectedIds = this.selectedStudentIds()
     if (selectedIds.length === 0) {
       event.preventDefault()
-      window.alert("Select at least one student to change deadline.")
+      this.alert("Select at least one student to change deadline.", "No students selected")
       return
     }
 
@@ -127,28 +125,57 @@ export default class extends Controller {
 
     const summary = `You are about to change student deadlines for ${selectedIds.length} student${selectedIds.length === 1 ? "" : "s"} in ${scope} to ${dueLabel}.\n\nThis updates selected students' assignment deadlines, not the survey deadline. To change the survey deadline for everyone, use Survey Builder.\n\nProceed?`
 
-    if (!window.confirm(summary)) {
-      event.preventDefault()
-    }
+    await this.confirmSubmit(event, summary, "Change deadlines")
   }
 
-  prepareUnassign(event) {
+  async prepareUnassign(event) {
     this.syncBulkFormFields()
 
     const selectedIds = this.selectedStudentIds()
     if (selectedIds.length === 0) {
       event.preventDefault()
-      window.alert("Select at least one student to unassign.")
+      this.alert("Select at least one student to unassign.", "No students selected")
       return
     }
 
-    const confirmed = window.confirm(
-      `You are about to unassign this survey for ${selectedIds.length} student${selectedIds.length === 1 ? "" : "s"}. Completed assignments will be skipped. Proceed?`
+    await this.confirmSubmit(
+      event,
+      `You are about to unassign this survey for ${selectedIds.length} student${selectedIds.length === 1 ? "" : "s"}. Completed assignments will be skipped. Proceed?`,
+      "Unassign students"
     )
+  }
 
-    if (!confirmed) {
-      event.preventDefault()
+  async confirmSubmit(event, message, title) {
+    const form = event.target
+    if (form && form.dataset.assignmentModalConfirmed === "true") {
+      delete form.dataset.assignmentModalConfirmed
+      return
     }
+
+    event.preventDefault()
+    event.stopImmediatePropagation()
+
+    const confirmed = window.AppModal && typeof window.AppModal.confirm === "function"
+      ? await window.AppModal.confirm({ title, message })
+      : window.confirm(message)
+
+    if (!confirmed || !form) return
+
+    form.dataset.assignmentModalConfirmed = "true"
+    if (typeof form.requestSubmit === "function") {
+      form.requestSubmit(event.submitter || undefined)
+    } else {
+      form.submit()
+    }
+  }
+
+  alert(message, title = "Notice") {
+    if (window.AppModal && typeof window.AppModal.alert === "function") {
+      window.AppModal.alert({ title, message })
+      return
+    }
+
+    window.alert(message)
   }
 
   clearFiltersAndSelection() {

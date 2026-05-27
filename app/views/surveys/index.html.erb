@@ -44,7 +44,7 @@
           <header class="c-resource-card__header">
             <div>
               <p class="c-resource-card__eyebrow"><%= survey.semester.presence || "Semester TBD" %></p>
-              <h2><%= link_to survey.title, survey_path(survey) %></h2>
+              <h2 class="c-h3"><%= link_to survey.title, survey_path(survey) %></h2>
               <% if (review_note = review_meetings_note(offering)).present? %>
                 <p class="c-help">
                   Review meetings: <%= review_note %>

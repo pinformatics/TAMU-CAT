@@ -171,7 +171,7 @@
 
         <section class="u-stack u-stack--sm u-border-top u-pt-lg">
           <header class="c-toolbar__row u-justify-between">
-            <h3 class="c-heading-inline">Course Contribution Report</h3>
+            <h3 class="c-h3 c-heading-inline">Course Contribution Report</h3>
             <span class="c-muted-meta"><%= @course_competency_report[:course_contributions].to_a.size %> rows</span>
           </header>
           <% if @course_competency_report[:course_contributions].present? %>
@@ -322,7 +322,7 @@
 
         <section class="u-stack u-stack--sm u-border-top u-pt-lg">
           <header class="c-toolbar__row u-justify-between">
-            <h3 class="c-heading-inline">Student Profile</h3>
+            <h3 class="c-h3 c-heading-inline">Student Profile</h3>
             <span class="c-muted-meta"><%= pluralize(portfolio_rows.size, "student") %></span>
           </header>
           <% if portfolio_rows.present? %>
@@ -370,7 +370,7 @@
       <% elsif active_report_tab == "domain_heatmap" %>
         <section class="u-stack u-stack--sm">
           <header class="c-toolbar__row u-justify-between">
-            <h3 class="c-heading-inline">Student/Course Heatmap</h3>
+            <h3 class="c-h3 c-heading-inline">Student/Course Heatmap</h3>
             <span class="c-muted-meta"><%= @course_competency_report[:student_course_heatmap].to_a.size %> rows</span>
           </header>
           <% if @course_competency_report[:student_course_heatmap].present? %>
@@ -437,7 +437,7 @@
 
         <section class="u-stack u-stack--sm u-border-top u-pt-lg">
           <header class="c-toolbar__row u-justify-between">
-            <h3 class="c-heading-inline">Student by Domain Heatmap</h3>
+            <h3 class="c-h3 c-heading-inline">Student by Domain Heatmap</h3>
             <span class="c-muted-meta"><%= @report_insights[:heatmap].to_a.size %> rows</span>
           </header>
           <% if @report_insights[:heatmap].present? %>

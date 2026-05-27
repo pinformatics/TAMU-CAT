@@ -1,7 +1,7 @@
 <%= form_with(model: question_response, local: true) do |form| %>
   <% if question_response.errors.any? %>
     <div style="color: red">
-      <h2><%= pluralize(question_response.errors.count, "error") %> prohibited this question_response from being saved:</h2>
+      <h2 class="c-panel-title"><%= pluralize(question_response.errors.count, "error") %> prohibited this question_response from being saved:</h2>
 
       <ul>
         <% question_response.errors.each do |error| %>

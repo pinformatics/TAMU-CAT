@@ -99,7 +99,7 @@
       <section class="u-stack u-stack--md">
         <div>
           <p class="c-eyebrow">Batch actions</p>
-          <h2 class="c-heading-inline">Next Steps</h2>
+          <h2 class="c-section-title c-heading-inline">Next Steps</h2>
         </div>
 
         <div class="u-grid" style="--u-grid-min: 260px">
@@ -267,7 +267,7 @@
       <% if target_review_required %>
         <details class="c-card c-card--flush c-section-group" open>
           <summary class="c-section-group__header">
-            <h2>Target Warnings Before Commit</h2>
+            <h2 class="c-section-title">Target Warnings Before Commit</h2>
             <span>
               <%= pluralize(@target_warning_summary.dig(:counts, :missing_course_targets).to_i, "missing uploaded target") %>
             </span>
@@ -284,7 +284,7 @@
             <% warning_groups.each do |title, rows| %>
               <% next if rows.blank? %>
               <section class="u-stack u-stack--sm">
-                <h3 class="c-heading-inline"><%= title %></h3>
+                <h3 class="c-h3 c-heading-inline"><%= title %></h3>
                 <div class="c-table-wrapper">
                   <table class="c-table c-table--sm">
                     <thead>
@@ -315,7 +315,7 @@
 
             <% if @target_warning_summary[:target_coverage].present? %>
               <section class="u-stack u-stack--sm">
-                <h3 class="c-heading-inline">Target Coverage</h3>
+                <h3 class="c-h3 c-heading-inline">Target Coverage</h3>
                 <div class="c-table-wrapper">
                   <table class="c-table c-table--sm">
                     <thead>
@@ -399,7 +399,7 @@
           <div class="u-responsive-split">
             <div>
               <p class="c-eyebrow">Course target attainment</p>
-              <h2 class="c-heading-inline">Target Performance by Course</h2>
+              <h2 class="c-section-title c-heading-inline">Target Performance by Course</h2>
               <p class="c-help">Met rate uses rows that have both an assessed level and a course target.</p>
             </div>
           </div>
@@ -436,7 +436,7 @@
         <section class="c-card c-card--tight u-stack u-stack--md">
           <div>
             <p class="c-eyebrow">Course competency review</p>
-            <h2 class="c-heading-inline">Actual vs Course Target by Competency</h2>
+            <h2 class="c-section-title c-heading-inline">Actual vs Course Target by Competency</h2>
             <p class="c-help">Use this to review what each course contributed and whether assessed levels met the uploaded course targets.</p>
           </div>
           <div class="c-table-wrapper">
@@ -493,7 +493,7 @@
       <section class="c-card c-card--tight u-stack u-stack--md">
         <div>
           <p class="c-eyebrow">Import review checklist</p>
-          <h2 class="c-heading-inline">Review in this order</h2>
+          <h2 class="c-section-title c-heading-inline">Review in this order</h2>
           <p class="c-help">Use this page from top to bottom. Fix failed values first, match pending students next, then review the evidence rows before approving or committing.</p>
         </div>
         <div class="u-grid" style="--u-grid-min: 220px">
@@ -518,7 +518,7 @@
 
       <details class="c-card c-card--flush c-section-group" open>
         <summary class="c-section-group__header">
-          <h2>1. File Summary</h2>
+          <h2 class="c-section-title">1. File Summary</h2>
           <span><%= pluralize(@files.size, "uploaded file") %></span>
         </summary>
         <div class="c-callout c-callout--info u-m-md">
@@ -575,7 +575,7 @@
 
       <details class="c-card c-card--flush c-section-group" <%= "open" if has_file_issues %>>
         <summary class="c-section-group__header">
-          <h2>2. File Diagnostics</h2>
+          <h2 class="c-section-title">2. File Diagnostics</h2>
           <span>Format, counts, and issues</span>
         </summary>
         <div class="u-stack u-stack--md u-p-md">
@@ -692,7 +692,7 @@
 
               <% if mappings.any? %>
                 <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Competency Source</h3>
+                  <h3 class="c-h3 c-heading-inline">Competency Source</h3>
                   <p class="c-help">Assignment mapping rules were used to convert Canvas scores into competency levels.</p>
                   <div class="c-table-wrapper">
                     <table class="c-table c-table--sm">
@@ -719,7 +719,7 @@
                 </div>
               <% elsif direct_competencies.any? %>
                 <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Competency Source</h3>
+                  <h3 class="c-h3 c-heading-inline">Competency Source</h3>
                   <p class="c-help">Competency columns were read directly from the uploaded file.</p>
                   <div class="c-table-wrapper">
                     <table class="c-table c-table--sm">
@@ -750,7 +750,7 @@
 
               <% if review_items.any? %>
                 <div class="u-mt-md">
-                  <h3 class="c-heading-inline">Review Items</h3>
+                  <h3 class="c-h3 c-heading-inline">Review Items</h3>
                   <ul class="c-modal__review-list">
                     <% review_items.each do |item| %>
                       <li>
@@ -774,7 +774,7 @@
 
       <details class="c-card c-card--flush c-section-group" <%= "open" if has_pending_matches %>>
         <summary class="c-section-group__header">
-          <h2>3. Pending Student Matching</h2>
+          <h2 class="c-section-title">3. Pending Student Matching</h2>
           <span><%= pluralize(@pending_rows.size, "competency row") %> needing a student</span>
         </summary>
         <% if @pending_rows.empty? %>
@@ -966,7 +966,7 @@
 
       <details class="c-card c-card--flush c-section-group" <%= "open" if has_evidence_rows && !has_pending_matches && !has_file_issues %>>
         <summary class="c-section-group__header">
-          <h2>4. Student Processed</h2>
+          <h2 class="c-section-title">4. Student Processed</h2>
           <span><%= pluralize(@evidences.size, "matched competency row") %> ready for review</span>
         </summary>
         <div class="c-callout c-callout--info u-m-md">

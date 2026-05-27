@@ -29,12 +29,12 @@
 
 <section class="report-export">
   <header class="report-export__header">
-    <h1>Health Program Analytics</h1>
+    <h1 class="c-page-title">Health Program Analytics</h1>
     <p>Generated at <%= payload[:generated_at]&.in_time_zone&.strftime("%B %d, %Y %I:%M %p %Z") %></p>
   </header>
 
   <section class="report-export__section">
-    <h2>Active Filters</h2>
+    <h2 class="c-section-title">Active Filters</h2>
     <div class="c-table-wrapper">
       <table class="c-table report-export__table">
       <tbody>
@@ -51,7 +51,7 @@
 
   <% if show_trend %>
     <section class="report-export__section">
-      <h2>Key Metrics</h2>
+      <h2 class="c-section-title">Key Metrics</h2>
       <div class="c-table-wrapper">
         <table class="c-table report-export__table">
         <thead>
@@ -88,10 +88,10 @@
 
   <% if show_domain_summary %>
     <section class="report-export__section">
-      <h2>Competency Summary</h2>
+      <h2 class="c-section-title">Competency Summary</h2>
       <% if competencies.any? %>
         <div class="chart-block">
-          <h3><%= percent_mode ? "% Meeting Program Target by Domain" : "Average Score by Domain" %></h3>
+          <h3 class="c-h3"><%= percent_mode ? "% Meeting Program Target by Domain" : "Average Score by Domain" %></h3>
         <div class="chart-legend">
           <span class="chart-legend__item">
             <span class="chart-legend__swatch" style="background-color: #500000"></span>
@@ -214,9 +214,9 @@
 
   <% if show_competency_detail && competency_items.any? %>
     <section class="report-export__section">
-      <h2>Competency Detail</h2>
+      <h2 class="c-section-title">Competency Detail</h2>
       <div class="chart-block">
-        <h3><%= percent_mode ? "% Meeting Program Target by Competency" : "Average Score by Competency" %></h3>
+        <h3 class="c-h3"><%= percent_mode ? "% Meeting Program Target by Competency" : "Average Score by Competency" %></h3>
         <div class="chart-legend">
           <span class="chart-legend__item">
             <span class="chart-legend__swatch" style="background-color: #500000"></span>
@@ -325,18 +325,18 @@
     </section>
   <% elsif show_competency_detail %>
     <section class="report-export__section">
-      <h2>Competency Detail</h2>
+      <h2 class="c-section-title">Competency Detail</h2>
       <p class="report-export__note">No competency detail available for the selected filters.</p>
     </section>
   <% end %>
 
   <% if show_track %>
     <section class="report-export__section">
-      <h2>Track Achievement</h2>
+      <h2 class="c-section-title">Track Achievement</h2>
       <% tracks = Array(payload[:track_summary]) %>
       <% if tracks.any? %>
         <div class="chart-block">
-          <h3>% All Competency Achieved by Track</h3>
+          <h3 class="c-h3">% All Competency Achieved by Track</h3>
           <div class="chart-legend">
             <span class="chart-legend__item">
               <span class="chart-legend__swatch" style="display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 999px; background-color: <%= status_colors[:achieved] %>"></span>
@@ -428,7 +428,7 @@
 
   <% if show_employment %>
     <section class="report-export__section">
-      <h2>Employment Across Respondents</h2>
+      <h2 class="c-section-title">Employment Across Respondents</h2>
 
       <% employment_status_counts = Array(employment[:status_counts]) %>
       <% employment_total = employment[:total_respondents].to_i %>
@@ -461,7 +461,7 @@
 
       <% if employment_status_counts.any? %>
         <div class="chart-block" style="margin-bottom: 1.25rem;">
-          <h3>Employment Status Breakdown</h3>
+          <h3 class="c-h3">Employment Status Breakdown</h3>
           <div class="chart-legend">
             <% employment_status_counts.each do |entry| %>
               <span class="chart-legend__item">
@@ -488,7 +488,7 @@
 
       <% if hours_labels.any? %>
         <div class="chart-block" style="margin-bottom: 1.25rem;">
-          <h3>Hours Per Week</h3>
+          <h3 class="c-h3">Hours Per Week</h3>
           <div class="chart-horizontal">
             <% hours_labels.zip(hours_data).each do |label, count| %>
               <% count_value = count.to_i %>
@@ -507,7 +507,7 @@
 
       <% if flexibility_labels.any? %>
         <div class="chart-block" style="margin-bottom: 1.25rem;">
-          <h3>Work Schedule Flexibility</h3>
+          <h3 class="c-h3">Work Schedule Flexibility</h3>
           <div class="chart-horizontal">
             <% flexibility_labels.zip(flexibility_data).each do |label, count| %>
               <% count_value = count.to_i %>
@@ -587,12 +587,12 @@
 
   <% if show_trend %>
     <section class="report-export__section">
-      <h2>Monthly Trend</h2>
+      <h2 class="c-section-title">Monthly Trend</h2>
 
       <% timeline_points = Array(payload.dig(:benchmark, :timeline)) %>
       <% if timeline_points.any? %>
         <div class="chart-block" style="margin-bottom: 1.25rem;">
-          <h3><%= percent_mode ? "% Meeting Program Target Over Time" : "Average Score Over Time" %></h3>
+          <h3 class="c-h3"><%= percent_mode ? "% Meeting Program Target Over Time" : "Average Score Over Time" %></h3>
           <div class="chart-legend">
             <span class="chart-legend__item">
               <span class="chart-legend__swatch" style="background-color: #500000"></span>

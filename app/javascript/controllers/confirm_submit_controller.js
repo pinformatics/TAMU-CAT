@@ -5,11 +5,31 @@ export default class extends Controller {
     message: String
   }
 
-  confirm(event) {
+  connect() {
+    this.confirmed = false
+  }
+
+  async confirm(event) {
+    if (this.confirmed) {
+      this.confirmed = false
+      return
+    }
+
     const message = this.messageValue || "Are you sure you want to continue?"
-    if (!window.confirm(message)) {
-      event.preventDefault()
-      event.stopImmediatePropagation()
+    event.preventDefault()
+    event.stopImmediatePropagation()
+
+    const confirmed = window.AppModal && typeof window.AppModal.confirm === "function"
+      ? await window.AppModal.confirm({ message, title: "Confirm action" })
+      : window.confirm(message)
+
+    if (!confirmed) return
+
+    this.confirmed = true
+    if (typeof this.element.requestSubmit === "function") {
+      this.element.requestSubmit(event.submitter || undefined)
+    } else {
+      this.element.submit()
     }
   }
 }

@@ -61,7 +61,8 @@ class Admin::SurveysController < Admin::BaseController
     active_scope = active_scope.order(Arel.sql("#{order_expression} #{@sort_direction}"))
     active_scope = active_scope.order("surveys.id ASC")
 
-    @active_surveys = active_scope.preload(:track_assignments).load
+    @active_surveys = active_scope.preload(:track_assignments, :program_semester).load
+    @active_survey_groups = surveys_grouped_by_semester(@active_surveys)
 
     @track_filter_options = (
       Survey.track_options +
@@ -69,7 +70,8 @@ class Admin::SurveysController < Admin::BaseController
     ).compact.map(&:to_s).reject(&:blank?).uniq.sort
     @unassigned_track_token = unassigned_track_token
 
-    @archived_surveys = Survey.archived.includes(:categories, :track_assignments, :creator).order(updated_at: :desc)
+    @archived_surveys = Survey.archived.includes(:categories, :track_assignments, :creator, :program_semester).order(updated_at: :desc)
+    @archived_survey_groups = surveys_grouped_by_semester(@archived_surveys)
     @recent_logs = SurveyChangeLog.recent.includes(:survey, :admin).limit(12)
   end
 
@@ -586,6 +588,22 @@ class Admin::SurveysController < Admin::BaseController
 
   def copy_survey_params
     params.fetch(:survey_copy, ActionController::Parameters.new).permit(:target_program_semester_id)
+  end
+
+  def surveys_grouped_by_semester(surveys)
+    surveys
+      .group_by { |survey| survey.program_semester&.name.presence || survey.semester.presence || "Unscheduled" }
+      .sort_by { |semester_name, rows| semester_group_sort_key(semester_name, rows.first) }
+  end
+
+  def semester_group_sort_key(semester_name, survey)
+    if (match = semester_name.to_s.match(/\A(\w+)\s+(\d{4})\z/))
+      term_order = { "winter" => 0, "spring" => 1, "summer" => 2, "fall" => 3 }[match[1].downcase] || 99
+      return [ -match[2].to_i, -term_order, semester_name.to_s ]
+    end
+
+    timestamp = survey&.updated_at&.to_time&.to_i || 0
+    [ -timestamp, semester_name.to_s ]
   end
 
   # Phase 1 single-source transition:

@@ -6,14 +6,14 @@
 
 <section class="u-w-full max-w-4xl c-card c-card--spacious text-center">
   <%= image_tag app_icon_asset, alt: app_full_name, class: "c-app-logo-lockup u-mx-auto" %>
-  <h1 class="mt-lg text-3xl font-semibold text-primary md:text-4xl"><%= app_full_name %></h1>
+  <h1 class="c-page-title c-page-title--brand mt-lg"><%= app_full_name %></h1>
   <p class="mt-4 text-base text-slate-600 md:text-lg">Competency assessment tracking for student and advisor access.</p>
 </section>
 
 <section id="login-sections" class="u-w-full max-w-5xl">
   <div class="flex u-w-full flex-col gap-10 c-card c-card--spacious text-center md:flex-row md:items-stretch md:gap-12">
     <div id="student-login" class="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-4 md:px-10">
-      <h2 class="text-2xl font-semibold text-slate-800">Student Login</h2>
+      <h2 class="c-h2">Student Login</h2>
       <p class="u-max-w-sm text-sm leading-6 text-slate-600">Access your surveys, track requirements, and stay informed on program updates.</p>
       <%= form_with url: user_google_oauth2_omniauth_authorize_path,
                     method: :post,
@@ -30,7 +30,7 @@
     <div class="mx-auto h-px w-3/4 bg-slate-200 md:hidden"></div>
 
     <div id="advisor-login" class="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-4 md:px-10">
-      <h2 class="text-2xl font-semibold text-slate-800">Advisor Login</h2>
+      <h2 class="c-h2">Advisor Login</h2>
       <p class="u-max-w-sm text-sm leading-6 text-slate-600">Manage student rosters, review feedback, and monitor survey responses.</p>
       <%= form_with url: user_google_oauth2_omniauth_authorize_path,
                     method: :post,
