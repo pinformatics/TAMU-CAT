@@ -1,11 +1,38 @@
+<%
+  rating_sources = { self: "Self", advisor: "Advisor", course: "Course" }
+  active_filters = []
+  active_filters << "Search: #{@filters[:q]}" if @filters[:q].present?
+  active_filters << "Track: #{@filters[:track]}" if @filters[:track].present?
+  active_filters << "Class: #{@filters[:program_year]}" if @filters[:program_year].present?
+  active_filters << "Advisor: #{@filter_options[:advisors].find { |advisor| advisor[:id].to_s == @filters[:advisor_id].to_s }&.dig(:name) }" if @filters[:advisor_id].present?
+  active_filters << "Domain: #{@filters[:domain]}" if @filters[:domain].present?
+  active_filters << "Semester: #{@filters[:semester]}" if @filters[:semester].present?
+  active_filters << "Status: #{Array(@filter_options[:student_statuses]).find { |label, value| value.to_s == @filters[:student_status].to_s }&.first}" if @filters[:student_status].present?
+  active_filters << pluralize(@filters[:competencies].size, "selected competency") if @filters[:competencies].present?
+
+  rating_totals = { self: 0, advisor: 0, course: 0, below_target: 0 }
+  @students.each do |student|
+    student[:ratings].values.each do |ratings|
+      target = ratings[:program_target]
+      rating_sources.keys.each do |source|
+        value = ratings[:"#{source}_rating"]
+        next if value.nil?
+
+        rating_totals[source] += 1
+        rating_totals[:below_target] += 1 if target.present? && value.to_f < target.to_f
+      end
+    end
+  end
+%>
+
 <main class="c-main c-main--dashboard">
-  <div class="c-container c-container--dashboard c-page">
+  <div class="c-container c-container--wide c-page">
     <section class="c-card c-card--brand">
       <header class="c-page-header">
         <div>
           <p class="c-eyebrow">Competency review</p>
           <h1 class="c-page-title c-page-title--brand">Competencies</h1>
-          <p class="c-page-subtitle">Compare student self-ratings, advisor ratings, and course-derived ratings across all 17 competencies.</p>
+          <p class="c-page-subtitle">Compare self, advisor, and course-derived ratings across all reportable competencies.</p>
         </div>
         <div class="u-actions">
           <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
@@ -20,269 +47,321 @@
       </header>
     </section>
 
-    <section class="c-card c-card--spacious u-stack u-stack--xl">
-    <section class="u-stack u-stack--md">
-    <% if current_user&.role_admin? %>
-      <div class="c-card c-card--flush">
-        <div class="c-panel-header c-panel-header--with-border">
-          <div class="c-filter-bar">
-            <div class="c-filter-bar__field">
-              <label class="c-label">Course competency rule</label>
-              <%= form_with url: course_rule_admin_competencies_path, method: :patch, local: true, data: { turbo: false }, class: "u-actions u-actions--start u-items-end" do %>
-                <div class="c-select-wrapper">
-                  <%= select_tag :course_competency_rule,
-                    options_for_select(@course_competency_rule_options.map { |option| [option[:label], option[:key]] }, @active_course_competency_rule),
-                    class: "c-select" %>
-                </div>
-                <%= submit_tag "Save rule", class: button_classes(:secondary) %>
-              <% end %>
+    <section class="c-stats-grid c-stats-grid--compact" aria-label="Competency matrix summary">
+      <div class="c-stat c-stat--muted">
+        <div class="c-stat__label">Students</div>
+        <strong class="c-value c-value--xl"><%= @students.size %></strong>
+        <div class="c-stat__subtext">Shown in matrix</div>
+      </div>
+      <div class="c-stat c-stat--muted">
+        <div class="c-stat__label">Competencies</div>
+        <strong class="c-value c-value--xl"><%= @visible_competency_count %></strong>
+        <div class="c-stat__subtext"><%= pluralize(@domains.size, "domain") %></div>
+      </div>
+      <div class="c-stat c-stat--success">
+        <div class="c-stat__label">Course ratings</div>
+        <strong class="c-value c-value--xl"><%= rating_totals[:course] %></strong>
+        <div class="c-stat__subtext"><%= @active_course_competency_rule_label %> rule</div>
+      </div>
+      <div class="c-stat <%= rating_totals[:below_target].positive? ? 'c-stat--warning' : 'c-stat--muted' %>">
+        <div class="c-stat__label">Below target</div>
+        <strong class="c-value c-value--xl"><%= rating_totals[:below_target] %></strong>
+        <div class="c-stat__subtext">Across visible scores</div>
+      </div>
+    </section>
+
+    <section class="c-card c-card--compact u-stack u-stack--md">
+      <header class="c-page-header c-page-header--compact">
+        <div>
+          <p class="c-eyebrow">Controls</p>
+          <h2 class="c-section-title">Review Scope</h2>
+          <p class="c-page-subtitle">Set the course rule, filter the student set, then open a student row for the source-by-competency matrix.</p>
+        </div>
+      </header>
+
+      <% if current_user&.role_admin? %>
+        <div class="c-callout c-callout--info">
+          <div class="u-actions u-actions--split">
+            <div>
+              <p>
+                <span class="c-callout__title">Course competency rule:</span>
+                Course-derived ratings currently use <strong><%= @active_course_competency_rule_label %></strong>.
+              </p>
+              <p class="c-help">Global setting applied to course-derived competency values for all users.</p>
             </div>
-            <p class="c-help">Global setting applied to course-derived competency values for all users.</p>
+            <%= form_with url: course_rule_admin_competencies_path, method: :patch, local: true, data: { turbo: false }, class: "u-actions u-actions--start u-items-end" do %>
+              <div class="c-select-wrapper">
+                <%= select_tag :course_competency_rule,
+                  options_for_select(@course_competency_rule_options.map { |option| [option[:label], option[:key]] }, @active_course_competency_rule),
+                  class: "c-select" %>
+              </div>
+              <%= submit_tag "Save rule", class: button_classes(:secondary) %>
+            <% end %>
           </div>
         </div>
-      </div>
-    <% end %>
+      <% end %>
 
-    <%= form_with url: admin_competencies_path, method: :get, local: true, data: { turbo: false } do %>
-      <div class="c-card c-card--flush">
-        <div class="c-panel-header c-panel-header--with-border">
-          <div class="u-stack u-stack--sm">
-            <div class="u-actions u-actions--split">
-              <div>
-                <h2 class="c-section-title c-heading-inline">Filter students</h2>
-                <p class="c-help">Display all students by default, or narrow the matrix with one quick filter row.</p>
-              </div>
-            </div>
-
-            <div class="c-card c-card--tight">
-              <div class="c-filter-bar">
-                <div class="c-filter-bar__field c-filter-bar__field--wide">
-                  <label class="c-label">Student</label>
-                  <%= text_field_tag :q, @filters[:q], placeholder: "Name, email, UIN, or student ID", class: "c-input c-search-input u-w-full" %>
-                </div>
-
-                <div class="c-filter-bar__field c-filter-bar__field--wide">
-                  <label class="c-label">Competency</label>
-                  <details class="c-popover-anchor u-hover-dropdown">
-                    <summary class="c-select u-flex u-min-h-control u-cursor-pointer u-list-none u-items-center u-justify-between u-gap-sm">
-                      <span class="u-min-w-0 u-overflow-hidden u-text-ellipsis u-whitespace-nowrap">
-                        <% if @filters[:competencies].present? %>
-                          <%= pluralize(@filters[:competencies].size, "competency") %> selected
-                        <% else %>
-                          All competencies
-                        <% end %>
-                      </span>
-                    </summary>
-
-                    <div class="c-popover c-popover--wide u-hover-dropdown__panel u-popover-down-left">
-                      <% @filter_options[:competencies].group_by { |entry| entry[:domain] }.each do |domain_name, entries| %>
-                        <div class="c-option-group">
-                          <p class="c-option-group__title"><%= domain_name %></p>
-                          <div class="u-stack u-stack--sm">
-                            <% entries.each do |entry| %>
-                              <% checkbox_id = "competency_#{entry[:title].parameterize(separator: '_')}" %>
-                              <label class="c-choice-label c-choice-label--top" for="<%= checkbox_id %>">
-                                <%= check_box_tag "competencies[]",
-                                                  entry[:title],
-                                                  @filters[:competencies].include?(entry[:title]),
-                                                  id: checkbox_id,
-                                                  class: "c-choice" %>
-                                <span><%= entry[:title] %></span>
-                              </label>
-                            <% end %>
-                          </div>
-                        </div>
-                      <% end %>
-                    </div>
-                  </details>
-                </div>
-
-                <div class="c-filter-bar__field">
-                  <label class="c-label">Track</label>
-                  <div class="c-select-wrapper">
-                    <%= select_tag :track,
-                      options_for_select([["All tracks", ""]] + @filter_options[:tracks].map { |track| [track, track] }, @filters[:track]),
-                      class: "c-select u-w-full" %>
-                  </div>
-                </div>
-
-                <div class="c-filter-bar__field">
-                  <label class="c-label">Class</label>
-                  <div class="c-select-wrapper">
-                    <%= select_tag :program_year,
-                      options_for_select([["All classes", ""]] + @filter_options[:program_years].map { |year| ["Class of #{year}", year] }, @filters[:program_year]),
-                      class: "c-select u-w-full" %>
-                  </div>
-                </div>
-
-                <div class="c-filter-bar__field">
-                  <label class="c-label">Advisor</label>
-                  <div class="c-select-wrapper">
-                    <%= select_tag :advisor_id,
-                      options_for_select([["All advisors", ""]] + @filter_options[:advisors].map { |advisor| [advisor[:name], advisor[:id]] }, @filters[:advisor_id]),
-                      class: "c-select u-w-full" %>
-                  </div>
-                </div>
-
-                <div class="c-filter-bar__field">
-                  <label class="c-label">Domain</label>
-                  <div class="c-select-wrapper">
-                    <%= select_tag :domain,
-                      options_for_select([["All domains", ""]] + @filter_options[:domains].map { |domain| [domain, domain] }, @filters[:domain]),
-                      class: "c-select u-w-full" %>
-                  </div>
-                </div>
-
-                <div class="c-filter-bar__field">
-                  <label class="c-label">Semester</label>
-                  <div class="c-select-wrapper">
-                    <%= select_tag :semester,
-                      options_for_select([["All semesters", ""]] + @filter_options[:semesters].map { |semester| [semester, semester] }, @filters[:semester]),
-                      class: "c-select u-w-full" %>
-                  </div>
-                </div>
-
-                <div class="c-filter-bar__field">
-                  <label class="c-label">Student status</label>
-                  <div class="c-select-wrapper">
-                    <%= select_tag :student_status,
-                      options_for_select(@filter_options[:student_statuses], @filters[:student_status]),
-                      class: "c-select u-w-full" %>
-                  </div>
-                </div>
-
-                <div class="u-actions u-actions--start">
-                  <%= submit_tag "Apply", class: button_classes(:secondary) %>
-                  <%= link_to "Clear", admin_competencies_path, class: button_classes(:ghost), data: { turbo: false } %>
-                </div>
-              </div>
-            </div>
-          </div>
+      <%= form_with url: admin_competencies_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
+        <div class="c-filter-bar__field c-filter-bar__field--wide">
+          <label class="c-label">Student</label>
+          <%= text_field_tag :q, @filters[:q], placeholder: "Name, email, UIN, or student ID", class: "c-input c-search-input u-w-full" %>
         </div>
-      </div>
-    <% end %>
 
-    <div class="c-card c-card--tight c-card--muted u-actions u-actions--split">
-      <div class="u-stack u-stack--xs">
-        <p class="c-help">
-          Showing <span class="c-strong"><%= pluralize(@students.size, "student") %></span> across <span class="c-strong"><%= pluralize(@visible_competency_count, "competency") %></span>.
-        </p>
-        <p class="c-eyebrow">
-          <% if @filters[:semester].present? %>
-            Self, advisor, and course ratings are filtered to <%= @filters[:semester] %>. Course ratings use the global <%= @active_course_competency_rule_label %> rule across reportable imports for that semester.
-          <% else %>
-            Ratings use the latest self/advisor entry. Course ratings use the global <%= @active_course_competency_rule_label %> rule across reportable imports.
-          <% end %>
-        </p>
-      </div>
-      <div class="u-actions u-actions--start">
-        <span class="c-score-pill c-score-pill--self">Self</span>
-        <span class="c-score-pill c-score-pill--advisor">Advisor</span>
-        <span class="c-score-pill c-score-pill--course">Course</span>
-      </div>
-    </div>
-
-    <% if @students.empty? %>
-      <div class="c-card c-card--tight c-card--dashed c-empty-state">
-        <p class="c-empty-state__body">No students match the current filters.</p>
-      </div>
-    <% elsif @domains.empty? %>
-      <div class="c-card c-card--tight c-card--dashed c-empty-state">
-        <p class="c-empty-state__body">No competencies match the current domain or competency filters.</p>
-      </div>
-    <% else %>
-      <div class="u-stack u-stack--sm">
-        <% @students.each do |student| %>
-          <details class="c-card c-card--compact u-overflow-hidden">
-            <summary class="c-disclosure-summary c-disclosure-summary--compact u-items-center u-gap-sm">
-              <span class="u-flex u-flex-wrap u-min-w-0 u-flex-1 u-items-center u-gap-sm">
-                <span class="u-flex-column u-min-w-0 u-flex-1">
-                  <span class="c-table__title"><%= student[:name] %></span>
-
-                  <% if student[:email].present? %>
-                  <span class="c-table__meta u-overflow-hidden u-text-ellipsis u-whitespace-nowrap"><%= student[:email] %></span>
-                  <% end %>
-                </span>
-
-                <span class="u-actions u-actions--start u-gap-sm">
-                  <% unless student[:current_record] %>
-                    <span class="c-pill c-pill--muted"><%= student[:lifecycle_label] %></span>
-                  <% end %>
-                  <span class="c-pill c-pill--muted"><%= student[:track].presence || "No track" %></span>
-                  <span class="c-pill c-pill--muted"><%= student[:program_year].present? ? "Class of #{student[:program_year]}" : "No class" %></span>
-                  <span class="c-pill c-pill--muted"><%= student[:advisor_name].presence || "Unassigned advisor" %></span>
-                </span>
-              </span>
-
-              <span class="u-flex u-shrink-0 u-items-center">
-                <%= link_to "Details",
-                            admin_competency_path(student[:id], semester: @filters[:semester].presence),
-                            class: button_classes(:secondary, extra_classes: "btn-sm"),
-                            data: { turbo: false } %>
+        <div class="c-filter-bar__field c-filter-bar__field--wide">
+          <label class="c-label">Competency</label>
+          <details class="c-popover-anchor u-hover-dropdown">
+            <summary class="c-select u-flex u-min-h-control u-cursor-pointer u-list-none u-items-center u-justify-between u-gap-sm">
+              <span class="u-min-w-0 u-overflow-hidden u-text-ellipsis u-whitespace-nowrap">
+                <% if @filters[:competencies].present? %>
+                  <%= pluralize(@filters[:competencies].size, "competency") %> selected
+                <% else %>
+                  All competencies
+                <% end %>
               </span>
             </summary>
 
-            <div class="c-table-wrapper">
-              <table class="c-table c-table--sm c-table--matrix">
-                <thead>
-                  <tr>
-                    <th class="c-table__sticky-cell c-table__sticky-cell--header c-table__source-cell" rowspan="2">Source</th>
-                    <% @domains.each do |domain| %>
-                      <th class="c-table__domain-header"
-                          colspan="<%= domain[:competencies].size %>">
-                        <%= domain[:name] %>
-                      </th>
+            <div class="c-popover c-popover--wide u-hover-dropdown__panel u-popover-down-left">
+              <% @filter_options[:competencies].group_by { |entry| entry[:domain] }.each do |domain_name, entries| %>
+                <div class="c-option-group">
+                  <p class="c-option-group__title"><%= domain_name %></p>
+                  <div class="u-stack u-stack--sm">
+                    <% entries.each do |entry| %>
+                      <% checkbox_id = "competency_#{entry[:title].parameterize(separator: '_')}" %>
+                      <label class="c-choice-label c-choice-label--top" for="<%= checkbox_id %>">
+                        <%= check_box_tag "competencies[]",
+                                          entry[:title],
+                                          @filters[:competencies].include?(entry[:title]),
+                                          id: checkbox_id,
+                                          class: "c-choice" %>
+                        <span><%= entry[:title] %></span>
+                      </label>
                     <% end %>
-                  </tr>
-                  <tr>
-                    <% @domains.each do |domain| %>
-                      <% domain[:competencies].each do |competency| %>
-                        <% ratings = student[:ratings][competency[:title]] || {} %>
-                        <% program_target = ratings[:program_target] %>
-                        <th class="c-table__competency-header">
-                          <span class="c-table__competency-title"><%= competency[:title] %></span>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </details>
+        </div>
+
+        <div class="c-filter-bar__field">
+          <label class="c-label">Track</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :track,
+              options_for_select([["All tracks", ""]] + @filter_options[:tracks].map { |track| [track, track] }, @filters[:track]),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div class="c-filter-bar__field">
+          <label class="c-label">Class</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :program_year,
+              options_for_select([["All classes", ""]] + @filter_options[:program_years].map { |year| ["Class of #{year}", year] }, @filters[:program_year]),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div class="c-filter-bar__field">
+          <label class="c-label">Advisor</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :advisor_id,
+              options_for_select([["All advisors", ""]] + @filter_options[:advisors].map { |advisor| [advisor[:name], advisor[:id]] }, @filters[:advisor_id]),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div class="c-filter-bar__field">
+          <label class="c-label">Domain</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :domain,
+              options_for_select([["All domains", ""]] + @filter_options[:domains].map { |domain| [domain, domain] }, @filters[:domain]),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div class="c-filter-bar__field">
+          <label class="c-label">Semester</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :semester,
+              options_for_select([["All semesters", ""]] + @filter_options[:semesters].map { |semester| [semester, semester] }, @filters[:semester]),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div class="c-filter-bar__field">
+          <label class="c-label">Student status</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :student_status,
+              options_for_select(@filter_options[:student_statuses], @filters[:student_status]),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+
+        <div class="u-actions u-actions--start">
+          <%= submit_tag "Apply", class: button_classes(:secondary) %>
+          <%= link_to "Clear", admin_competencies_path, class: button_classes(:ghost), data: { turbo: false } %>
+        </div>
+      <% end %>
+
+      <div class="c-card c-card--tight c-card--muted u-stack u-stack--sm">
+        <div class="u-actions u-actions--split">
+          <div>
+            <p class="c-help">
+              Showing <span class="c-strong"><%= pluralize(@students.size, "student") %></span>
+              across <span class="c-strong"><%= pluralize(@visible_competency_count, "competency") %></span>.
+            </p>
+            <p class="c-help">
+              <% if @filters[:semester].present? %>
+                Self, advisor, and course ratings are filtered to <%= @filters[:semester] %>.
+              <% else %>
+                Ratings use the latest self/advisor entry and all reportable course imports.
+              <% end %>
+            </p>
+          </div>
+          <div class="u-actions u-actions--start">
+            <span class="c-score-pill c-score-pill--self">Self</span>
+            <span class="c-score-pill c-score-pill--advisor">Advisor</span>
+            <span class="c-score-pill c-score-pill--course">Course</span>
+          </div>
+        </div>
+
+        <% if active_filters.any? %>
+          <div class="u-actions u-actions--start u-gap-xs">
+            <% active_filters.each do |filter_label| %>
+              <span class="c-pill c-pill--muted"><%= filter_label %></span>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    </section>
+
+    <section class="c-card c-card--compact u-stack u-stack--md">
+      <header class="c-page-header c-page-header--compact">
+        <div>
+          <p class="c-eyebrow">Matrix</p>
+          <h2 class="c-section-title">Student Competency Matrix</h2>
+          <p class="c-page-subtitle">Open a student row to compare source ratings. Hover a score for target context.</p>
+        </div>
+      </header>
+
+      <% if @students.empty? %>
+        <div class="c-card c-card--tight c-card--dashed c-empty-state">
+          <p class="c-empty-state__body">No students match the current filters.</p>
+        </div>
+      <% elsif @domains.empty? %>
+        <div class="c-card c-card--tight c-card--dashed c-empty-state">
+          <p class="c-empty-state__body">No competencies match the current domain or competency filters.</p>
+        </div>
+      <% else %>
+        <div class="u-stack u-stack--sm">
+          <% @students.each do |student| %>
+            <%
+              student_rating_values = student[:ratings].values
+              student_evidence_count = 0
+              student_below_target_count = 0
+
+              student_rating_values.each do |ratings|
+                target = ratings[:program_target]
+                rating_sources.keys.each do |source|
+                  value = ratings[:"#{source}_rating"]
+                  next if value.nil?
+
+                  student_evidence_count += 1
+                  student_below_target_count += 1 if target.present? && value.to_f < target.to_f
+                end
+              end
+            %>
+            <details class="c-card c-card--flush u-overflow-hidden" <%= "open" if @students.size == 1 %>>
+              <summary class="c-disclosure-summary c-disclosure-summary--compact c-disclosure-summary--stacked">
+                <span class="u-flex u-flex-wrap u-min-w-0 u-flex-1 u-items-center u-gap-sm">
+                  <span class="u-flex-column u-min-w-0 u-flex-1">
+                    <span class="c-table__title"><%= student[:name] %></span>
+
+                    <% if student[:email].present? %>
+                      <span class="c-table__meta u-overflow-hidden u-text-ellipsis u-whitespace-nowrap"><%= student[:email] %></span>
+                    <% end %>
+                  </span>
+
+                  <span class="u-actions u-actions--start u-gap-xs">
+                    <% unless student[:current_record] %>
+                      <span class="c-pill c-pill--muted"><%= student[:lifecycle_label] %></span>
+                    <% end %>
+                    <span class="c-pill c-pill--muted"><%= student[:track].presence || "No track" %></span>
+                    <span class="c-pill c-pill--muted"><%= student[:program_year].present? ? "Class of #{student[:program_year]}" : "No class" %></span>
+                    <span class="c-pill c-pill--muted"><%= student[:advisor_name].presence || "Unassigned advisor" %></span>
+                  </span>
+                </span>
+
+                <span class="u-actions u-actions--start u-shrink-0">
+                  <span class="c-status-pill"><%= pluralize(student_evidence_count, "score") %></span>
+                  <% if student_below_target_count.positive? %>
+                    <span class="c-status-pill c-status-pill--warning"><%= student_below_target_count %> below target</span>
+                  <% end %>
+                  <%= link_to "Details",
+                              admin_competency_path(student[:id], semester: @filters[:semester].presence),
+                              class: button_classes(:secondary, extra_classes: "btn-sm"),
+                              data: { turbo: false } %>
+                </span>
+              </summary>
+
+              <div class="c-table-wrapper">
+                <table class="c-table c-table--sm c-table--matrix">
+                  <thead>
+                    <tr>
+                      <th class="c-table__sticky-cell c-table__sticky-cell--header c-table__source-cell" rowspan="2">Source</th>
+                      <% @domains.each do |domain| %>
+                        <th class="c-table__domain-header"
+                            colspan="<%= domain[:competencies].size %>">
+                          <%= domain[:name] %>
                         </th>
                       <% end %>
-                    <% end %>
-                  </tr>
-                </thead>
-                <tbody>
-                  <% { self: "Self", advisor: "Advisor", course: "Course" }.each do |source, label| %>
-                    <% source_row_class = { self: "c-table-row--self", advisor: "c-table-row--advisor", course: "c-table-row--course" }[source] %>
-                    <tr class="<%= source_row_class %>">
-                      <th class="c-table__sticky-cell c-table__source-cell">
-                        <span class="c-score-pill c-score-pill--<%= source %> u-w-full"><%= label %></span>
-                      </th>
+                    </tr>
+                    <tr>
                       <% @domains.each do |domain| %>
                         <% domain[:competencies].each do |competency| %>
-                          <% ratings = student[:ratings][competency[:title]] || {} %>
-                          <% program_target = ratings[:program_target] %>
-                          <% value = ratings[:"#{source}_rating"] %>
-                          <td class="c-table__score-cell">
-                            <span class="c-popover-anchor u-hover-dropdown u-inline-block">
-                              <span class="c-score-pill c-score-pill--<%= source %> <%= competency_rating_target_class(value, program_target) %>">
-                                <%= competency_matrix_rating(value) %>
-                              </span>
-                              <span class="c-popover c-popover--tooltip u-popover-down-right u-hover-dropdown__panel">
-                                <span class="c-popover__title"><%= competency[:title] %></span>
-                                <span class="c-popover__body">
-                                  <%= competency_rating_target_title(value, program_target, source: source) %>
-                                </span>
-                              </span>
-                            </span>
-                          </td>
+                          <th class="c-table__competency-header">
+                            <span class="c-table__competency-title"><%= competency[:title] %></span>
+                          </th>
                         <% end %>
                       <% end %>
                     </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          </details>
-        <% end %>
-      </div>
-    <% end %>
-    </section>
+                  </thead>
+                  <tbody>
+                    <% rating_sources.each do |source, label| %>
+                      <% source_row_class = { self: "c-table-row--self", advisor: "c-table-row--advisor", course: "c-table-row--course" }[source] %>
+                      <tr class="<%= source_row_class %>">
+                        <th class="c-table__sticky-cell c-table__source-cell">
+                          <span class="c-score-pill c-score-pill--<%= source %> u-w-full"><%= label %></span>
+                        </th>
+                        <% @domains.each do |domain| %>
+                          <% domain[:competencies].each do |competency| %>
+                            <% ratings = student[:ratings][competency[:title]] || {} %>
+                            <% program_target = ratings[:program_target] %>
+                            <% value = ratings[:"#{source}_rating"] %>
+                            <td class="c-table__score-cell">
+                              <span class="c-popover-anchor u-hover-dropdown u-inline-block">
+                                <span class="c-score-pill c-score-pill--<%= source %> <%= competency_rating_target_class(value, program_target) %>">
+                                  <%= competency_matrix_rating(value) %>
+                                </span>
+                                <span class="c-popover c-popover--tooltip u-popover-down-right u-hover-dropdown__panel">
+                                  <span class="c-popover__title"><%= competency[:title] %></span>
+                                  <span class="c-popover__body">
+                                    <%= competency_rating_target_title(value, program_target, source: source) %>
+                                  </span>
+                                </span>
+                              </span>
+                            </td>
+                          <% end %>
+                        <% end %>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          <% end %>
+        </div>
+      <% end %>
     </section>
   </div>
 </main>

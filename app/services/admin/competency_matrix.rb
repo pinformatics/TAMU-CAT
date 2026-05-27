@@ -253,19 +253,24 @@ class Admin::CompetencyMatrix
     semester = selected_program_semester
     return {} if students.empty? || semester.blank?
 
-    tracks = students.map { |student| track_label_for(student) }.compact.uniq
+    tracks = students.flat_map { |student| target_track_candidates_for(student) }.compact.uniq
+    normalized_tracks = tracks.map { |track| track.to_s.downcase }.uniq
+    return {} if normalized_tracks.empty?
+
     records = CompetencyTargetLevel
       .includes(:competency)
       .where(program_semester_id: semester.id)
-      .where(track: tracks)
+      .where("LOWER(track) IN (?)", normalized_tracks)
     records = filter_competency_identity(records, table_name: "competency_target_levels").to_a
 
     students.each_with_object(Hash.new { |hash, key| hash[key] = {} }) do |student, lookup|
-      student_track = track_label_for(student)
-      next if student_track.blank?
+      student_tracks = target_track_candidates_for(student).map { |track| track.to_s.downcase }.uniq
+      next if student_tracks.blank?
 
       visible_competency_titles.each do |title|
-        matches = records.select { |record| record.track == student_track && canonical_competency_title(record) == title }
+        matches = records.select do |record|
+          student_tracks.include?(record.track.to_s.downcase) && canonical_competency_title(record) == title
+        end
         exact_year = matches.find { |record| record.program_year == student.program_year }
         exact_class = matches.find { |record| record.class_of == student.program_year }
         fallback = matches.find { |record| record.program_year.blank? && record.class_of.blank? }
@@ -279,9 +284,37 @@ class Admin::CompetencyMatrix
       if normalized_filters[:semester].present?
         ProgramSemester.find_by_name_case_insensitive(normalized_filters[:semester])
       else
-        ProgramSemester.current
+        target_semester_for_unfiltered_matrix
       end
     end
+  end
+
+  def target_semester_for_unfiltered_matrix
+    current = ProgramSemester.current
+    return current if current.present? && CompetencyTargetLevel.where(program_semester_id: current.id).exists?
+
+    ProgramSemester
+      .joins(:competency_target_levels)
+      .distinct
+      .to_a
+      .max_by { |semester| semester_sort_key(semester) } || current
+  end
+
+  def semester_sort_key(semester)
+    name = semester.name.to_s
+    year = name[/\b(20\d{2})\b/, 1].to_i
+    term_rank = case name.downcase
+    when /spring/
+      1
+    when /summer/
+      2
+    when /fall/
+      3
+    else
+      0
+    end
+
+    [ year, term_rank, semester.created_at || Time.zone.at(0), semester.id || 0 ]
   end
 
   def normalize_rating(value)
@@ -424,6 +457,14 @@ class Admin::CompetencyMatrix
 
   def track_label_for(student)
     student.track.presence || student[:track].to_s.strip.titleize.presence
+  end
+
+  def target_track_candidates_for(student)
+    [
+      student.respond_to?(:track_key) ? student.track_key : nil,
+      track_label_for(student),
+      student[:track]
+    ].map { |track| track.to_s.strip.presence }.compact.uniq
   end
 
   def competency_slug(value)

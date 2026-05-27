@@ -290,6 +290,16 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
 
   test "admin can export competencies as csv" do
     sign_in @admin
+    student = students(:student)
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+
+    CompetencyTargetLevel.create!(
+      program_semester: program_semesters(:fall_2025),
+      track: student.track,
+      class_of: student.program_year,
+      competency_title: competency_title,
+      target_level: 4
+    )
 
     assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
       get export_admin_competencies_path(format: :csv)
@@ -301,7 +311,37 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
     csv = CSV.parse(response.body, headers: true)
     assert_includes csv.headers, "Student ID"
     assert_includes csv.headers, "Course Competency Rule"
+    assert_includes csv.headers, "#{competency_title} Program Target"
     assert csv.any?, "Expected exported CSV to include at least one row"
+    assert_equal csv.map { |row| row["Student ID"] }.uniq.size, csv.size
+
+    export_row = csv.find { |row| row["Student ID"].to_i == student.student_id }
+    assert_equal "4", export_row["#{competency_title} Program Target"]
+  end
+
+  test "admin csv export uses latest configured program targets when current semester has none" do
+    sign_in @admin
+    student = students(:student)
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+
+    ProgramSemester.update_all(current: false)
+    ProgramSemester.create!(name: "Fall 2099", current: true)
+
+    CompetencyTargetLevel.create!(
+      program_semester: program_semesters(:spring_2026),
+      track: student.track,
+      class_of: student.program_year,
+      competency_title: competency_title,
+      target_level: 5
+    )
+
+    get export_admin_competencies_path(format: :csv)
+
+    assert_response :success
+    csv = CSV.parse(response.body, headers: true)
+    export_row = csv.find { |row| row["Student ID"].to_i == student.student_id }
+
+    assert_equal "5", export_row["#{competency_title} Program Target"]
   end
 
   test "admin csv export uses the same semester-scoped course ratings as the matrix" do
@@ -326,10 +366,10 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     csv = CSV.parse(response.body, headers: true)
-    export_row = csv.find { |row| row["Student ID"].to_i == student.student_id && row["Competency"] == competency_title }
+    export_row = csv.find { |row| row["Student ID"].to_i == student.student_id }
 
     refute_nil export_row
-    assert_equal "2.0", export_row["Course Rating"]
+    assert_equal "2.0", export_row["#{competency_title} Course Rating"]
     assert_equal fall.name, export_row["Semester Filter"]
   end
 

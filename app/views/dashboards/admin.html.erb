@@ -28,10 +28,6 @@
       <path d="M12 16V5" />
       <path d="M17 16v-4" />
     </symbol>
-    <symbol id="icon-portfolio" viewBox="0 0 24 24">
-      <path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" />
-      <path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" />
-    </symbol>
     <symbol id="icon-competencies" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="8" />
       <circle cx="12" cy="12" r="4" />
@@ -114,14 +110,6 @@
           <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-reports"></use></svg></div>
           <div class="c-tile__title">Reports</div>
           <div class="c-tile__description"><%= @total_reports || 0 %> generated</div>
-        <% end %>
-      </div>
-
-      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
-        <%= link_to reports_path(report_tab: "portfolio_export"), class: "c-tile__link" do %>
-          <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-portfolio"></use></svg></div>
-          <div class="c-tile__title">Student Profile</div>
-          <div class="c-tile__description">Open student profile data in Reports</div>
         <% end %>
       </div>
 

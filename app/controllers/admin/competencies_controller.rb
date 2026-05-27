@@ -128,87 +128,67 @@ class Admin::CompetenciesController < ApplicationController
   end
 
   def competencies_csv(payload)
-    rows = payload[:students].flat_map do |student|
-      domain_rows = payload[:domains].flat_map do |domain|
-        domain[:competencies].map do |competency|
-          ratings = student.dig(:ratings, competency[:title]) || {}
-
-          {
-            student_id: student[:id],
-            student_name: student[:name],
-            student_email: student[:email],
-            uin: student[:uin],
-            track: student[:track],
-            program_year: student[:program_year],
-            advisor_name: student[:advisor_name],
-            domain: domain[:name],
-            competency: competency[:title],
-            self_rating: ratings[:self_rating],
-            advisor_rating: ratings[:advisor_rating],
-            course_rating: ratings[:course_rating],
-            course_rule: payload[:course_competency_rule_label],
-            semester_filter: payload.dig(:filters, :semester).presence || "All semesters"
-          }
-        end
+    competency_columns = payload[:domains].flat_map do |domain|
+      domain[:competencies].map do |competency|
+        {
+          domain: domain[:name],
+          title: competency[:title]
+        }
       end
+    end
 
-      next domain_rows if domain_rows.any?
+    base_headers = [
+      "Student ID",
+      "Student Name",
+      "Student Email",
+      "UIN",
+      "Track",
+      "Program Year",
+      "Advisor",
+      "Course Competency Rule",
+      "Semester Filter"
+    ]
+
+    competency_headers = competency_columns.flat_map do |competency|
+      title = competency[:title]
 
       [
-        {
-          student_id: student[:id],
-          student_name: student[:name],
-          student_email: student[:email],
-          uin: student[:uin],
-          track: student[:track],
-          program_year: student[:program_year],
-          advisor_name: student[:advisor_name],
-          domain: nil,
-          competency: nil,
-          self_rating: nil,
-          advisor_rating: nil,
-          course_rating: nil,
-          course_rule: payload[:course_competency_rule_label],
-          semester_filter: payload.dig(:filters, :semester).presence || "All semesters"
-        }
+        "#{title} Domain",
+        "#{title} Self Rating",
+        "#{title} Advisor Rating",
+        "#{title} Course Rating",
+        "#{title} Program Target"
       ]
     end
 
     CSV.generate(headers: true) do |csv|
-      csv << [
-        "Student ID",
-        "Student Name",
-        "Student Email",
-        "UIN",
-        "Track",
-        "Program Year",
-        "Advisor",
-        "Domain",
-        "Competency",
-        "Self Rating",
-        "Advisor Rating",
-        "Course Rating",
-        "Course Competency Rule",
-        "Semester Filter"
-      ]
+      csv << base_headers + competency_headers
 
-      rows.sort_by { |row| [ row[:student_name].to_s.downcase, row[:domain].to_s.downcase, row[:competency].to_s.downcase ] }.each do |row|
-        csv << row.values_at(
-          :student_id,
-          :student_name,
-          :student_email,
-          :uin,
-          :track,
-          :program_year,
-          :advisor_name,
-          :domain,
-          :competency,
-          :self_rating,
-          :advisor_rating,
-          :course_rating,
-          :course_rule,
-          :semester_filter
-        )
+      payload[:students].sort_by { |student| [ student[:name].to_s.downcase, student[:id].to_s ] }.each do |student|
+        row = [
+          student[:id],
+          student[:name],
+          student[:email],
+          student[:uin],
+          student[:track],
+          student[:program_year],
+          student[:advisor_name],
+          payload[:course_competency_rule_label],
+          payload.dig(:filters, :semester).presence || "All semesters"
+        ]
+
+        competency_columns.each do |competency|
+          ratings = student.dig(:ratings, competency[:title]) || {}
+          row += [
+            competency[:domain],
+            ratings[:self_rating],
+            ratings[:advisor_rating],
+            ratings[:course_rating],
+            ratings[:program_target]
+          ]
+        end
+
+        csv << row
       end
     end
   end
