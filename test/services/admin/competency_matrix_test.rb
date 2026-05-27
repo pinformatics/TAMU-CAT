@@ -100,6 +100,31 @@ class Admin::CompetencyMatrixTest < ActiveSupport::TestCase
     assert_in_delta 5.0, ratings[:course_rating], 0.001
   end
 
+  test "program targets use the selected semester and student cohort" do
+    CompetencyTargetLevel.create!(
+      program_semester: program_semesters(:fall_2025),
+      track: @student.track,
+      class_of: @student.program_year,
+      competency_title: @competency_name,
+      target_level: 3
+    )
+    CompetencyTargetLevel.create!(
+      program_semester: program_semesters(:spring_2026),
+      track: @student.track,
+      class_of: @student.program_year,
+      competency_title: @competency_name,
+      target_level: 5
+    )
+
+    spring_payload = Admin::CompetencyMatrix.new(params: { semester: "Spring 2026" }, actor_user: @admin).call
+    spring_row = spring_payload[:students].find { |row| row[:id] == @student.student_id }
+    default_payload = Admin::CompetencyMatrix.new(params: {}, actor_user: @admin).call
+    default_row = default_payload[:students].find { |row| row[:id] == @student.student_id }
+
+    assert_equal 5, spring_row.dig(:ratings, @competency_name, :program_target)
+    assert_equal 3, default_row.dig(:ratings, @competency_name, :program_target)
+  end
+
   private
 
   def create_course_rating(level:, semester: nil)

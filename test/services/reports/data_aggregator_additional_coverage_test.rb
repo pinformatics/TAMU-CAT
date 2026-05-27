@@ -372,7 +372,7 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
     aggregator = Reports::DataAggregator.new(user: @admin, params: {})
 
     CompetencyTargetLevel.stub(:select, relation.new(rows)) do
-      key = [ semester_id, track, title ]
+      key = [ semester_id, ProgramTrack.canonical_key(track), title ]
       assert_equal 4, aggregator.send(:competency_target_level_any_year_lookup)[key]
     end
   end

@@ -79,6 +79,7 @@ Rails.application.routes.draw do
     get "target_levels", to: "target_levels#index", as: :target_levels
     patch "target_levels", to: "target_levels#update"
     post "target_levels/fill_defaults", to: "target_levels#fill_defaults", as: :fill_default_target_levels
+    post "target_levels/copy_to_current", to: "target_levels#copy_to_current", as: :copy_target_levels_to_current
     resources :course_grade_release_dates, only: %i[index new create edit update destroy] do
       collection do
         patch :bulk_update

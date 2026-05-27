@@ -1546,6 +1546,7 @@ module Reports
         program_target_level: effective_target_level,
         survey_id: record.survey_id,
         survey_title: record.survey_title,
+        program_semester_id: record.program_semester_id,
         survey_semester: record.survey_semester,
         track: record.student_track,
         student_id: record.student_primary_id,
@@ -1581,25 +1582,44 @@ module Reports
       return nil unless student
 
       title = normalized_competency_title(rating.competency_title)
-      target_from_dataset = course_target_level_from_dataset(student_id: student.student_id, competency_title: title)
+      program_semester_id = target_program_semester_id_for_rating(rating)
+      target_from_dataset = course_target_level_from_dataset(
+        student_id: student.student_id,
+        competency_title: title,
+        program_semester_id: program_semester_id
+      )
       return target_from_dataset if target_from_dataset.present?
 
-      fallback_course_target_level(student: student, competency_title: title)
+      fallback_course_target_level(student: student, competency_title: title, program_semester_id: program_semester_id)
     end
 
-    def course_target_level_from_dataset(student_id:, competency_title:)
+    def target_program_semester_id_for_rating(rating)
+      rating.grade_import_batch&.program_semester_id || selected_report_program_semester&.id || ProgramSemester.current&.id
+    end
+
+    def selected_report_program_semester
+      return nil if filters[:semester].blank?
+
+      @selected_report_program_semester ||= ProgramSemester.find_by_name_case_insensitive(filters[:semester])
+    end
+
+    def course_target_level_from_dataset(student_id:, competency_title:, program_semester_id:)
+      return nil if program_semester_id.blank?
+
       matching_rows = dataset_rows.select do |row|
-        row[:student_id] == student_id && normalized_competency_title(row[:question_text]) == competency_title
+        row[:student_id] == student_id &&
+          row[:program_semester_id] == program_semester_id &&
+          normalized_competency_title(row[:question_text]) == competency_title
       end
 
       average(matching_rows.map { |row| row[:program_target_level] }.compact.map(&:to_f))
     end
 
-    def fallback_course_target_level(student:, competency_title:)
-      track = student[:track].to_s.strip
-      return nil if track.blank? || competency_title.blank?
+    def fallback_course_target_level(student:, competency_title:, program_semester_id:)
+      track = target_track_key(student[:track])
+      return nil if track.blank? || competency_title.blank? || program_semester_id.blank?
 
-      records = competency_target_records_by_track_and_title[[ track, competency_title ]] || []
+      records = competency_target_records_by_semester_track_and_title[[ program_semester_id, track, competency_title ]] || []
       return nil if records.blank?
 
       class_of = student.class_of
@@ -1624,13 +1644,15 @@ module Reports
       records.first&.target_level
     end
 
-    def competency_target_records_by_track_and_title
-      @competency_target_records_by_track_and_title ||= begin
+    def competency_target_records_by_semester_track_and_title
+      @competency_target_records_by_semester_track_and_title ||= begin
         records = CompetencyTargetLevel
           .select(:program_semester_id, :track, :program_year, :class_of, :competency_title, :target_level)
           .to_a
 
-        records.group_by { |record| [ record.track.to_s.strip, normalized_competency_title(record.competency_title) ] }
+        records.group_by do |record|
+          [ record.program_semester_id, target_track_key(record.track), normalized_competency_title(record.competency_title) ]
+        end
                .transform_values do |rows|
           rows.sort_by do |row|
             [
@@ -1648,7 +1670,7 @@ module Reports
       return fallback unless record.respond_to?(:program_semester_id) && record.respond_to?(:student_track)
 
       semester_id = record.program_semester_id
-      track = record.student_track.to_s.strip
+      track = target_track_key(record.student_track)
       title = normalized_competency_title(record.question_text)
       class_of = record.respond_to?(:student_class_of) ? record.student_class_of : nil
       program_year = record.respond_to?(:student_program_year) ? record.student_program_year : nil
@@ -1675,7 +1697,7 @@ module Reports
           .select(:id, :program_semester_id, :track, :program_year, :class_of, :competency_title, :target_level)
           .find_each do |row|
             semester_id = row.program_semester_id
-            track = row.track.to_s.strip
+            track = target_track_key(row.track)
             title = normalized_competency_title(row.competency_title)
             program_year = row.program_year
             class_of = row.class_of
@@ -1723,6 +1745,10 @@ module Reports
     def normalize_track(value)
       trimmed = value.to_s.strip
       trimmed.presence
+    end
+
+    def target_track_key(value)
+      ProgramTrack.canonical_key(value) || value.to_s.strip.downcase.presence
     end
 
     def group_student_rows(rows)

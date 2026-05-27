@@ -142,6 +142,21 @@ module Reports
       assert_equal "Fall 2025", aggregator.export_payload.dig(:filters, :semester)
     end
 
+    test "course target comparisons use the rating semester target for the student cohort" do
+      create_target_level(level: 2, semester: program_semesters(:fall_2025))
+      create_target_level(level: 5, semester: program_semesters(:spring_2025))
+      create_course_rating(level: 4.0, competency_title: @competency_name, semester: program_semesters(:spring_2025))
+
+      aggregator = Reports::DataAggregator.new(
+        user: @admin,
+        params: { student_id: @student.student_id }
+      )
+      item = aggregator.competency_detail[:items].find { |entry| entry[:name] == @competency_name }
+
+      assert item, "Expected competency detail to include #{@competency_name}"
+      assert_in_delta 0.0, item[:course_target_percent], 0.001
+    end
+
     test "domain summary reflects course percent meeting target" do
       create_student_response(score: "4.0")
       create_target_level(level: 4)
@@ -227,9 +242,9 @@ module Reports
       )
     end
 
-    def create_target_level(level:)
+    def create_target_level(level:, semester: @survey.program_semester)
       CompetencyTargetLevel.create!(
-        program_semester_id: @survey.program_semester_id,
+        program_semester: semester,
         track: @student[:track],
         program_year: @student.program_year,
         competency_title: @competency_name,

@@ -319,13 +319,19 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "4", export_row["#{competency_title} Program Target"]
   end
 
-  test "admin csv export uses latest configured program targets when current semester has none" do
+  test "admin csv export uses selected semester program targets" do
     sign_in @admin
     student = students(:student)
     competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    current_semester = ProgramSemester.current
 
-    ProgramSemester.update_all(current: false)
-    ProgramSemester.create!(name: "Fall 2099", current: true)
+    CompetencyTargetLevel.create!(
+      program_semester: current_semester,
+      track: student.track,
+      class_of: student.program_year,
+      competency_title: competency_title,
+      target_level: 3
+    )
 
     CompetencyTargetLevel.create!(
       program_semester: program_semesters(:spring_2026),
@@ -335,13 +341,14 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
       target_level: 5
     )
 
-    get export_admin_competencies_path(format: :csv)
+    get export_admin_competencies_path(format: :csv, semester: program_semesters(:spring_2026).name)
 
     assert_response :success
     csv = CSV.parse(response.body, headers: true)
     export_row = csv.find { |row| row["Student ID"].to_i == student.student_id }
 
     assert_equal "5", export_row["#{competency_title} Program Target"]
+    assert_equal program_semesters(:spring_2026).name, export_row["Semester Filter"]
   end
 
   test "admin csv export uses the same semester-scoped course ratings as the matrix" do

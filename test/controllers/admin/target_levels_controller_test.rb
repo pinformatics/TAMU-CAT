@@ -204,6 +204,83 @@ class Admin::TargetLevelsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/Select a semester, track, and cohort/i, flash[:alert].to_s)
   end
 
+  test "admin can copy selected target levels to current semester" do
+    sign_in @admin
+    source_semester = program_semesters(:spring_2026)
+    current_semester = ProgramSemester.current
+
+    CompetencyTargetLevel.create!(
+      program_semester: source_semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title,
+      target_level: 5
+    )
+
+    assert_difference -> { CompetencyTargetLevel.where(program_semester: current_semester, track: @track_value, class_of: 2026).count }, 1 do
+      post admin_copy_target_levels_to_current_path, params: {
+        program_semester_id: source_semester.id,
+        track: @track_value,
+        class_of: "2026"
+      }
+    end
+
+    copied = CompetencyTargetLevel.find_by!(
+      program_semester: current_semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title
+    )
+
+    assert_equal 5, copied.target_level
+    assert_redirected_to admin_program_setup_path(tab: "targets", program_semester_id: current_semester.id, track: @track_value, class_of: 2026)
+    assert_match(/Copied 1 target level to #{Regexp.escape(current_semester.name)}/, flash[:notice].to_s)
+  end
+
+  test "copy to current updates existing target levels" do
+    sign_in @admin
+    source_semester = program_semesters(:spring_2026)
+    current_semester = ProgramSemester.current
+
+    CompetencyTargetLevel.create!(
+      program_semester: source_semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title,
+      target_level: 5
+    )
+    current_record = CompetencyTargetLevel.create!(
+      program_semester: current_semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title,
+      target_level: 2
+    )
+
+    assert_no_difference "CompetencyTargetLevel.count" do
+      post admin_copy_target_levels_to_current_path, params: {
+        program_semester_id: source_semester.id,
+        track: @track_value,
+        class_of: "2026"
+      }
+    end
+
+    assert_equal 5, current_record.reload.target_level
+    assert_match(/Copied 1 target level/, flash[:notice].to_s)
+  end
+
+  test "copy to current button appears for non-current target context" do
+    sign_in @admin
+    source_semester = program_semesters(:spring_2026)
+
+    get admin_target_levels_path(program_semester_id: source_semester.id, track: @track_value, class_of: "2026")
+    assert_redirected_to admin_program_setup_path(tab: "targets", program_semester_id: source_semester.id, track: @track_value, class_of: "2026")
+
+    follow_redirect!
+    assert_response :success
+    assert_includes response.body, "Copy to Current Semester"
+  end
+
   test "editor renders previously saved target levels" do
     sign_in @admin
 

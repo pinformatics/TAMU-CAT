@@ -141,6 +141,62 @@ class Admin::TargetLevelsController < Admin::BaseController
     ), alert: e.message
   end
 
+  def copy_to_current
+    load_selector_options
+
+    unless @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present?
+      redirect_to admin_program_setup_path(tab: "targets"), alert: "Select a source semester, track, and cohort before copying target levels."
+      return
+    end
+
+    current_semester = ProgramSemester.current
+    if current_semester.blank?
+      redirect_to selected_context_path, alert: "Set a current semester before copying target levels."
+      return
+    end
+
+    if current_semester.id == @selected_semester_id
+      redirect_to selected_context_path, alert: "This context is already the current semester."
+      return
+    end
+
+    source_records = copy_source_target_records
+    if source_records.empty?
+      redirect_to selected_context_path, alert: "No configured target levels were found for the selected source context."
+      return
+    end
+
+    result = copy_target_records_to_current!(source_records, current_semester)
+
+    if result[:changed].positive?
+      submitted_students = submitted_students_count_for_context(
+        semester_id: current_semester.id,
+        track: @selected_track,
+        class_of: @selected_class_of
+      )
+
+      if submitted_students.positive?
+        session[:target_levels_post_save_warning] = "Target levels changed. #{submitted_students} student(s) have already submitted surveys for #{@selected_track} (#{current_semester.name}); reports may reflect the updated targets."
+        notify_admins_target_levels_changed_after_submissions!(
+          semester_label: current_semester.name,
+          submitted_students: submitted_students,
+          semester_id: current_semester.id,
+          track: @selected_track,
+          class_of: @selected_class_of
+        )
+      end
+    end
+
+    redirect_to admin_program_setup_path(
+      tab: "targets",
+      program_semester_id: current_semester.id,
+      track: @selected_track,
+      class_of: @selected_class_of
+    ), notice: "Copied #{result[:changed]} target #{'level'.pluralize(result[:changed])} to #{current_semester.name}. #{result[:unchanged]} already matched."
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to selected_context_path, alert: e.record.errors.full_messages.to_sentence
+  end
+
   private
 
   def load_selector_options
@@ -181,35 +237,96 @@ class Admin::TargetLevelsController < Admin::BaseController
   end
 
   def submitted_students_count_for_selected_context
-    return 0 unless @selected_semester_id.present? && @selected_track.present?
+    submitted_students_count_for_context(
+      semester_id: @selected_semester_id,
+      track: @selected_track,
+      class_of: @selected_class_of
+    )
+  end
+
+  def submitted_students_count_for_context(semester_id:, track:, class_of:)
+    return 0 unless semester_id.present? && track.present?
 
     submitted_scope = SurveyAssignment
       .joins(:student)
       .joins(survey: :track_assignments)
-      .where(surveys: { program_semester_id: @selected_semester_id })
-      .where(survey_track_assignments: { track: @selected_track })
-      .where(students: { track: @selected_track })
+      .where(surveys: { program_semester_id: semester_id })
+      .where(survey_track_assignments: { track: track })
+      .where(students: { track: track })
       .where.not(completed_at: nil)
 
-    if @selected_class_of.present?
-      submitted_scope = submitted_scope.where(students: { program_year: @selected_class_of })
+    if class_of.present?
+      submitted_scope = submitted_scope.where(students: { program_year: class_of })
     end
 
     submitted_scope.select(:student_id).distinct.count
   end
 
-  def notify_admins_target_levels_changed_after_submissions!(semester_label:, submitted_students:)
-    message = "Program target levels changed for #{@selected_track}, Class of #{@selected_class_of}, #{semester_label} after #{submitted_students} student(s) had already submitted surveys."
+  def notify_admins_target_levels_changed_after_submissions!(semester_label:, submitted_students:, semester_id: @selected_semester_id, track: @selected_track, class_of: @selected_class_of)
+    message = "Program target levels changed for #{track}, Class of #{class_of}, #{semester_label} after #{submitted_students} student(s) had already submitted surveys."
 
     User.admins.find_each do |admin_user|
       notification = Notification.deliver!(
         user: admin_user,
         title: "Target Levels Changed After Submissions",
         message: message,
-        notifiable: ProgramSemester.find_by(id: @selected_semester_id)
+        notifiable: ProgramSemester.find_by(id: semester_id)
       )
       NotificationEmailDeliveryJob.perform_later(notification_id: notification.id)
     end
+  end
+
+  def copy_source_target_records
+    competency_titles = Reports::DataAggregator::COMPETENCY_TITLES
+    scoped = CompetencyTargetLevel.where(
+      program_semester_id: @selected_semester_id,
+      track: @selected_track,
+      competency_title: competency_titles
+    )
+
+    exact = scoped.where(class_of: @selected_class_of).index_by(&:competency_title)
+    legacy = legacy_target_records(scoped, @selected_class_of).index_by(&:competency_title)
+
+    competency_titles.filter_map do |title|
+      record = exact[title] || legacy[title]
+      record if record&.target_level.present?
+    end
+  end
+
+  def copy_target_records_to_current!(source_records, current_semester)
+    result = { changed: 0, unchanged: 0 }
+
+    ActiveRecord::Base.transaction do
+      source_records.each do |source|
+        target = CompetencyTargetLevel.find_or_initialize_by(
+          program_semester_id: current_semester.id,
+          track: @selected_track,
+          class_of: @selected_class_of,
+          competency_title: source.competency_title
+        )
+
+        if target.persisted? && target.target_level.to_i == source.target_level.to_i
+          result[:unchanged] += 1
+          next
+        end
+
+        target.target_level = source.target_level
+        target.program_year = nil if target.respond_to?(:program_year)
+        target.save!
+        result[:changed] += 1
+      end
+    end
+
+    result
+  end
+
+  def selected_context_path
+    admin_program_setup_path(
+      tab: "targets",
+      program_semester_id: @selected_semester_id,
+      track: @selected_track,
+      class_of: @selected_class_of
+    )
   end
 
   def legacy_program_year_candidates(class_of)

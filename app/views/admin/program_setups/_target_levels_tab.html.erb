@@ -73,6 +73,8 @@
   <% end %>
 
   <% if @selected_semester_id.present? && @selected_track.present? && @selected_class_of.present? %>
+    <% selected_semester = @semesters.find { |semester| semester.id == @selected_semester_id } %>
+    <% current_semester = @current_program_semester %>
     <% if @target_coverage_summary.present? %>
       <% coverage = @target_coverage_summary %>
       <section class="c-card c-card--tight u-stack u-stack--sm">
@@ -109,8 +111,24 @@
           </p>
         <% end %>
 
-        <% if coverage[:missing_count].positive? %>
-          <div class="u-actions u-actions--start">
+        <% if coverage[:missing_count].positive? || (current_semester.present? && current_semester.id != @selected_semester_id) %>
+          <div class="u-actions u-actions--start u-gap-xs">
+            <% if current_semester.present? && current_semester.id != @selected_semester_id %>
+              <%= button_to "Copy to Current Semester",
+                            admin_copy_target_levels_to_current_path,
+                            method: :post,
+                            params: {
+                              program_semester_id: @selected_semester_id,
+                              track: @selected_track,
+                              class_of: @selected_class_of
+                            },
+                            class: button_classes(:secondary),
+                            data: {
+                              turbo_confirm: "Copy configured target levels from #{selected_semester&.name || 'the selected semester'} to #{current_semester.name} for #{@selected_track}, Class of #{@selected_class_of}? Existing current-semester values for these competencies will be updated."
+                            } %>
+            <% end %>
+
+            <% if coverage[:missing_count].positive? %>
             <%= button_to "Fill Missing From Defaults",
                           admin_fill_default_target_levels_path,
                           method: :post,
@@ -121,6 +139,7 @@
                           },
                           class: button_classes(:secondary),
                           data: { turbo_confirm: "Fill only blank target levels from db/data/default_target_levels.yml for this selected context?" } %>
+            <% end %>
           </div>
         <% end %>
       </section>

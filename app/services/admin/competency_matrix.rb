@@ -284,37 +284,9 @@ class Admin::CompetencyMatrix
       if normalized_filters[:semester].present?
         ProgramSemester.find_by_name_case_insensitive(normalized_filters[:semester])
       else
-        target_semester_for_unfiltered_matrix
+        ProgramSemester.current
       end
     end
-  end
-
-  def target_semester_for_unfiltered_matrix
-    current = ProgramSemester.current
-    return current if current.present? && CompetencyTargetLevel.where(program_semester_id: current.id).exists?
-
-    ProgramSemester
-      .joins(:competency_target_levels)
-      .distinct
-      .to_a
-      .max_by { |semester| semester_sort_key(semester) } || current
-  end
-
-  def semester_sort_key(semester)
-    name = semester.name.to_s
-    year = name[/\b(20\d{2})\b/, 1].to_i
-    term_rank = case name.downcase
-    when /spring/
-      1
-    when /summer/
-      2
-    when /fall/
-      3
-    else
-      0
-    end
-
-    [ year, term_rank, semester.created_at || Time.zone.at(0), semester.id || 0 ]
   end
 
   def normalize_rating(value)

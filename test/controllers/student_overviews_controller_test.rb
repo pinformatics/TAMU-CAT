@@ -21,7 +21,9 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "student-overview-stats-tab"
     assert_includes response.body, "Students by Domain"
     assert_includes response.body, "Competencies"
-    assert_includes response.body, "Log on"
+    assert_includes response.body, "Year"
+    assert_not_includes response.body, "Class of"
+    assert_not_includes response.body, "Log on"
     assert_includes response.body, "1 / #{Reports::DataAggregator::COMPETENCY_TITLES.size}"
     assert_includes response.body, "meeting target"
     assert_includes response.body, @student.user.display_name
