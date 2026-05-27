@@ -3402,6 +3402,13 @@ body {
   flex-shrink: 0;
 }
 
+.c-app-logo-lockup {
+  display: block;
+  width: min(100%, 420px);
+  max-height: 170px;
+  object-fit: contain;
+}
+
 .c-nav-links {
   display: flex;
   flex-wrap: nowrap;

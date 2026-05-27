@@ -5,10 +5,43 @@ module ApplicationHelper
   include GuidanceTextHelper
   include CompetencyTargetLevelsHelper
 
+  APP_SHORT_NAME = "TAMU CAT".freeze
+  APP_FULL_NAME = "TAMU Competency Assessment Tracking".freeze
+  APP_LEGACY_NAME = "TAMU Competency Assessment Tool".freeze
+  APP_ICON_ASSET = "TAMU_CAT_icon.png".freeze
+  TAMU_ICON_ASSET = "tamu-logo.png".freeze
+
   # Base CSS class applied to all flash notifications.
   FLASH_BASE_CLASSES = "flash".freeze
   # Query string keys that should be preserved when building sortable headers.
   SURVEY_SORTABLE_KEYS = %w[q track semester].freeze
+
+  def app_short_name
+    APP_SHORT_NAME
+  end
+
+  def app_full_name
+    APP_FULL_NAME
+  end
+
+  def app_icon_asset
+    APP_ICON_ASSET
+  end
+
+  def tamu_icon_asset
+    TAMU_ICON_ASSET
+  end
+
+  def browser_title(page_title = nil)
+    title = page_title.to_s.strip
+    return app_short_name if title.blank?
+
+    compact_title = title
+      .gsub(APP_FULL_NAME, app_short_name)
+      .gsub(APP_LEGACY_NAME, app_short_name)
+
+    compact_title.include?(app_short_name) ? compact_title : "#{compact_title} | #{app_short_name}"
+  end
 
   # Computes alert styling classes based on the flash key.
   #

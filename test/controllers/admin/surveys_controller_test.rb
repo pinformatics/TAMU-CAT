@@ -98,6 +98,27 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to dashboard_path
   end
 
+  test "requires admin role for copy" do
+    sign_out @admin_user
+    sign_in @advisor_user
+
+    get copy_admin_survey_path(@survey)
+    assert_redirected_to dashboard_path
+  end
+
+  test "requires admin role for copy_to_semester" do
+    sign_out @admin_user
+    sign_in @advisor_user
+
+    assert_no_difference "Survey.count" do
+      post copy_to_semester_admin_survey_path(@survey), params: {
+        survey_copy: { target_program_semester_id: program_semesters(:spring_2026).id }
+      }
+    end
+
+    assert_redirected_to dashboard_path
+  end
+
   test "updating survey available_until updates existing assignments without re-running auto assignment" do
     assignment = survey_assignments(:residential_assignment)
     assert_equal @survey.id, assignment.survey_id
@@ -1144,6 +1165,122 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
 
     @survey.reload
     refute_equal "", @survey.title
+  end
+
+  # === Copy Action ===
+
+  test "copy renders target semester form" do
+    get copy_admin_survey_path(@survey)
+
+    assert_response :success
+    assert_select "h1", "Copy Survey"
+    assert_select "select[name='survey_copy[target_program_semester_id]']"
+    assert_includes response.body, "No students will be assigned"
+  end
+
+  test "copy_to_semester copies survey definition without assigning students" do
+    target_semester = program_semesters(:spring_2026)
+    section = @survey.sections.create!(title: "Competency Block", description: "Self-assessment prompts", position: 0)
+    category = @survey.categories.first
+    category.update!(section: section)
+    parent_question = category.questions.first
+    parent_question.update!(
+      tooltip_text: "Use your best evidence.",
+      has_feedback: true,
+      program_target_level: 3,
+      configuration: { "prompt_format" => "rich_text", "integer_min" => "1", "integer_max" => "5" }
+    )
+
+    if Question.sub_question_columns_supported?
+      category.questions.create!(
+        question_text: "Describe the evidence behind that rating",
+        question_type: "short_answer",
+        question_order: parent_question.question_order,
+        parent_question: parent_question,
+        sub_question_order: 1
+      )
+    end
+
+    @survey.create_legend!(title: "Rating guide", body: "Use the program competency scale.")
+    @survey.offerings.create!(
+      track: "Residential",
+      class_of: 2027,
+      stage: "initial",
+      assignment_group: "A",
+      available_from: 3.days.from_now,
+      available_until: 30.days.from_now,
+      review_meetings_start: Date.current + 10.days,
+      review_meetings_end: Date.current + 20.days,
+      portfolio_due_date: 30.days.from_now
+    )
+
+    source_section_count = @survey.sections.count
+    source_category_count = @survey.categories.count
+    source_question_count = @survey.questions.count
+    source_offering_count = @survey.offerings.count
+
+    assert_difference "Survey.count", 1 do
+      assert_difference "SurveySection.count", source_section_count do
+        assert_difference "Category.count", source_category_count do
+          assert_difference "Question.count", source_question_count do
+            assert_difference "SurveyLegend.count", 1 do
+              assert_difference "SurveyOffering.count", source_offering_count do
+                assert_difference "SurveyChangeLog.count", 1 do
+                  assert_no_difference "SurveyAssignment.count" do
+                    post copy_to_semester_admin_survey_path(@survey), params: {
+                      survey_copy: { target_program_semester_id: target_semester.id }
+                    }
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
+    copied_survey = Survey.find_by!(title: @survey.title, program_semester: target_semester)
+    assert_redirected_to edit_admin_survey_path(copied_survey)
+    assert_equal @admin_user, copied_survey.creator
+    assert_equal @survey.description, copied_survey.description
+    assert_equal @survey.track_list.sort, copied_survey.track_list.sort
+    assert_empty copied_survey.survey_assignments
+    assert_equal source_section_count, copied_survey.sections.count
+    assert_equal source_category_count, copied_survey.categories.count
+    assert_equal source_question_count, copied_survey.questions.count
+    assert_equal source_offering_count, copied_survey.offerings.count
+    assert_equal "Rating guide", copied_survey.legend.title
+    assert_equal "Use the program competency scale.", copied_survey.legend.body
+
+    copied_category = copied_survey.categories.find_by!(name: category.name)
+    assert_equal "Competency Block", copied_category.section.title
+
+    copied_parent = copied_category.questions.find_by!(question_text: parent_question.question_text)
+    assert_equal "Use your best evidence.", copied_parent.tooltip_text
+    assert_equal 3, copied_parent.program_target_level
+    assert_equal "rich_text", copied_parent.prompt_format
+
+    if Question.sub_question_columns_supported?
+      copied_child = copied_category.questions.find_by!(question_text: "Describe the evidence behind that rating")
+      assert_equal copied_parent.id, copied_child.parent_question_id
+    end
+
+    log = SurveyChangeLog.order(:created_at).last
+    assert_equal "copy", log.action
+    assert_equal copied_survey, log.survey
+    assert_includes log.description, @survey.title
+    assert_includes log.description, "without assigning students"
+  end
+
+  test "copy_to_semester rejects same semester" do
+    assert_no_difference "Survey.count" do
+      post copy_to_semester_admin_survey_path(@survey), params: {
+        survey_copy: { target_program_semester_id: @survey.program_semester_id }
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_includes response.body, "Choose a different semester"
   end
 
   # === Destroy Action ===

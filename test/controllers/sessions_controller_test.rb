@@ -83,6 +83,10 @@ class SessionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "body"
+    assert_select "title", text: "Login - TAMU CAT"
+    assert_select "link[rel='icon'][href*='TAMU_CAT_icon']"
+    assert_select "img[alt='TAMU Competency Assessment Tracking']"
+    assert_select "h1", text: "TAMU Competency Assessment Tracking"
   end
 
   # Edge cases

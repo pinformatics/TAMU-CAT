@@ -2,7 +2,7 @@
 <html lang="en" data-text-scale="<%= (user_signed_in? ? (current_user.text_scale_percent || 100) : 100) %>" style="font-size: <%= ((user_signed_in? ? (current_user.text_scale_percent || 100) : 100).to_f * 16.0 / 100.0).round(2) %>px;">
   <head>
     
-    <title><%= content_for(:title) || "TAMU Competency Assessment Tool" %></title>
+    <title><%= browser_title(content_for(:title)) %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -14,8 +14,8 @@
     <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
     <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
 
-  <%= favicon_link_tag "tamu-logo.png", rel: "icon", type: "image/png" %>
-  <%= favicon_link_tag "tamu-logo.png", rel: "apple-touch-icon", type: "image/png" %>
+  <%= favicon_link_tag app_icon_asset, rel: "icon", type: "image/png" %>
+  <%= favicon_link_tag app_icon_asset, rel: "apple-touch-icon", type: "image/png" %>
 
   <%# Includes all consolidated stylesheet %>
   <%= tailwind_stylesheet_tag %>

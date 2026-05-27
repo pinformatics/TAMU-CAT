@@ -1,12 +1,13 @@
-<% content_for :title, "Login - TAMU Competency Assessment Tool" %>
+<% content_for :title, "Login - #{app_full_name}" %>
 
 <% content_for :header do %>
   <%= render "shared/login_navbar" %>
 <% end %>
 
 <section class="u-w-full max-w-4xl c-card c-card--spacious text-center">
-  <h1 class="text-3xl font-semibold text-primary md:text-4xl">TAMU Competency Assessment Tool</h1>
-  <p class="mt-4 text-base text-slate-600 md:text-lg">Competency Assessment Tool for student and advisor access.</p>
+  <%= image_tag app_icon_asset, alt: app_full_name, class: "c-app-logo-lockup u-mx-auto" %>
+  <h1 class="mt-lg text-3xl font-semibold text-primary md:text-4xl"><%= app_full_name %></h1>
+  <p class="mt-4 text-base text-slate-600 md:text-lg">Competency assessment tracking for student and advisor access.</p>
 </section>
 
 <section id="login-sections" class="u-w-full max-w-5xl">

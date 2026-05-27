@@ -14,6 +14,20 @@ class ApplicationHelperTest < ActionView::TestCase
     assert_equal "Custom Key", flash_title(:custom_key)
   end
 
+  test "app names expose short browser name and full display name" do
+    assert_equal "TAMU CAT", app_short_name
+    assert_equal "TAMU Competency Assessment Tracking", app_full_name
+    assert_equal "TAMU_CAT_icon.png", app_icon_asset
+    assert_equal "tamu-logo.png", tamu_icon_asset
+  end
+
+  test "browser_title keeps tab text compact" do
+    assert_equal "TAMU CAT", browser_title(nil)
+    assert_equal "Reports | TAMU CAT", browser_title("Reports")
+    assert_equal "Login - TAMU CAT", browser_title("Login - TAMU Competency Assessment Tracking")
+    assert_equal "FAQ - TAMU CAT", browser_title("FAQ - TAMU Competency Assessment Tool")
+  end
+
   test "tailwind_button_classes returns different variants" do
     primary = tailwind_button_classes(:primary)
     danger = tailwind_button_classes(:danger)

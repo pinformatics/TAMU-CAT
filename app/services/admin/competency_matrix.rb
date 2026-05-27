@@ -3,6 +3,10 @@
 class Admin::CompetencyMatrix
   COMPETENCY_TITLES = Reports::DataAggregator::COMPETENCY_TITLES
   DOMAIN_NAMES = Reports::DataAggregator::REPORT_DOMAINS
+  COMPETENCY_IDENTITY_MODELS = {
+    "grade_competency_ratings" => GradeCompetencyRating,
+    "competency_target_levels" => CompetencyTargetLevel
+  }.freeze
 
   def initialize(params: {}, actor_user: nil)
     @params = params.to_h.with_indifferent_access
@@ -429,15 +433,19 @@ class Admin::CompetencyMatrix
   def filter_competency_identity(scope, table_name:)
     return scope.where(competency_title: visible_competency_titles) if visible_competency_ids.empty?
 
+    table = competency_identity_table(table_name)
     scope.where(
-      "#{table_name}.competency_id IN (:ids) OR #{table_name}.competency_title IN (:titles)",
-      ids: visible_competency_ids,
-      titles: visible_competency_titles
+      table[:competency_id].in(visible_competency_ids)
+        .or(table[:competency_title].in(visible_competency_titles))
     )
   end
 
   def visible_competency_ids
     @visible_competency_ids ||= Competency.where(title: visible_competency_titles).pluck(:id)
+  end
+
+  def competency_identity_table(table_name)
+    COMPETENCY_IDENTITY_MODELS.fetch(table_name).arel_table
   end
 
   def canonical_competency_title(record)

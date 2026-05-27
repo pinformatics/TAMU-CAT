@@ -112,6 +112,8 @@ Rails.application.routes.draw do
     resources :surveys do
       member do
         get :preview
+        get :copy
+        post :copy_to_semester
         patch :archive
         patch :activate
       end

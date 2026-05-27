@@ -149,6 +149,7 @@
                         <div class="u-actions u-actions--nowrap">
                           <%= link_to "Assign", assignments_survey_path(survey), class: button_classes(:primary, extra_classes: "btn-sm"), data: { turbo: false } %>
                           <%= link_to "Preview", preview_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+                          <%= link_to "Copy", copy_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
                           <%= link_to "Edit", edit_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
                           <%= button_to "Archive", archive_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Archive '#{survey.title}' and remove it from advisors?" }, class: button_classes(:secondary) %>
                           <%= button_to "Delete", admin_survey_path(survey), method: :delete, data: { turbo_confirm: "Delete '#{survey.title}' permanently?" }, class: button_classes(:danger) %>
@@ -219,6 +220,7 @@
                       <td class="u-whitespace-nowrap">
                         <div class="u-actions u-actions--nowrap">
                           <%= link_to "Preview", preview_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+                          <%= link_to "Copy", copy_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
                           <%= button_to "Activate", activate_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Activate '#{survey.title}' for advisors?" }, class: button_classes(:primary) %>
                           <%= button_to "Delete", admin_survey_path(survey), method: :delete, data: { turbo_confirm: "Delete '#{survey.title}' permanently?" }, class: button_classes(:danger) %>
                         </div>

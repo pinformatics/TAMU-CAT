@@ -1,22 +1,27 @@
 # Image Assets Directory
 
-This directory contains all the images used in TAMU Competency Assessment Tool.
+This directory contains all the images used in TAMU Competency Assessment Tracking.
 
 ## Required Images for Student Dashboard:
 
-### 1. Texas A&M Logo
+### 1. TAMU CAT App Icon
+- **File:** `TAMU_CAT_icon.png`
+- **Format:** PNG with transparent background
+- **Usage:** Browser favicon, PWA app icon, and application-branded login surfaces
+
+### 2. Texas A&M Logo
 - **File:** `tamu-logo.png`
 - **Size:** 40x40px (or larger, will be scaled)
 - **Format:** PNG with transparent background
-- **Usage:** Header logo next to "TEXAS A&M UNIVERSITY"
+- **Usage:** Header logo where the mark specifically represents Texas A&M University
 
-### 2. Survey Icon
-- **File:** `survey-icon.png` 
+### 3. Survey Icon
+- **File:** `survey-icon.png`
 - **Size:** 20x20px (or larger, will be scaled)
 - **Format:** PNG with transparent background
 - **Usage:** Next to each survey item in the to-do list
 
-### 3. Notification Icon
+### 4. Notification Icon
 - **File:** `notification-icon.png`
 - **Size:** 24x24px (or larger, will be scaled)
 - **Format:** PNG with transparent background

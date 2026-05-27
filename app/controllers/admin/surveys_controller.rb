@@ -4,7 +4,7 @@
 require "securerandom"
 
 class Admin::SurveysController < Admin::BaseController
-  before_action :set_survey, only: %i[edit update destroy preview archive activate]
+  before_action :set_survey, only: %i[edit update destroy preview copy copy_to_semester archive activate]
   before_action :prepare_supporting_data, only: %i[new create edit update]
 
   # Lists active and archived surveys with optional search and track filters.
@@ -438,6 +438,26 @@ class Admin::SurveysController < Admin::BaseController
     )
   end
 
+  def copy
+    prepare_copy_options
+  end
+
+  def copy_to_semester
+    prepare_copy_options
+    target_semester = ProgramSemester.find_by(id: copy_survey_params[:target_program_semester_id])
+    copied_survey = Surveys::CopyToSemester.call(
+      source_survey: @survey,
+      target_semester: target_semester,
+      actor: current_user
+    )
+
+    redirect_to edit_admin_survey_path(copied_survey),
+                notice: "Survey copied to #{copied_survey.semester}. No students were assigned."
+  rescue Surveys::CopyToSemester::Error, ActiveRecord::RecordInvalid => e
+    flash.now[:alert] = e.message
+    render :copy, status: :unprocessable_entity
+  end
+
   private
 
   # Looks up the survey referenced by the request parameters.
@@ -556,6 +576,16 @@ class Admin::SurveysController < Admin::BaseController
     @available_tracks = Survey.track_options
     @question_types = Question.question_types.keys
     @program_semester_options = ProgramSemester.ordered.pluck(:name)
+  end
+
+  def prepare_copy_options
+    @copy_target_semesters = ProgramSemester.operational.ordered.where.not(id: @survey.program_semester_id)
+    @target_program_semester_id = copy_survey_params[:target_program_semester_id].presence ||
+                                  @copy_target_semesters.first&.id
+  end
+
+  def copy_survey_params
+    params.fetch(:survey_copy, ActionController::Parameters.new).permit(:target_program_semester_id)
   end
 
   # Phase 1 single-source transition:

@@ -6,7 +6,7 @@
 <% selected_semester = @payload.dig(:filters, :semester).presence || "All semesters" %>
 <% student_name = @payload[:student].user&.display_name || @payload[:student].full_name %>
 <% change_summary = @payload[:change_summary] || {} %>
-<% content_for :pdf_brand, "TAMU Competency Assessment Tool - Competencies" %>
+<% content_for :pdf_brand, "#{app_full_name} - Competencies" %>
 <% content_for :pdf_meta, "#{student_name} | #{selected_semester} | Generated: #{Time.current.strftime('%Y-%m-%d %H:%M')}" %>
 
 <h1 class="c-item-title">My Competencies</h1>

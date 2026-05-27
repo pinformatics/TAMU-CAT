@@ -1,4 +1,4 @@
-# TAMU Competency Assessment Tool
+# TAMU Competency Assessment Tracking
 
 Need deeper walkthroughs for environment variables, setup screenshots, or deployment runbooks? Jump into the [project wiki](https://github.com/rockey1006/MHA-Survey-Portal/wiki) for extended guides.
 
@@ -20,7 +20,7 @@ Need deeper walkthroughs for environment variables, setup screenshots, or deploy
 
 ## Project Title & Description
 
-**TAMU Competency Assessment Tool** is a Ruby on Rails application that streamlines the Texas A&M Master of Health Administration (MHA) survey lifecycle. Students complete required assessments, advisors monitor cohorts, and administrators orchestrate the program—each via secure, role-aware dashboards with feedback loops and analytics.
+**TAMU Competency Assessment Tracking** is a Ruby on Rails application that streamlines the Texas A&M Master of Health Administration (MHA) survey lifecycle. Students complete required assessments, advisors monitor cohorts, and administrators orchestrate the program—each via secure, role-aware dashboards with feedback loops and analytics.
 
 ## Requirements (Internal & External Components)
 

@@ -7,6 +7,11 @@ class StudentCompetencyDashboard
   COMPETENCY_TITLES = Reports::DataAggregator::COMPETENCY_TITLES
   DOMAIN_NAMES = Reports::DataAggregator::REPORT_DOMAINS
   ALL_SEMESTERS_VALUE = "all"
+  COMPETENCY_IDENTITY_MODELS = {
+    "grade_competency_evidences" => GradeCompetencyEvidence,
+    "grade_competency_ratings" => GradeCompetencyRating,
+    "competency_target_levels" => CompetencyTargetLevel
+  }.freeze
   SOURCE_OPTIONS = {
     "self" => "Self",
     "course" => "Course",
@@ -487,15 +492,19 @@ class StudentCompetencyDashboard
   def filter_competency_identity(scope, table_name:)
     return scope.where(competency_title: COMPETENCY_TITLES) if competency_ids.empty?
 
+    table = competency_identity_table(table_name)
     scope.where(
-      "#{table_name}.competency_id IN (:ids) OR #{table_name}.competency_title IN (:titles)",
-      ids: competency_ids,
-      titles: COMPETENCY_TITLES
+      table[:competency_id].in(competency_ids)
+        .or(table[:competency_title].in(COMPETENCY_TITLES))
     )
   end
 
   def competency_ids
     @competency_ids ||= Competency.where(title: COMPETENCY_TITLES).pluck(:id)
+  end
+
+  def competency_identity_table(table_name)
+    COMPETENCY_IDENTITY_MODELS.fetch(table_name).arel_table
   end
 
   def canonical_competency_title(record)
