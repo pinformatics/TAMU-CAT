@@ -1,0 +1,65 @@
+<% notifications = local_assigns.fetch(:notifications, []) %>
+<% empty_message = local_assigns.fetch(:empty_message, "You're all caught up! New notifications will appear here.") %>
+<% card_classes = local_assigns.fetch(:card_classes, "c-card c-card--compact c-card--hover") %>
+<% list_classes = local_assigns.fetch(:list_classes, "u-stack u-stack--md u-max-h-70vh u-scroll-y") %>
+<% compact = local_assigns.fetch(:compact, false) %>
+<% item_classes = [ "c-list-item", "c-media", ("c-list-item--compact" if compact) ].compact.join(" ") %>
+<% icon_size_class = compact ? "u-size-md" : "u-size-lg" %>
+<% action_button_size = compact ? "btn-sm" : nil %>
+
+<section class="<%= card_classes %>">
+  <h2 class="c-section-title c-heading-inline">
+    <div class="c-section-icon"></div>
+    Notifications
+  </h2>
+
+  <div class="<%= list_classes %>">
+    <% if notifications.present? %>
+      <% notifications.each do |notification| %>
+        <div class="<%= item_classes %><%= notification.read? ? "" : " is-unread" %>">
+          <div class="u-flex u-items-center u-justify-center <%= icon_size_class %> u-rounded-full c-icon-circle" aria-hidden="true">
+            <span class="c-icon-button__icon">
+              <span class="sr-only">Notification</span>
+              <%= image_tag "notification-icon.png", alt: "", class: "c-notification-icon", aria: { hidden: true } %>
+            </span>
+          </div>
+
+          <div class="c-media__content">
+            <%= link_to notification.title, notification_path(notification), class: "c-media__title-link" %>
+
+            <p class="c-help">
+              <%= truncate(notification.display_message, length: 120) %>
+            </p>
+
+            <time class="c-help" datetime="<%= notification.created_at.iso8601 %>">
+              <%= time_ago_in_words(notification.created_at) %> ago
+            </time>
+
+            <% if (target = notification.target_path_for(current_user)).present? %>
+              <div class="mt-lg">
+                <%= link_to "Open related record", target, class: button_classes(:subtle, extra_classes: action_button_size) %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <div class="u-actions">
+        <%= link_to "View all notifications", notifications_path, class: button_classes(:secondary, extra_classes: action_button_size) %>
+      </div>
+    <% else %>
+      <div class="<%= item_classes %>">
+        <div class="u-flex u-items-center u-justify-center <%= icon_size_class %> u-rounded-full c-icon-circle" aria-hidden="true">
+          <span class="c-icon-button__icon">
+            <span class="sr-only">Notification</span>
+            <%= image_tag "notification-icon.png", alt: "", class: "c-notification-icon", aria: { hidden: true } %>
+          </span>
+        </div>
+
+        <div class="c-media__content">
+          <p class="c-help"><%= empty_message %></p>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</section>

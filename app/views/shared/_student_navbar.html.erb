@@ -36,6 +36,10 @@
         <%= link_to "Competencies",
                     student_competencies_path,
                     class: "c-nav-link #{'active' if controller_name == 'student_competencies'}" %>
+
+        <%= link_to "FAQ",
+              faq_path,
+              class: "c-nav-link #{'active' if current_page?(faq_path)}" %>
       </nav>
     </div>
 

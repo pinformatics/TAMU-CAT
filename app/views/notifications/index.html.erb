@@ -10,112 +10,105 @@
   end %>
 
 <main class="c-main c-page">
-  <div class="u-stack u-stack--xl">
-    <div class="c-toolbar c-toolbar--spaced">
-      <div class="c-toolbar__row u-w-full u-justify-between u-gap-md">
-        <%= link_to "Back to Dashboard", back_path, class: button_classes(:secondary), data: { turbo: false } %>
-        <% if @unread_notification_count.to_i.positive? %>
-          <%= button_to "Mark all as read",
-                        mark_all_read_notifications_path,
-                        method: :patch,
-                        class: button_classes(:secondary) %>
-        <% end %>
-      </div>
-    </div>
-
-    <header class="c-card c-card--spacious c-card--muted">
-      <div class="u-responsive-row u-justify-between">
-        <div class="u-stack u-stack--md">
+  <div class="u-stack u-stack--md">
+    <header class="c-card c-card--compact c-card--brand">
+      <div class="c-page-header c-page-header--compact">
+        <div>
           <p class="c-eyebrow">Inbox</p>
-          <h1 class="c-h1">Notifications</h1>
-          <p class="c-lede u-max-w-xl">
-            Stay on top of survey activity, advisor feedback, and other important updates tailored to your role.
-          </p>
+          <h1 class="c-page-title c-page-title--brand">Notifications</h1>
+          <dl class="c-key-value-grid u-mt-sm">
+            <div class="c-key-value">
+              <dt>Unread</dt>
+              <dd><%= @unread_notification_count %></dd>
+            </div>
+            <div class="c-key-value">
+              <dt>Total</dt>
+              <dd><%= @total_notifications %></dd>
+            </div>
+          </dl>
         </div>
-        <div class="u-grid u-grid--2 u-w-full u-max-w-sm">
-          <div class="c-stat c-stat--muted">
-            <p class="c-stat__label">Unread</p>
-            <p class="c-stat__value c-stat__value--md"><%= @unread_notification_count %></p>
-          </div>
-          <div class="c-stat">
-            <p class="c-stat__label">Total</p>
-            <p class="c-stat__value c-stat__value--md"><%= @total_notifications %></p>
-          </div>
+
+        <div class="u-actions">
+          <%= link_to "Dashboard", back_path, class: button_classes(:secondary, extra_classes: "btn-sm"), data: { turbo: false } %>
+          <% if @unread_notification_count.to_i.positive? %>
+            <%= button_to "Mark all read",
+                          mark_all_read_notifications_path,
+                          method: :patch,
+                          class: button_classes(:secondary, extra_classes: "btn-sm") %>
+          <% end %>
         </div>
       </div>
     </header>
 
     <% if @notifications.blank? %>
-    <div class="c-card c-card--spacious c-card--dashed c-empty-state">
-      <div class="c-icon-circle u-flex u-items-center u-justify-center u-size-xl u-rounded-full u-mx-auto">
-        <svg aria-hidden="true" class="u-size-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m1 0v1a2 2 0 004 0v-1m-4 0h4" />
-        </svg>
+      <div class="c-card c-card--compact c-card--dashed c-list-item--empty">
+        You're all caught up. New notifications will appear here when something needs attention.
       </div>
-      <h2 class="c-empty-state__title">You're all caught up</h2>
-      <p class="c-empty-state__body">New notifications will appear here as soon as there is something that needs your attention.</p>
-    </div>
     <% else %>
-  <div class="u-stack u-stack--xl">
-        <% @notifications.each do |notification| %>
-        <% unread = !notification.read? %>
-        <article class="u-relative u-overflow-hidden c-card c-card--interactive c-card--lift <%= 'is-unread' if unread %>">
-          <%= link_to notification_path(notification), class: "u-block u-h-full" do %>
-            <div class="u-responsive-row u-items-start">
-              <div class="u-flex u-size-xl u-shrink-0 u-items-center u-justify-center u-rounded-full c-icon-circle">
-                <svg aria-hidden="true" class="u-size-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <% if unread %>
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m1 0v1a2 2 0 004 0v-1m-4 0h4" />
+      <div class="c-card c-card--flush c-table-wrapper">
+        <table class="c-table c-table--sm c-table--divide">
+          <thead>
+            <tr>
+              <th scope="col">Notification</th>
+              <th scope="col">Status</th>
+              <th scope="col">Received</th>
+              <th scope="col"><span class="sr-only">Action</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @notifications.each do |notification| %>
+              <% unread = !notification.read? %>
+              <% target_path = notification.target_path_for(current_user) %>
+              <tr class="c-table-row <%= 'c-table-row--unread' if unread %>">
+                <th scope="row">
+                  <%= link_to notification.title, notification_path(notification), class: "c-table__title u-link" %>
+                  <span class="c-table__meta"><%= truncate(notification.display_message, length: 110) %></span>
+                </th>
+                <td>
+                  <span class="c-status-badge <%= unread ? 'c-status-badge--info' : 'c-status-badge--muted' %>">
+                    <%= unread ? "Unread" : "Read" %>
+                  </span>
+                </td>
+                <td class="u-whitespace-nowrap">
+                  <time class="c-table__meta" datetime="<%= notification.created_at.iso8601 %>">
+                    <%= time_ago_in_words(notification.created_at) %> ago
+                  </time>
+                </td>
+                <td class="u-text-right">
+                  <% if target_path.present? %>
+                    <%= link_to "Open",
+                                notification_path(notification),
+                                class: button_classes(:subtle, extra_classes: "btn-sm") %>
+                  <% elsif unread %>
+                    <%= link_to "Mark read",
+                                notification_path(notification),
+                                class: button_classes(:subtle, extra_classes: "btn-sm") %>
                   <% else %>
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <span class="sr-only">No action available</span>
                   <% end %>
-                </svg>
-              </div>
-              <div class="u-flex-1 u-stack u-stack--md">
-                <div class="u-actions u-actions--start">
-                  <h2 class="c-h3"><%= notification.title %></h2>
-                  <% status_copy = unread ? "Unread" : "Read" %>
-                  <span class="c-pill <%= unread ? 'c-pill--primary' : 'c-pill--muted' %>">
-                    <%= status_copy %>
-                  </span>
-                </div>
-                <p class="c-help">
-                  <%= truncate(notification.message, length: 160) %>
-                </p>
-                <% if notification.target_path_for(current_user).present? %>
-                  <span class="u-inline-flex u-items-center c-help u-text-primary">
-                    View related record
-                    <svg aria-hidden="true" class="u-size-sm" viewBox="0 0 20 20" fill="currentColor">
-                      <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L13.586 11H4a1 1 0 110-2h9.586l-3.293-3.293a1 1 0 010-1.414z" clip-rule="evenodd" />
-                    </svg>
-                  </span>
-                <% end %>
-              </div>
-              <time class="c-help" datetime="<%= notification.created_at.iso8601 %>">
-                <%= time_ago_in_words(notification.created_at) %> ago
-              </time>
-            </div>
-          <% end %>
-        </article>
-        <% end %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
       </div>
 
       <% if @total_pages > 1 %>
-      <nav class="u-actions u-actions--split u-section-divider">
-        <% prev_page = @page - 1 %>
-        <% next_page = @page + 1 %>
-        <div>
-          <% if prev_page >= 1 %>
-            <%= link_to "← Previous", notifications_path(page: prev_page), class: "u-link" %>
-          <% end %>
-        </div>
-        <p class="c-eyebrow">Page <%= @page %> of <%= @total_pages %></p>
-        <div>
-          <% if next_page <= @total_pages %>
-            <%= link_to "Next →", notifications_path(page: next_page), class: "u-link" %>
-          <% end %>
-        </div>
-      </nav>
+        <nav class="c-card c-card--compact u-actions u-actions--split">
+          <% prev_page = @page - 1 %>
+          <% next_page = @page + 1 %>
+          <div>
+            <% if prev_page >= 1 %>
+              <%= link_to "Previous", notifications_path(page: prev_page), class: button_classes(:secondary, extra_classes: "btn-sm") %>
+            <% end %>
+          </div>
+          <p class="c-eyebrow">Page <%= @page %> of <%= @total_pages %></p>
+          <div>
+            <% if next_page <= @total_pages %>
+              <%= link_to "Next", notifications_path(page: next_page), class: button_classes(:secondary, extra_classes: "btn-sm") %>
+            <% end %>
+          </div>
+        </nav>
       <% end %>
     <% end %>
   </div>

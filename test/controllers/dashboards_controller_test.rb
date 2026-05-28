@@ -667,6 +667,53 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Welcome"
   end
 
+  test "student dashboard only lists unread notifications" do
+    user = users(:student)
+    sign_in user
+
+    Notification.delete_all
+    Notification.create!(user: user, title: "Needs attention", message: "Unread alert.")
+    Notification.create!(user: user, title: "Already handled", message: "Read alert.", read_at: Time.current)
+
+    get student_dashboard_path
+
+    assert_response :success
+    notification_panel = Nokogiri::HTML.parse(response.body).at_css("main.c-main--dashboard section.u-self-start")
+    assert_not_nil notification_panel
+    assert_includes notification_panel.text, "Needs attention"
+    refute_includes notification_panel.text, "Already handled"
+    assert_includes response.body, "u-max-h-md"
+    assert_includes response.body, "u-self-start"
+  end
+
+  test "advisor dashboard lists recent notifications" do
+    sign_in @advisor
+
+    Notification.delete_all
+    Notification.create!(user: @advisor, title: "Advisee update", message: "A new advisee item is ready for review.")
+
+    get advisor_dashboard_path
+
+    assert_response :success
+    assert_includes response.body, "Notifications"
+    assert_includes response.body, "Advisee update"
+    assert_includes response.body, notifications_path
+  end
+
+  test "admin dashboard lists recent notifications" do
+    sign_in @admin
+
+    Notification.delete_all
+    Notification.create!(user: @admin, title: "Import needs review", message: "A Canvas import is waiting for approval.")
+
+    get admin_dashboard_path
+
+    assert_response :success
+    assert_includes response.body, "Notifications"
+    assert_includes response.body, "Import needs review"
+    assert_includes response.body, notifications_path
+  end
+
   test "student dashboard only shows surveys assigned to the student" do
     Student.find(@student.id).update!(program_year: 2026) if Student.find_by(student_id: @student.id)&.program_year.blank?
     sign_in @student

@@ -49,12 +49,11 @@ class SurveyNotificationJob < ApplicationJob
 
   def handle_assigned_notification(survey_assignment_id)
     assignment = assignment_scope.includes(:survey, student: :user, advisor: :user).find(survey_assignment_id)
-    advisor_name = assignment.advisor&.user&.display_name || "Your advisor"
 
     Notification.deliver!(
       user: assignment.recipient_user,
       title: "New Competency Survey Assigned",
-      message: "#{advisor_name} assigned the competency survey '#{assignment.survey.title}' to you.",
+      message: "You were assigned the competency survey '#{assignment.survey.title}'.",
       notifiable: assignment
     )
   end
@@ -151,10 +150,14 @@ class SurveyNotificationJob < ApplicationJob
     advisor_ids = assignment_scope.where(survey_id: survey_id).distinct.pluck(:advisor_id).compact
 
     User.where(id: advisor_ids).find_each do |advisor_user|
+      summary = metadata[:summary].to_s.strip
+      message = "The competency survey '#{survey.title}' was updated."
+      message = "#{message} #{summary}" if summary.present?
+
       Notification.deliver!(
         user: advisor_user,
         title: "Competency Survey Updated",
-        message: "The competency survey '#{survey.title}' has been updated. #{metadata[:summary]}".strip,
+        message: message,
         notifiable: survey
       )
     end

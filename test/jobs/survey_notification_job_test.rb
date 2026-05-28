@@ -25,15 +25,15 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     notification = Notification.last
     assert_equal @assignment.student.user, notification.user
     assert_equal "New Competency Survey Assigned", notification.title
-    assert_match @assignment.survey.title, notification.message
+    assert_equal "You were assigned the competency survey '#{@assignment.survey.title}'.", notification.message
   end
 
-  test "assigned event includes advisor name in message" do
+  test "assigned event does not include advisor name in message" do
     SurveyNotificationJob.perform_now(event: :assigned, survey_assignment_id: @assignment.id)
 
     notification = Notification.last
     advisor_name = @assignment.advisor.user.display_name
-    assert_match advisor_name, notification.message
+    refute_match advisor_name, notification.message
   end
 
   test "assigned event handles missing advisor gracefully" do
@@ -49,7 +49,7 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     end
 
     notification = Notification.last
-    assert_includes notification.message, "Your advisor"
+    assert_equal "You were assigned the competency survey '#{assignment_without_advisor.survey.title}'.", notification.message
   end
 
   # Test :response_submitted event

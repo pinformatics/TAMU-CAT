@@ -67,4 +67,54 @@ class NotificationTest < ActiveSupport::TestCase
     assert_equal assignments_survey_path(survey), notification.target_path_for(advisor)
     assert_equal assignments_survey_path(survey), notification.target_path_for(admin)
   end
+
+  test "target_path_for hides incomplete expired survey assignments from students" do
+    user = users(:student)
+    assignment = survey_assignments(:residential_assignment)
+    assignment.update!(available_until: 1.day.ago, completed_at: nil)
+    notification = Notification.create!(user: user, title: "Survey Reminder", message: "Review", notifiable: assignment)
+
+    assert_nil notification.target_path_for(user)
+  end
+
+  test "target_path_for still opens active incomplete survey assignments for students" do
+    user = users(:student)
+    assignment = survey_assignments(:residential_assignment)
+    assignment.update!(available_until: 1.day.from_now, completed_at: nil)
+    notification = Notification.create!(user: user, title: "Survey Reminder", message: "Review", notifiable: assignment)
+
+    assert_equal survey_path(assignment.survey), notification.target_path_for(user)
+  end
+
+  test "display_message hides assigner names for assigned survey notifications" do
+    notification = Notification.new(
+      title: "New Competency Survey Assigned",
+      message: "Jack Buckley assigned the competency survey 'EMHA Final Competency Survey' to you."
+    )
+
+    assert_equal "You were assigned the competency survey 'EMHA Final Competency Survey'.", notification.display_message
+    refute_includes notification.display_message, "Jack Buckley"
+  end
+
+  test "display_message hides remover names for unassigned survey notifications" do
+    notification = Notification.new(
+      title: "Survey Unassigned",
+      message: "Tee Li removed 'RMHA Mid-point Competency Survey' from your assignments."
+    )
+
+    assert_equal "The survey 'RMHA Mid-point Competency Survey' was removed from your assignments.", notification.display_message
+    refute_includes notification.display_message, "Tee Li"
+  end
+
+  test "display_message clarifies legacy survey update change logs" do
+    notification = Notification.new(
+      title: "Competency Survey Updated",
+      message: "The competency survey 'RMHA Final Competency Survey' has been updated. Available until changed from '2026-01-01 00:00' to '2026-02-01 00:00'; No structural changes detected"
+    )
+
+    assert_includes notification.display_message, "The competency survey 'RMHA Final Competency Survey' was updated."
+    assert_includes notification.display_message, "Due date changed from"
+    assert_includes notification.display_message, "No question or structure changes were detected."
+    refute_includes notification.display_message, "Available until"
+  end
 end

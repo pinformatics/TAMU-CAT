@@ -2,6 +2,8 @@
 # controllers. Ensures users are signed in and exposes current profile
 # accessors for views.
 class ApplicationController < ActionController::Base
+  NAV_NOTIFICATION_LIMIT = 5
+
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   around_action :use_app_time_zone
   before_action :redirect_for_maintenance_mode
@@ -87,7 +89,8 @@ class ApplicationController < ActionController::Base
   def load_notification_state
     notifications_scope = current_user.notifications
     @unread_notification_count = notifications_scope.unread.count
-    @recent_notifications = notifications_scope.recent.limit(10)
+    @notification_menu_limit = NAV_NOTIFICATION_LIMIT
+    @recent_notifications = notifications_scope.unread.recent.limit(NAV_NOTIFICATION_LIMIT)
   end
 
   # When enabled, redirects non-admin users to the maintenance page.

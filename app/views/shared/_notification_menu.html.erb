@@ -1,5 +1,5 @@
-<details class="notifications-menu c-popover-anchor u-hover-dropdown">
-  <summary class="c-icon-button c-icon-button--nav" aria-label="Notifications">
+<div class="notifications-menu c-popover-anchor u-hover-dropdown" data-click-pins="true">
+  <button type="button" class="c-icon-button c-icon-button--nav" aria-label="Notifications" aria-haspopup="menu" aria-expanded="false">
     <span class="c-icon-button__icon">
       <%= image_tag "notification-icon.png", alt: "", class: "c-notification-icon", aria: { hidden: true } %>
       <% if @unread_notification_count.to_i.positive? %>
@@ -9,16 +9,16 @@
       <% end %>
     </span>
     <span class="sr-only">Notifications</span>
-  </summary>
+  </button>
 
   <div class="c-popover c-popover--menu u-popover-down-right u-hover-dropdown__panel" role="menu">
     <div class="c-menu__header">
-      <span class="c-menu__title">Recent Notifications</span>
+      <span class="c-menu__title">Unread Notifications</span>
       <%= link_to "View all", notifications_path, class: button_classes(:ghost, extra_classes: "btn-sm") %>
     </div>
 
     <% if @recent_notifications.blank? %>
-      <p class="c-menu__empty">No notifications yet.</p>
+      <p class="c-menu__empty">No unread notifications.</p>
     <% else %>
       <ul class="c-menu">
         <% @recent_notifications.each do |notification| %>
@@ -28,10 +28,8 @@
                 <span class="c-menu__item-title"><%= notification.title %></span>
                 <time class="c-menu__meta" datetime="<%= notification.created_at.iso8601 %>"><%= time_ago_in_words(notification.created_at) %> ago</time>
               </div>
-              <p class="c-menu__message"><%= truncate(notification.message, length: 80) %></p>
-              <% unless notification.read? %>
-                <span class="c-pill c-pill--primary">Unread</span>
-              <% end %>
+              <p class="c-menu__message"><%= truncate(notification.display_message, length: 80) %></p>
+              <span class="c-pill c-pill--primary">Unread</span>
             <% end %>
           </li>
         <% end %>
@@ -40,6 +38,11 @@
 
     <% if @unread_notification_count.to_i.positive? %>
       <div class="c-menu__footer">
+        <% if @unread_notification_count.to_i > @recent_notifications.size %>
+          <p class="c-menu__meta">
+            Showing <%= @recent_notifications.size %> of <%= @unread_notification_count %> unread.
+          </p>
+        <% end %>
         <%= button_to "Mark all as read",
                     mark_all_read_notifications_path,
                     method: :patch,
@@ -47,4 +50,4 @@
       </div>
     <% end %>
   </div>
-</details>
+</div>

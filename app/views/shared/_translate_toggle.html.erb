@@ -1,9 +1,11 @@
-<div id="gt-compact" class="translate-nav u-hover-dropdown" aria-hidden="false">
+<div id="gt-compact" class="translate-nav u-hover-dropdown" aria-hidden="false" data-turbo-permanent>
   <button
     id="gt-toggle"
     type="button"
     class="c-icon-button c-icon-button--nav"
     aria-label="Translate site"
+    aria-controls="gt-panel"
+    aria-expanded="false"
     title="Translate site">
     <span class="c-icon-button__icon">
       <span class="sr-only">Translate</span>
@@ -13,7 +15,7 @@
     </span>
   </button>
 
-  <div id="gt-panel" class="translate-panel u-hover-dropdown__panel" style="display:none;">
+  <div id="gt-panel" class="translate-panel u-hover-dropdown__panel" style="display:none;" aria-hidden="true">
     <div class="translate-panel__header">
       <p>Choose a language</p>
       <small>Powered by Google Translate</small>

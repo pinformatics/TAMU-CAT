@@ -1013,47 +1013,88 @@ function initDisableSubmitIfUnchanged() {
 
 
 // -----------------------------
-// Hover dropdown support for <details>
+// Hover dropdown support
 // -----------------------------
 
 function initHoverDropdownDetails() {
-  // Some browsers effectively keep <details> content non-rendered unless [open] is set.
-  // For hover-based dropdowns implemented with <details>/<summary>, keep [open]
-  // in sync with hover/focus so menus behave like the profile dropdown.
-  document.querySelectorAll("details.u-hover-dropdown").forEach((details) => {
-    if (details.dataset.hoverDropdownInitialized === "true") return
-    details.dataset.hoverDropdownInitialized = "true"
+  document.querySelectorAll("details.u-hover-dropdown, .u-hover-dropdown[data-click-pins='true']").forEach((dropdown) => {
+    if (dropdown.dataset.hoverDropdownInitialized === "true") return
+    dropdown.dataset.hoverDropdownInitialized = "true"
 
     let closeTimer = null
+    let pinnedOpen = false
+    const isDetails = dropdown.tagName.toLowerCase() === "details"
+    const clickPins = dropdown.dataset.clickPins === "true"
+    const trigger = isDetails ? dropdown.querySelector("summary") : dropdown.querySelector("button")
+
+    const setOpen = (open) => {
+      if (isDetails) dropdown.open = open
+      dropdown.classList.toggle("is-pinned", open && pinnedOpen)
+      trigger?.setAttribute("aria-expanded", open ? "true" : "false")
+    }
 
     const openNow = () => {
       if (closeTimer) {
         window.clearTimeout(closeTimer)
         closeTimer = null
       }
-      details.open = true
+      if (isDetails) setOpen(true)
     }
 
     const closeSoon = () => {
+      if (pinnedOpen) return
       if (closeTimer) window.clearTimeout(closeTimer)
       closeTimer = window.setTimeout(() => {
-        if (details.matches(":focus-within")) return
-        details.open = false
+        if (pinnedOpen) return
+        if (dropdown.matches(":focus-within")) return
+        setOpen(false)
       }, 75)
     }
 
-    details.addEventListener("mouseenter", openNow)
-    details.addEventListener("mouseleave", closeSoon)
-    details.addEventListener("focusin", openNow)
-    details.addEventListener("focusout", closeSoon)
+    dropdown.addEventListener("mouseenter", openNow)
+    dropdown.addEventListener("mouseleave", closeSoon)
+    dropdown.addEventListener("focusin", openNow)
+    dropdown.addEventListener("focusout", closeSoon)
 
-    // If a click toggles [open] off while still hovered/focused, immediately restore it.
-    details.addEventListener("toggle", () => {
-      if (details.open) return
-      if (details.matches(":hover") || details.matches(":focus-within")) {
-        details.open = true
-      }
-    })
+    if (clickPins && trigger) {
+      trigger.addEventListener("click", (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+
+        pinnedOpen = !pinnedOpen
+        setOpen(pinnedOpen)
+      })
+
+      document.addEventListener("click", (event) => {
+        if (!pinnedOpen) return
+        if (dropdown.contains(event.target)) return
+
+        pinnedOpen = false
+        setOpen(false)
+      })
+
+      dropdown.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return
+
+        pinnedOpen = false
+        setOpen(false)
+        trigger.focus()
+      })
+    }
+
+    if (isDetails) {
+      // If a click toggles [open] off while still hovered/focused, immediately restore it.
+      dropdown.addEventListener("toggle", () => {
+        if (dropdown.open) return
+        if (pinnedOpen) {
+          setOpen(true)
+          return
+        }
+        if (dropdown.matches(":hover") || dropdown.matches(":focus-within")) {
+          setOpen(true)
+        }
+      })
+    }
   })
 }
 
@@ -1140,6 +1181,303 @@ function initServerMarkdownPreviews() {
 
 
 // -----------------------------
+// Google Translate widget
+// -----------------------------
+
+const GOOGLE_TRANSLATE_ELEMENT_ID = "google_translate_element"
+const GOOGLE_TRANSLATE_SCRIPT_ID = "google-translate-script"
+const GOOGLE_TRANSLATE_SCRIPT_URL = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
+
+let googleTranslateBarObserver = null
+let googleTranslateBarInterval = null
+let googleTranslateRetryCount = 0
+
+function googleTranslateContainer() {
+  return document.getElementById(GOOGLE_TRANSLATE_ELEMENT_ID)
+}
+
+function googleTranslateCombo() {
+  const container = googleTranslateContainer()
+  return container?.querySelector("select.goog-te-combo") || document.querySelector("select.goog-te-combo")
+}
+
+function googleTranslateWidgetReady() {
+  const container = googleTranslateContainer()
+  if (!container) return false
+
+  return Boolean(
+    container.querySelector("select.goog-te-combo, .goog-te-gadget, .goog-te-gadget-simple")
+  )
+}
+
+function setGoogleTranslateStatus(message, { retry = false } = {}) {
+  const container = googleTranslateContainer()
+  if (!container || googleTranslateWidgetReady()) return
+
+  container.innerHTML = `
+    <div class="translate-widget__status">
+      <span>${message}</span>
+      ${retry ? '<button type="button" class="btn btn-secondary btn-sm" data-gt-retry>Retry</button>' : ""}
+    </div>
+  `
+
+  bindGoogleTranslateRetry()
+}
+
+function bindGoogleTranslateRetry() {
+  const retryButton = googleTranslateContainer()?.querySelector("[data-gt-retry]")
+  if (!retryButton || retryButton.dataset.gtRetryBound === "true") return
+  retryButton.dataset.gtRetryBound = "true"
+
+  retryButton.addEventListener("click", () => {
+    googleTranslateRetryCount = 0
+    setGoogleTranslateStatus("Loading translation options...")
+    ensureGoogleTranslateScript({ force: true })
+    scheduleGoogleTranslateAdoption({ reapply: true, forceRetry: true })
+  })
+}
+
+function readGoogleTranslateCookie() {
+  const match = document.cookie.match(/(?:^|;\s*)googtrans=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : ""
+}
+
+function selectedGoogleTranslateLanguage() {
+  const cookie = readGoogleTranslateCookie()
+  if (!cookie || cookie === "/auto/en" || cookie === "/en/en") return ""
+  return cookie.split("/").filter(Boolean).pop() || ""
+}
+
+function bindGoogleTranslateToggle() {
+  const button = document.getElementById("gt-toggle")
+  const panel = document.getElementById("gt-panel")
+  if (!button || !panel) return
+  if (button.dataset.gtToggleBound === "true") return
+  button.dataset.gtToggleBound = "true"
+
+  button.addEventListener("click", () => {
+    const isHidden = panel.style.display === "none" || window.getComputedStyle(panel).display === "none"
+    panel.style.display = isHidden ? "block" : "none"
+    panel.setAttribute("aria-hidden", isHidden ? "false" : "true")
+    button.setAttribute("aria-expanded", isHidden ? "true" : "false")
+
+    if (isHidden) {
+      initGoogleTranslateWidget()
+    }
+  })
+}
+
+function installGoogleTranslateCallback() {
+  window.googleTranslateElementInit = () => {
+    mountGoogleTranslateWidget()
+    scheduleGoogleTranslateAdoption({ reapply: true })
+  }
+}
+
+function ensureGoogleTranslateScript(options = {}) {
+  installGoogleTranslateCallback()
+
+  if (window.google?.translate?.TranslateElement) {
+    mountGoogleTranslateWidget()
+    return
+  }
+
+  const existingScript = document.getElementById(GOOGLE_TRANSLATE_SCRIPT_ID)
+  if (existingScript && !options.force) return
+  if (existingScript && options.force) existingScript.remove()
+
+  const script = document.createElement("script")
+  script.id = GOOGLE_TRANSLATE_SCRIPT_ID
+  script.type = "text/javascript"
+  script.src = options.force ? `${GOOGLE_TRANSLATE_SCRIPT_URL}&retry=${Date.now()}` : GOOGLE_TRANSLATE_SCRIPT_URL
+  script.async = true
+  script.onload = () => {
+    window.setTimeout(() => {
+      mountGoogleTranslateWidget()
+      scheduleGoogleTranslateAdoption({ reapply: true })
+    }, 0)
+  }
+  script.onerror = () => {
+    setGoogleTranslateStatus("Translation options could not load.", { retry: true })
+  }
+  document.head.appendChild(script)
+}
+
+function mountGoogleTranslateWidget() {
+  const container = googleTranslateContainer()
+  if (!container) return
+  if (googleTranslateWidgetReady()) return
+  if (!window.google?.translate?.TranslateElement) return
+
+  try {
+    container.innerHTML = ""
+    new window.google.translate.TranslateElement(
+      { pageLanguage: "en", layout: window.google.translate.TranslateElement.InlineLayout.SIMPLE },
+      GOOGLE_TRANSLATE_ELEMENT_ID
+    )
+  } catch (error) {
+    console.warn("[Google Translate] widget mount failed", error)
+  }
+}
+
+function bindGoogleTranslateCombo(select) {
+  if (!select || select.dataset.gtChangeBound === "true") return
+  select.dataset.gtChangeBound = "true"
+
+  select.addEventListener("change", () => {
+    if (select.dataset.gtProgrammatic === "true") return
+
+    window.setTimeout(() => {
+      const cookie = readGoogleTranslateCookie()
+      const language = cookie || select.value
+      if (!language) return
+
+      // Google usually translates immediately. The reload is only a one-time
+      // fallback for cases where the cookie is set but Turbo content did not update.
+      const key = `gt_reload_after_choice:${language}`
+      if (window.sessionStorage.getItem(key) === "true") return
+      window.sessionStorage.setItem(key, "true")
+      window.sessionStorage.removeItem("gt_turbo_reloaded")
+      window.location.reload()
+    }, 700)
+  })
+}
+
+function adoptGoogleTranslateWidget() {
+  const container = googleTranslateContainer()
+  if (!container) return false
+
+  const select = googleTranslateCombo()
+  if (!select) return googleTranslateWidgetReady()
+
+  select.style.width = "100%"
+  select.style.height = "2.25rem"
+  select.style.display = ""
+
+  const gadget = select.closest(".goog-te-gadget")
+  if (gadget) {
+    Array.from(gadget.children).forEach((child) => {
+      if (child !== select && !child.contains(select)) child.style.display = "none"
+    })
+  }
+
+  bindGoogleTranslateCombo(select)
+  return true
+}
+
+function scheduleGoogleTranslateAdoption(options = {}) {
+  const maxAttempts = options.maxAttempts || 24
+  const delay = options.delay || 250
+  let attempts = 0
+
+  const tick = () => {
+    attempts += 1
+    const ready = adoptGoogleTranslateWidget()
+    if (ready) {
+      if (options.reapply) reapplyGoogleTranslateLanguage()
+      return
+    }
+    if (attempts < maxAttempts) window.setTimeout(tick, delay)
+    else handleGoogleTranslateTimeout(options)
+  }
+
+  tick()
+}
+
+function handleGoogleTranslateTimeout(options = {}) {
+  if (googleTranslateWidgetReady()) return
+
+  if (googleTranslateRetryCount < 1 || options.forceRetry) {
+    googleTranslateRetryCount += 1
+    ensureGoogleTranslateScript({ force: true })
+    scheduleGoogleTranslateAdoption({ reapply: options.reapply, maxAttempts: 20 })
+    return
+  }
+
+  setGoogleTranslateStatus("Translation options are still loading.", { retry: true })
+}
+
+function reapplyGoogleTranslateLanguage() {
+  const language = selectedGoogleTranslateLanguage()
+  if (!language) return
+
+  const select = googleTranslateCombo()
+  if (!(select instanceof HTMLSelectElement)) return
+  if (select.value === language) return
+
+  try {
+    select.dataset.gtProgrammatic = "true"
+    select.value = language
+    select.dispatchEvent(new Event("change", { bubbles: true }))
+  } catch (error) {
+    console.warn("[Google Translate] language reapply failed", error)
+  } finally {
+    window.setTimeout(() => {
+      delete select.dataset.gtProgrammatic
+    }, 0)
+  }
+}
+
+function initGoogleTranslateWidget() {
+  if (!googleTranslateContainer()) return
+
+  bindGoogleTranslateToggle()
+  if (!googleTranslateWidgetReady()) {
+    setGoogleTranslateStatus("Loading translation options...")
+  }
+  ensureGoogleTranslateScript()
+
+  if (window.google?.translate?.TranslateElement) {
+    mountGoogleTranslateWidget()
+  }
+
+  scheduleGoogleTranslateAdoption({ reapply: true })
+}
+
+function adjustForGoogleTranslateBar() {
+  try {
+    const frame = document.querySelector('iframe[id^="goog-gt-"]') || document.querySelector("iframe.goog-te-banner-frame")
+    if (frame && frame.clientHeight) {
+      const height = `${frame.clientHeight}px`
+      document.body.style.setProperty("margin-top", height, "important")
+      document.documentElement.style.setProperty("margin-top", height, "important")
+      document.body.style.setProperty("transform", "none", "important")
+    } else if (frame) {
+      document.body.style.setProperty("margin-top", "40px", "important")
+      document.documentElement.style.setProperty("margin-top", "40px", "important")
+      document.body.style.setProperty("transform", "none", "important")
+    } else {
+      document.body.style.removeProperty("margin-top")
+      document.documentElement.style.removeProperty("margin-top")
+      document.body.style.removeProperty("transform")
+    }
+  } catch {
+    // Google injects cross-browser iframe variations; failing to offset should never break the app.
+  }
+}
+
+function initGoogleTranslateBarOffset() {
+  adjustForGoogleTranslateBar()
+
+  if (!googleTranslateBarObserver) {
+    googleTranslateBarObserver = new MutationObserver(adjustForGoogleTranslateBar)
+    googleTranslateBarObserver.observe(document.documentElement || document.body, { childList: true, subtree: true })
+  }
+
+  if (googleTranslateBarInterval) window.clearInterval(googleTranslateBarInterval)
+
+  let checks = 0
+  googleTranslateBarInterval = window.setInterval(() => {
+    adjustForGoogleTranslateBar()
+    checks += 1
+    if (checks > 20) {
+      window.clearInterval(googleTranslateBarInterval)
+      googleTranslateBarInterval = null
+    }
+  }, 300)
+}
+
+// -----------------------------
 // Hook into Turbo / DOM load
 // -----------------------------
 
@@ -1157,6 +1495,8 @@ function initAccessibilityFeatures() {
   initDisableSubmitIfUnchanged()
   initHoverDropdownDetails()
   initServerMarkdownPreviews()
+  initGoogleTranslateWidget()
+  initGoogleTranslateBarOffset()
 }
 
 document.addEventListener("turbo:load", initAccessibilityFeatures)

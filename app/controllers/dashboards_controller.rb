@@ -133,7 +133,7 @@ class DashboardsController < ApplicationController
       end
     end
 
-    @dashboard_notifications = current_user.notifications.recent.limit(5)
+    @dashboard_notifications = current_user.notifications.unread.recent.limit(5)
   end
 
   # Displays advisor-specific information such as advisees and recent feedback.
@@ -160,6 +160,7 @@ class DashboardsController < ApplicationController
     @active_survey_count = Survey.count
     advisee_ids = Array(@advisees).map(&:student_id).compact
     @total_reports = advisee_ids.empty? ? 0 : SurveyAssignment.where(student_id: advisee_ids).count
+    @dashboard_notifications = current_user.notifications.recent.limit(5)
   end
 
   # Shows high-level system metrics for administrators.
@@ -178,6 +179,7 @@ class DashboardsController < ApplicationController
     @total_responses = StudentQuestion.count
     @total_reports = SurveyAssignment.count
     @maintenance_enabled = SiteSetting.maintenance_enabled?
+    @dashboard_notifications = current_user.notifications.recent.limit(5)
   end
 
   # Provides a single admin workspace for member and student management.

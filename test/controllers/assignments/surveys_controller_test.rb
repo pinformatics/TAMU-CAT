@@ -337,6 +337,9 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to assignments_survey_path(@survey)
     assert_match "Unassigned", flash[:notice]
+    notification = Notification.find_by!(user: student.user, title: "Survey Unassigned")
+    assert_equal "The survey '#{@survey.title}' was removed from your assignments.", notification.message
+    refute_includes notification.message, users(:advisor).name
   end
 
   test "unassigning multiple surveys creates distinct notifications" do

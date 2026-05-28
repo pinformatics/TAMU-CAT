@@ -737,18 +737,42 @@ class Admin::SurveysController < Admin::BaseController
       after_value = after[attribute]
       next if before_value == after_value
 
-      diffs << "#{attribute.to_s.humanize} changed from '#{before_value}' to '#{after_value}'"
+      diffs << "#{survey_change_label(attribute)} changed from #{survey_change_value(attribute, before_value)} to #{survey_change_value(attribute, after_value)}."
     end
 
     if before[:tracks].sort != tracks.sort
-      diffs << "Tracks updated to #{tracks.join(', ')}"
+      diffs << "Tracks updated to #{tracks.join(', ')}."
     end
 
     before_counts = before[:categories].map { |c| c[:question_count] }
     after_counts = after[:categories].map { |c| c[:question_count] }
-    diffs << "Category/question structure updated" if before_counts != after_counts
+    diffs << "Category or question structure updated." if before_counts != after_counts
 
-    diffs.present? ? diffs.join("; ") : "No structural changes detected"
+    diffs.present? ? diffs.join(" ") : "No question or structure changes were detected."
+  end
+
+  def survey_change_label(attribute)
+    {
+      available_from: "Open date",
+      available_until: "Due date",
+      is_active: "Status"
+    }.fetch(attribute, attribute.to_s.humanize)
+  end
+
+  def survey_change_value(attribute, value)
+    return "not set" if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+
+    case attribute
+    when :available_from, :available_until
+      parsed_time = Time.zone.parse(value.to_s)
+      parsed_time ? parsed_time.to_fs(:long) : value
+    when :is_active
+      ActiveModel::Type::Boolean.new.cast(value) ? "active" : "archived"
+    else
+      "'#{value}'"
+    end
+  rescue ArgumentError
+    value
   end
 
   # Token representing surveys with no track assignments when filtering.

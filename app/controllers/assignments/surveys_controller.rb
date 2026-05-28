@@ -234,7 +234,7 @@ module Assignments
           Notification.deliver!(
             user: student.user,
             title: "Survey Unassigned",
-            message: "#{current_user.name} removed '#{@survey.title}' from your assignments.",
+            message: "The survey '#{@survey.title}' was removed from your assignments.",
             notifiable: @survey
           )
         end
@@ -279,7 +279,7 @@ module Assignments
             Notification.deliver!(
               user: student.user,
               title: "Survey Unassigned",
-              message: "#{current_user.name} removed '#{@survey.title}' from your assignments.",
+              message: "The survey '#{@survey.title}' was removed from your assignments.",
               notifiable: @survey
             )
           end
