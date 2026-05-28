@@ -755,7 +755,7 @@ class Admin::SurveysController < Admin::BaseController
     {
       available_from: "Open date",
       available_until: "Due date",
-      is_active: "Status"
+      is_active: "Is active"
     }.fetch(attribute, attribute.to_s.humanize)
   end
 
