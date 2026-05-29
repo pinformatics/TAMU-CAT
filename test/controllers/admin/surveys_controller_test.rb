@@ -601,6 +601,15 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "index opens copy workflow in an inline modal" do
+    get admin_surveys_path
+
+    assert_response :success
+    assert_select "button[data-open-modal=?]", "copy-survey-modal-#{@survey.id}", text: "Copy"
+    assert_select "div#copy-survey-modal-#{@survey.id} form[action=?]", copy_to_semester_admin_survey_path(@survey)
+    assert_select "div#copy-survey-modal-#{@survey.id} select[name='survey_copy[target_program_semester_id]']"
+  end
+
   test "index with search query" do
     get admin_surveys_path, params: { q: "Fall" }
     assert_response :success
@@ -1427,6 +1436,9 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
+    assert_select "form[data-preview-survey-form='true']"
+    assert_select "input[type='submit'][value='Submit Preview']"
+    assert_includes response.body, "No responses are saved"
   end
 
   test "preview with categories and questions" do

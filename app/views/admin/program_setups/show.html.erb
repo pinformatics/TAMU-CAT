@@ -19,21 +19,16 @@
       </header>
     </section>
 
-    <section class="c-card c-card--spacious u-stack u-stack--md">
-      <div class="u-stack u-stack--sm">
-        <h2 class="c-section-title c-heading-inline">Workspace</h2>
-        <p class="c-lede">Choose the area you want to manage.</p>
-      </div>
-
-      <nav class="u-grid" style="--u-grid-min: 220px;" aria-label="Program setup tabs">
+    <section class="c-card c-card--compact u-stack u-stack--md">
+      <nav class="c-tab-list" aria-label="Program setup tabs">
         <% tabs.each do |label, value, description| %>
           <% active = (@tab == value) %>
-          <%= link_to admin_program_setup_path(tab: value), class: "c-card c-card--tight #{active ? '' : 'c-card--muted'}", aria: (active ? { current: "page" } : {}) do %>
-            <div class="u-stack u-stack--sm">
-              <div class="c-h3"><%= label %></div>
-              <p class="c-lede"><%= description %></p>
-            </div>
-          <% end %>
+          <%= link_to label,
+                admin_program_setup_path(tab: value),
+                class: "c-tab-link #{active ? 'is-active' : ''}",
+                title: description,
+                aria: (active ? { current: "page" } : {}),
+                data: { turbo: false } %>
         <% end %>
       </nav>
     </section>
@@ -60,25 +55,36 @@
                         <p class="c-table__title"><%= track.name %></p>
                       </div>
 
-                      <details>
-                        <summary class="u-cursor-pointer u-list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
-                        <div class="c-card c-card--tight c-card--muted u-mt-sm">
-                          <%= form_with model: [:admin, track], local: true, class: "u-stack u-stack--md" do |form| %>
-                            <div class="u-grid u-grid--2">
-                              <div class="c-field"><%= form.label :name, "Name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
-                              <div class="c-field"><%= form.label :key, "Key", class: "c-label" %><%= form.text_field :key, class: "c-input" %></div>
-                              <div class="c-field"><%= form.label :position, "Position", class: "c-label" %><%= form.number_field :position, min: 0, step: 1, class: "c-input" %></div>
-                              <label class="c-choice-label"><%= form.check_box :active, class: "c-choice" %><span>Active</span></label>
+                      <% modal_id = "program-track-edit-#{track.id}" %>
+                      <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
+
+                      <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                        <section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                          <header class="c-modal__header">
+                            <div>
+                              <p class="c-eyebrow">Track</p>
+                              <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit <%= track.name %></h3>
                             </div>
-                            <div class="u-actions u-actions--start">
-                              <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
+                            <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                          </header>
+                          <div class="c-modal__body u-stack u-stack--md">
+                            <%= form_with model: [:admin, track], local: true, class: "u-stack u-stack--md" do |form| %>
+                              <div class="u-grid u-grid--2">
+                                <div class="c-field"><%= form.label :name, "Name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
+                                <div class="c-field"><%= form.label :key, "Key", class: "c-label" %><%= form.text_field :key, class: "c-input" %></div>
+                                <div class="c-field"><%= form.label :position, "Position", class: "c-label" %><%= form.number_field :position, min: 0, step: 1, class: "c-input" %></div>
+                                <label class="c-choice-label"><%= form.check_box :active, class: "c-choice" %><span>Active</span></label>
+                              </div>
+                              <div class="u-actions u-actions--start">
+                                <%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %>
+                              </div>
+                            <% end %>
+                            <div class="u-section-divider u-pt-sm">
+                              <%= button_to "Delete", admin_program_track_path(track), method: :delete, data: { turbo_confirm: "Delete #{track.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
-                          <% end %>
-                          <div class="u-actions u-actions--start u-mt-sm">
-                            <%= button_to "Delete", admin_program_track_path(track), method: :delete, data: { turbo_confirm: "Delete #{track.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
                           </div>
-                        </div>
-                      </details>
+                        </section>
+                      </div>
                     </div>
                   </li>
                 <% end %>
@@ -120,18 +126,29 @@
                         <p class="c-table__title"><%= major.name %></p>
                       </div>
 
-                      <details>
-                        <summary class="u-cursor-pointer u-list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
-                        <div class="c-card c-card--tight c-card--muted u-mt-sm">
-                          <%= form_with model: [:admin, major], local: true, class: "u-stack u-stack--md" do |form| %>
-                            <div class="c-field"><%= form.label :name, "Name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
-                            <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
-                          <% end %>
-                          <div class="u-actions u-actions--start u-mt-sm">
-                            <%= button_to "Delete", admin_major_path(major), method: :delete, data: { turbo_confirm: "Delete #{major.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                      <% modal_id = "major-edit-#{major.id}" %>
+                      <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
+
+                      <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                        <section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                          <header class="c-modal__header">
+                            <div>
+                              <p class="c-eyebrow">Major</p>
+                              <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit <%= major.name %></h3>
+                            </div>
+                            <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                          </header>
+                          <div class="c-modal__body u-stack u-stack--md">
+                            <%= form_with model: [:admin, major], local: true, class: "u-stack u-stack--md" do |form| %>
+                              <div class="c-field"><%= form.label :name, "Name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
+                              <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
+                            <% end %>
+                            <div class="u-section-divider u-pt-sm">
+                              <%= button_to "Delete", admin_major_path(major), method: :delete, data: { turbo_confirm: "Delete #{major.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                            </div>
                           </div>
-                        </div>
-                      </details>
+                        </section>
+                      </div>
                     </div>
                   </li>
                 <% end %>
@@ -167,26 +184,38 @@
             <% else %>
               <div class="c-management-list">
                 <% @program_years.each do |year| %>
-                  <details class="c-management-item">
-                    <summary class="c-management-item__summary">
+                  <% modal_id = "program-year-edit-#{year.id}" %>
+                  <div class="c-management-item">
+                    <div class="c-management-item__summary">
                       <span class="c-table__title">Class of <%= year.value %></span>
-                      <span class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</span>
-                    </summary>
-
-                    <div class="c-management-item__body u-stack u-stack--md">
-                      <%= form_with model: [:admin, year], local: true, class: "u-stack u-stack--md" do |form| %>
-                        <div class="u-grid u-grid--2">
-                          <div class="c-field"><%= form.label :value, "Class of year", class: "c-label" %><%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "c-input" %></div>
-                          <div class="c-field"><%= form.label :position, "Position", class: "c-label" %><%= form.number_field :position, min: 0, step: 1, class: "c-input" %></div>
-                          <label class="c-choice-label"><%= form.check_box :active, class: "c-choice" %><span>Active</span></label>
-                        </div>
-                        <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
-                      <% end %>
-                      <div class="u-actions u-actions--start">
-                        <%= button_to "Delete", admin_program_year_path(year), method: :delete, data: { turbo_confirm: "Delete Class of #{year.value}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
-                      </div>
+                      <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
                     </div>
-                  </details>
+
+                    <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                      <section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                        <header class="c-modal__header">
+                          <div>
+                            <p class="c-eyebrow">Cohort</p>
+                            <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit Class of <%= year.value %></h3>
+                          </div>
+                          <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                        </header>
+                        <div class="c-modal__body u-stack u-stack--md">
+                          <%= form_with model: [:admin, year], local: true, class: "u-stack u-stack--md" do |form| %>
+                            <div class="u-grid u-grid--2">
+                              <div class="c-field"><%= form.label :value, "Class of year", class: "c-label" %><%= form.number_field :value, required: true, min: 2026, max: 3000, step: 1, class: "c-input" %></div>
+                              <div class="c-field"><%= form.label :position, "Position", class: "c-label" %><%= form.number_field :position, min: 0, step: 1, class: "c-input" %></div>
+                              <label class="c-choice-label"><%= form.check_box :active, class: "c-choice" %><span>Active</span></label>
+                            </div>
+                            <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
+                          <% end %>
+                          <div class="u-section-divider u-pt-sm">
+                            <%= button_to "Delete", admin_program_year_path(year), method: :delete, data: { turbo_confirm: "Delete Class of #{year.value}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </div>
                 <% end %>
               </div>
             <% end %>
@@ -224,6 +253,7 @@
             <% else %>
               <ul class="c-compact-list">
                 <% @program_semesters.each do |semester| %>
+                  <% modal_id = "program-semester-edit-#{semester.id}" %>
                   <li class="c-card c-card--tight">
                     <div class="u-responsive-split u-items-start">
                       <div class="u-stack u-stack--sm">
@@ -231,9 +261,18 @@
                       </div>
 
                       <div class="u-actions">
-                        <details>
-                          <summary class="u-cursor-pointer u-list-none <%= button_classes(:secondary, extra_classes: 'btn-sm') %>">Edit</summary>
-                          <div class="c-card c-card--tight c-card--muted u-mt-sm">
+                        <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
+
+                        <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                          <section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                            <header class="c-modal__header">
+                              <div>
+                                <p class="c-eyebrow">Semester</p>
+                                <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit <%= semester.name %></h3>
+                              </div>
+                              <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                            </header>
+                            <div class="c-modal__body u-stack u-stack--md">
                             <% unless semester.current? %>
                               <div class="u-actions u-actions--start">
                                 <%= button_to "Make current", make_current_admin_program_semester_path(semester), method: :patch, class: button_classes(:subtle, extra_classes: "btn-sm") %>
@@ -243,11 +282,12 @@
                               <div class="c-field"><%= form.label :name, "Semester name", class: "c-label" %><%= form.text_field :name, required: true, class: "c-input" %></div>
                               <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
                             <% end %>
-                            <div class="u-actions u-actions--start u-mt-sm">
+                            <div class="u-section-divider u-pt-sm">
                               <%= button_to "Delete", admin_program_semester_path(semester), method: :delete, data: { turbo_confirm: "Delete #{semester.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
-                          </div>
-                        </details>
+                            </div>
+                          </section>
+                        </div>
                       </div>
                     </div>
                   </li>

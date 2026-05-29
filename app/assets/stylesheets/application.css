@@ -190,6 +190,11 @@
   margin: 0;
 }
 
+.u-inline-form {
+  display: inline-flex;
+  margin: 0;
+}
+
 .u-flex-start {
   display: flex;
   align-items: flex-start;
@@ -3046,6 +3051,15 @@ details.u-hover-dropdown[open] > .u-hover-dropdown__panel {
   color: var(--primary-color);
 }
 
+.c-table-row--read .c-table__title {
+  color: var(--gray-700);
+  font-weight: var(--font-weight-medium);
+}
+
+.c-table-row--read .c-table__meta {
+  color: var(--gray-500);
+}
+
 .c-table__sticky-cell {
   position: sticky;
   left: 0;
@@ -3417,7 +3431,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--spacing-md);
   max-width: var(--container-max-width);
   margin: 0 auto;
@@ -3427,6 +3441,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--spacing-lg);
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -3457,6 +3472,7 @@ body {
 .c-nav-links {
   display: flex;
   flex-wrap: nowrap;
+  flex: 1 1 auto;
   gap: var(--spacing-xs);
   margin-left: var(--spacing-md);
   min-width: 0;
@@ -3491,6 +3507,8 @@ body {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   position: relative;
   min-width: 0;
 }
@@ -3795,31 +3813,44 @@ body {
 
 @media (max-width: 768px) {
   .c-app-header__content {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--spacing-md);
+    flex-direction: row;
+    align-items: center;
+    gap: var(--spacing-sm);
     padding: 0;
   }
 
   .c-app-header__left {
-    width: 100%;
+    width: auto;
     justify-content: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .c-brand-logo {
+    width: 34px;
+    height: 34px;
   }
 
   .c-nav-links {
-    width: 100%;
+    width: auto;
     gap: var(--spacing-xs);
-    margin-left: 0;
+    margin-left: var(--spacing-xs);
   }
 
   .c-nav-link {
     font-size: var(--font-size-sm);
+    padding-inline: var(--spacing-sm);
   }
 
   .c-user-section {
-    width: 100%;
+    width: auto;
     justify-content: flex-end;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: var(--spacing-xs);
+  }
+
+  .c-app-header .c-toggle__label,
+  .c-role-badge {
+    display: none;
   }
 
   .c-main {
@@ -3829,12 +3860,12 @@ body {
 
 @media (max-width: 480px) {
   .c-app-header {
-    padding: var(--spacing-sm) var(--spacing-lg);
+    padding: var(--spacing-xs) var(--spacing-md);
   }
 
   .c-app-header__left {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
     gap: var(--spacing-sm);
   }
 

@@ -39,6 +39,18 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
     refute_includes response.body, users(:other_student).name
   end
 
+  test "show gives student email and uin their own columns" do
+    @survey.update!(track: "Residential")
+
+    get assignments_survey_path(@survey)
+
+    assert_response :success
+    assert_select "th", text: "Email"
+    assert_select "th", text: "UIN"
+    assert_select "td", text: users(:student).email
+    assert_select "td", text: students(:student).uin
+  end
+
   test "show infers track from title when track attribute is blank" do
     sign_in users(:admin)
 

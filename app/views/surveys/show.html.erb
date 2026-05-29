@@ -52,7 +52,17 @@
     </div>
   <% end %>
 
-  <%= form_with url: submit_survey_path(@survey), method: :post, local: true, data: { turbo: false }, class: "u-stack u-stack--xl survey-form" do |form| %>
+  <% allow_save_progress = !(@survey_assignment&.completed_at?) %>
+  <%= form_with url: submit_survey_path(@survey),
+                method: :post,
+                local: true,
+                data: {
+                  turbo: false,
+                  survey_student_form: true,
+                  survey_autosave_url: save_progress_survey_path(@survey),
+                  survey_autosave_enabled: allow_save_progress.to_s
+                },
+                class: "u-stack u-stack--xl survey-form" do |form| %>
     <% rendered_section_ids = [] %>
     <% section_question_numbers = Hash.new(0) %>
     <% invalid_evidence_ids = Array(@invalid_evidence).map(&:to_s) %>
@@ -112,9 +122,20 @@
             <% invalid_evidence_error = question.question_type == "evidence" && invalid_evidence_ids.include?(question.id.to_s) %>
             <% invalid_integer_error = question.question_type == "integer" && invalid_integer_ids.include?(question.id.to_s) %>
             <% has_error = missing_required_error || invalid_evidence_error || invalid_integer_error %>
+            <% reflection_source_question = nil %>
+            <% if (reflection_match = question.question_text.to_s.squish.match(/\A(.+?)\s+Reflection\z/i)) %>
+              <% reflection_base = reflection_match[1].to_s.squish.downcase %>
+              <% reflection_source_question = ordered_questions.find do |candidate|
+                   candidate.id != question.id &&
+                     candidate.question_type == "dropdown" &&
+                     candidate.question_text.to_s.squish.downcase == reflection_base
+                 end %>
+            <% end %>
+            <% reflection_visible = reflection_source_question.blank? || @existing_answers[reflection_source_question.id.to_s].present? %>
             <% article_classes = ["c-question-card"] %>
             <% article_classes << "c-question-card--nested" if question.sub_question? %>
             <% article_classes << "c-question-card--error" if has_error %>
+            <% article_classes << "hidden" if reflection_source_question.present? && !reflection_visible %>
 
             <% is_branch_parent = !is_sub_question && question.question_type == "multiple_choice" && branch_parent_ids.include?(question.id) %>
             <% if is_branch_parent %>
@@ -134,7 +155,13 @@
                      <% end %>
                      <% if branch_child_of.present? %>
                        data-branch-child-of="<%= branch_child_of %>"
-                     <% end %>>
+                     <% end %>
+                     <% if reflection_source_question.present? %>
+                       data-reflection-question="true"
+                       data-reflection-source-id="<%= reflection_source_question.id %>"
+                       aria-hidden="<%= reflection_visible ? "false" : "true" %>"
+                     <% end %>
+                     >
             <% desc_text = question.description.to_s.strip.presence %>
             <% formatted_desc = desc_text.present? ? render_markdown(desc_text) : nil %>
 
@@ -325,13 +352,13 @@
       </div>
     <% end %>
 
-    <% allow_save_progress = !(@survey_assignment&.completed_at?) %>
     <div class="c-form-actions-bar">
       <div class="u-actions u-actions--split u-w-full">
         <div class="u-actions u-actions--start">
           <%= link_to "Cancel", cancel_path, class: button_classes(:secondary) %>
           <% if allow_save_progress %>
-            <%= button_tag "Save Progress", type: "button", class: button_classes(:secondary), onclick: "saveSurveyProgress()" %>
+            <%= button_tag "Save Progress", type: "button", class: button_classes(:secondary), data: { survey_save_exit: true } %>
+            <span class="c-muted-meta" data-survey-autosave-status>Autosave ready</span>
           <% end %>
         </div>
         <%= form.submit "Submit Survey", class: button_classes(:primary) %>
@@ -386,19 +413,6 @@
       })();
     </script>
   <% end %>
-
-  <script>
-    function saveSurveyProgress() {
-      const form = document.querySelector('.survey-form');
-      const originalAction = form.action;
-      
-      // Change to save_progress endpoint
-      form.action = '<%= save_progress_survey_path(@survey) %>';
-      
-      // Submit the form
-      form.submit();
-    }
-  </script>
 
     </div>
 

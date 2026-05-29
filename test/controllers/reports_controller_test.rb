@@ -25,8 +25,8 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_response :success
+    assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Program Dashboard/
     assert_includes response.body, "Course Target Attainment"
-    assert_includes response.body, "Course Contribution Report"
     assert_includes response.body, "Cohort Comparison"
     assert_includes response.body, "Heatmaps"
     assert_includes response.body, "FERPA reminder"
@@ -38,6 +38,13 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_response :success
+    assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Program Dashboard/
+    assert_download_href export_reports_excel_path(section: "dashboard"), label: "Download Excel"
+
+    get reports_path(report_tab: "course_target")
+
+    assert_response :success
+    assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Course Target Attainment/
     assert_download_href export_course_competency_reports_path, label: "Download CSV"
 
     get reports_path(report_tab: "cohort_comparison")
@@ -164,7 +171,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
       import_fingerprint: "fingerprint-reports-course"
     )
 
-    get reports_path(course_code: "PHPM-601")
+    get reports_path(report_tab: "course_target", course_code: "PHPM-601")
 
     assert_response :success
     assert_includes response.body, "PHPM-601"
@@ -277,6 +284,59 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_response :success
+  end
+
+  test "advisor course target details are scoped to assigned advisees" do
+    sign_in @advisor
+    semester = program_semesters(:fall_2025)
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: semester,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "advisor-scoped-course-report.csv",
+      file_checksum: "checksum-advisor-scoped-course-report",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: students(:student),
+      assignment_name: "Final",
+      course_code: "PHPM-601",
+      competency_title: "Policy Analysis",
+      raw_grade: 5,
+      mapped_level: 5,
+      course_target_level: 4,
+      source_key: "advisor-scoped-course-report",
+      import_fingerprint: "fingerprint-advisor-scoped-course-report"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: students(:other_student),
+      assignment_name: "Final",
+      course_code: "PHPM-999",
+      competency_title: "Systems Thinking",
+      raw_grade: 5,
+      mapped_level: 5,
+      course_target_level: 4,
+      source_key: "advisor-scoped-course-report-other",
+      import_fingerprint: "fingerprint-advisor-scoped-course-report-other"
+    )
+
+    get reports_path(report_tab: "course_target")
+
+    assert_response :success
+    assert_includes response.body, "PHPM-601"
+    refute_includes response.body, "PHPM-999"
+
+    get export_course_competency_reports_path(format: :csv)
+
+    assert_response :success
+    parsed = CSV.parse(response.body, headers: true)
+    assert_includes parsed.map { |row| row["Course"] }, "PHPM-601"
+    refute_includes parsed.map { |row| row["Course"] }, "PHPM-999"
   end
 
   test "show denies student access and redirects to dashboard" do

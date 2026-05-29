@@ -40,7 +40,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "No survey records for this survey are assigned to you."
 
     # Advisors can view Survey Records but should not see admin-only edit/delete actions.
-    assert_not_includes response.body, 'aria-label="More actions"'
+    assert_not_includes response.body, "Edit Response"
     assert_not_includes response.body, "Delete this student's survey responses?"
   end
 
@@ -174,8 +174,8 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
 
     assert_includes response.body, survey_response_path(survey_response)
     assert_not_includes response.body, new_feedback_path(survey_id: survey.id, student_id: student.student_id)
-    assert_includes response.body, 'aria-label="More actions"'
     assert_includes response.body, "Edit Response"
+    assert_includes response.body, "Delete this student&#39;s survey responses?"
   end
 
   test "advisor search stays within assigned scope" do

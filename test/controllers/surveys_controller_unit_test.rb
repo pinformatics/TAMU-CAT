@@ -264,6 +264,27 @@ class SurveysControllerUnitTest < ActionController::TestCase
     assert_equal false, computed[flexibility.id]
   end
 
+  test "employment-style sub questions are required only when parent answer is yes" do
+    parent = @category.questions.create!(
+      question_text: "Are you currently employed?",
+      question_order: 12,
+      question_type: "multiple_choice",
+      is_required: true,
+      answer_options: %w[Yes No].to_json
+    )
+    child = @category.questions.create!(
+      question_text: "If yes, where are you employed?",
+      question_order: 12,
+      question_type: "short_answer",
+      is_required: false,
+      parent_question: parent,
+      sub_question_order: 1
+    )
+
+    assert_equal true, @controller.send(:required_for_submission?, child, answers: { parent.id.to_s => "Yes" }, branch_parent_ids: [ parent.id ])
+    assert_equal false, @controller.send(:required_for_submission?, child, answers: { parent.id.to_s => "No" }, branch_parent_ids: [ parent.id ])
+  end
+
   test "submit persists provided answers and destroys removed records when submit validation fails" do
     sign_in @student_user
 

@@ -568,6 +568,42 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "show wires reflection questions to assessment dropdown visibility" do
+    sign_in @student_user
+    category = @survey.categories.first || @survey.categories.create!(name: "Reflection Category", description: "")
+    assessment = category.questions.create!(
+      question_text: "Test Reflection Assessment",
+      question_order: 9995,
+      question_type: "dropdown",
+      is_required: true,
+      answer_options: [ [ "Developing (2)", "2" ], [ "Mastery (5)", "5" ] ].to_json
+    )
+    reflection = category.questions.create!(
+      question_text: "Test Reflection Assessment Reflection",
+      question_order: 9996,
+      question_type: "short_answer",
+      is_required: false
+    )
+
+    get survey_path(@survey)
+
+    assert_response :success
+    assert_select "article#question-block-#{reflection.id}[data-reflection-question='true'][data-reflection-source-id='#{assessment.id}'].hidden"
+
+    StudentQuestion.create!(
+      student_id: @student.student_id,
+      advisor_id: @student.advisor_id,
+      question_id: assessment.id,
+      answer: "2"
+    )
+
+    get survey_path(@survey)
+
+    assert_response :success
+    assert_select "article#question-block-#{reflection.id}[data-reflection-question='true'][data-reflection-source-id='#{assessment.id}'].hidden", count: 0
+    assert_select "article#question-block-#{reflection.id}[data-reflection-question='true'][data-reflection-source-id='#{assessment.id}']"
+  end
+
   test "show pre-populates existing answers" do
     sign_in @student_user
     question = @survey.questions.first
@@ -778,6 +814,24 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to student_dashboard_path
     assert_match /Progress saved! You can continue later\./, flash[:notice]
     assert_match /\d+\/\d+ questions answered/i, flash[:notice]
+  end
+
+  test "save_progress autosave returns json without redirecting" do
+    sign_in @student_user
+    question = @survey.questions.first
+
+    post save_progress_survey_path(@survey),
+         params: { autosave: "1", answers: { question.id.to_s => "Autosaved draft" } },
+         headers: { "X-Requested-With" => "XMLHttpRequest", "Accept" => "application/json" }
+
+    assert_response :success
+    assert_equal "application/json", response.media_type
+    payload = JSON.parse(response.body)
+    assert_equal true, payload["saved"]
+    assert_match "Progress saved", payload["message"]
+
+    student_question = StudentQuestion.find_by(student_id: @student.student_id, question_id: question.id)
+    assert_equal "Autosaved draft", student_question.answer
   end
 
   test "save_progress allows blank required fields" do

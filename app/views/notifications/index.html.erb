@@ -59,7 +59,7 @@
             <% @notifications.each do |notification| %>
               <% unread = !notification.read? %>
               <% target_path = notification.target_path_for(current_user) %>
-              <tr class="c-table-row <%= 'c-table-row--unread' if unread %>">
+              <tr class="c-table-row <%= unread ? 'c-table-row--unread' : 'c-table-row--read' %>">
                 <th scope="row">
                   <%= link_to notification.title, notification_path(notification), class: "c-table__title u-link" %>
                   <span class="c-table__meta"><%= truncate(notification.display_message, length: 110) %></span>

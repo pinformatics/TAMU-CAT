@@ -333,7 +333,7 @@ module Reports
 
     def accessible_student_relation
       return Student.none unless user
-      return Student.all if user.role_admin? || user.role_advisor?
+      return Student.all if user.role_admin?
 
       advisor = user.advisor_profile
       advisor ? Student.where(advisor_id: advisor.advisor_id) : Student.none

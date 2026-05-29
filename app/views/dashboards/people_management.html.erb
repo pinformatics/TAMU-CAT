@@ -17,25 +17,17 @@
         ["Students", "students", "Advisors, tracks, and assignment groups"]
       ] %>
 
-      <div class="u-grid u-grid--2 u-gap-md">
+      <nav class="c-tab-list" aria-label="People management sections">
         <% tabs.each do |label, value, description| %>
           <% active = (@people_tab == value) %>
-          <%= link_to people_management_path(tab: value), class: [
-            "c-card c-card--hover u-block",
-            ("is-active" if active)
-          ].compact.join(" ") do %>
-            <div class="u-responsive-split">
-              <div class="u-stack u-stack--xs">
-                <div class="c-table__title"><%= label %></div>
-                <div class="c-lede"><%= description %></div>
-              </div>
-              <% if active %>
-                <span class="c-status-badge c-status-badge--success">Open</span>
-              <% end %>
-            </div>
-          <% end %>
+          <%= link_to label,
+                people_management_path(tab: value),
+                class: "c-tab-link #{active ? 'is-active' : ''}",
+                title: description,
+                aria: (active ? { current: "page" } : {}),
+                data: { turbo: false } %>
         <% end %>
-      </div>
+      </nav>
 
       <div>
         <% if @people_tab == "students" %>

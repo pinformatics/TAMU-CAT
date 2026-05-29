@@ -8,7 +8,7 @@ class ReportsController < ApplicationController
   def show
     @report_tab = normalize_report_tab(params[:report_tab])
     @report_insights = Reports::CompetencyInsights.new(user: current_user, params: reports_filter_params).call
-    @course_competency_report = Reports::CourseCompetencyReport.new(params: reports_filter_params).call
+    @course_competency_report = Reports::CourseCompetencyReport.new(user: current_user, params: reports_filter_params).call
     @portfolio_exporter = StudentPortfolioExporter.new(actor_user: current_user, params: portfolio_filter_params)
     @portfolio_rows = @report_tab == "portfolio_export" ? @portfolio_exporter.rows : []
   end
@@ -91,7 +91,7 @@ class ReportsController < ApplicationController
   end
 
   def export_course_competencies
-    report = Reports::CourseCompetencyReport.new(params: reports_filter_params)
+    report = Reports::CourseCompetencyReport.new(user: current_user, params: reports_filter_params)
 
     record_export_audit!(
       export_type: "course_competency_report_csv",
@@ -151,15 +151,15 @@ class ReportsController < ApplicationController
 
   def normalize_report_tab(value)
     normalized = value.to_s.strip
-    allowed = %w[course_target cohort_comparison domain_heatmap portfolio_export dashboard]
-    allowed.include?(normalized) ? normalized : "course_target"
+    allowed = %w[dashboard course_target cohort_comparison domain_heatmap portfolio_export]
+    allowed.include?(normalized) ? normalized : "dashboard"
   end
 
   def report_tab_csv_payload(tab)
     case tab
     when "course_target"
       {
-        csv: Reports::CourseCompetencyReport.new(params: reports_filter_params).csv,
+        csv: Reports::CourseCompetencyReport.new(user: current_user, params: reports_filter_params).csv,
         filename_prefix: "course-competency-report",
         export_type: "course_competency_report_csv",
         description: "Exported course competency report CSV."
@@ -208,7 +208,7 @@ class ReportsController < ApplicationController
 
   def heatmaps_csv
     insights = Reports::CompetencyInsights.new(user: current_user, params: reports_filter_params).call
-    course_report = Reports::CourseCompetencyReport.new(params: reports_filter_params).call
+    course_report = Reports::CourseCompetencyReport.new(user: current_user, params: reports_filter_params).call
 
     CSV.generate do |csv|
       csv << [ "Student/Course Heatmap" ]

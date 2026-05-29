@@ -12,8 +12,8 @@
           </div>
 
           <div class="u-actions">
-            <%= link_to "Survey Records", student_records_path, class: button_classes(:secondary), data: { turbo: false } %>
             <%= link_to "Back", current_user&.role_admin? ? admin_dashboard_path : advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "Survey Records", student_records_path, class: button_classes(:secondary), data: { turbo: false } %>
           </div>
         </header>
       </section>
@@ -101,52 +101,63 @@
           </header>
 
           <% if @student_rows.present? %>
-            <div class="c-table-wrapper">
-              <table class="c-table">
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Track</th>
-                    <th>Year</th>
-                    <th>Advisor</th>
-                    <th>Surveys</th>
-                    <th>Competencies</th>
-                    <th class="u-text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <% @student_rows.each do |row| %>
-                    <% student = row[:student] %>
-                    <tr>
-                      <td>
-                        <span class="c-table__title"><%= student.user&.display_name || student.student_id %></span>
-                        <span class="c-table__meta"><%= [student.user&.email, student.uin.presence].compact.join(" / ") %></span>
-                        <% unless student.current_record? %>
-                          <span class="c-pill c-pill--muted"><%= student.lifecycle_label %></span>
-                        <% end %>
-                      </td>
-                      <td>
-                        <span><%= student.track.presence || "Unknown" %></span>
-                      </td>
-                      <td><%= student.program_year.presence || "Missing" %></td>
-                      <td><%= student.advisor&.display_name || "Unassigned" %></td>
-                      <td>
-                        <span class="c-table__title"><%= row[:completed_count] %> / <%= row[:assigned_count] %></span>
-                        <span class="c-table__meta"><%= row[:completion_rate].present? ? "#{row[:completion_rate]}% complete" : "No assigned surveys" %></span>
-                      </td>
-                      <td>
-                        <% attainment = row[:competency_attainment] %>
-                        <span class="c-table__title"><%= attainment[:met_count] %> / <%= attainment[:total_count] %></span>
-                        <span class="c-table__meta">meeting target</span>
-                      </td>
-                      <td class="u-text-right">
-                        <%= link_to "Open overview", student_overview_path(student), class: button_classes(:primary), data: { turbo: false } %>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
+            <% current_rows = @student_rows.select { |row| row[:student]&.current_record? } %>
+            <% historical_rows = @student_rows.reject { |row| row[:student]&.current_record? } %>
+            <% [["Current Students", current_rows], ["Graduated / Inactive Students", historical_rows]].each do |group_label, group_rows| %>
+              <% next if group_rows.blank? %>
+              <section class="u-stack u-stack--sm">
+                <header class="c-toolbar__row u-justify-between">
+                  <h4 class="c-h3 c-heading-inline"><%= group_label %></h4>
+                  <span class="c-muted-meta"><%= pluralize(group_rows.size, "student") %></span>
+                </header>
+                <div class="c-table-wrapper">
+                  <table class="c-table">
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th>Track</th>
+                        <th>Year</th>
+                        <th>Advisor</th>
+                        <th>Surveys</th>
+                        <th>Competencies</th>
+                        <th class="u-text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% group_rows.each do |row| %>
+                        <% student = row[:student] %>
+                        <tr>
+                          <td>
+                            <span class="c-table__title"><%= student.user&.display_name || student.student_id %></span>
+                            <span class="c-table__meta"><%= [student.user&.email, student.uin.presence].compact.join(" / ") %></span>
+                            <% unless student.current_record? %>
+                              <span class="c-pill c-pill--muted"><%= student.lifecycle_label %></span>
+                            <% end %>
+                          </td>
+                          <td>
+                            <span><%= student.track.presence || "Unknown" %></span>
+                          </td>
+                          <td><%= student.program_year.presence || "Missing" %></td>
+                          <td><%= student.advisor&.display_name || "Unassigned" %></td>
+                          <td>
+                            <span class="c-table__title"><%= row[:completed_count] %> / <%= row[:assigned_count] %></span>
+                            <span class="c-table__meta"><%= row[:completion_rate].present? ? "#{row[:completion_rate]}% complete" : "No assigned surveys" %></span>
+                          </td>
+                          <td>
+                            <% attainment = row[:competency_attainment] %>
+                            <span class="c-table__title"><%= attainment[:met_count] %> / <%= attainment[:total_count] %></span>
+                            <span class="c-table__meta">meeting target</span>
+                          </td>
+                          <td class="u-text-right">
+                            <%= link_to "Open overview", student_overview_path(student), class: button_classes(:primary), data: { turbo: false } %>
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            <% end %>
           <% else %>
             <div class="c-empty-state">
               <p class="c-empty-state__body">No students match the current filters.</p>

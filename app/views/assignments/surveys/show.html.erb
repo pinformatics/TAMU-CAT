@@ -226,7 +226,7 @@
           </div>
 
           <%= render TableComponent.new(
-            headers: ["Select", "Student", "Track", "Class Year", "Status", "Last Notified", "Completed", "Closes", "Changes"],
+            headers: ["Select", "Student", "Email", "UIN", "Track", "Class Year", "Status", "Last Notified", "Completed", "Closes", "Changes"],
             right_align: []
           ) do %>
             <% @students.each do |student| %>
@@ -272,12 +272,10 @@
 
                 <td>
                   <div class="c-table__title"><%= student.full_name.presence || student.email %></div>
-                  <div class="c-table__meta u-stack u-stack--xs">
-                    <% if student.uin.present? %><span><%= student.uin %></span><% end %>
-                    <% if student.email.present? %><span><%= student.email %></span><% end %>
-                  </div>
                 </td>
 
+                <td class="u-break-anywhere"><%= student.email.presence || "—" %></td>
+                <td class="u-whitespace-nowrap"><%= student.uin.presence || "—" %></td>
                 <td><%= student.track.presence || "—" %></td>
                 <td><%= student.program_year.presence || "—" %></td>
                 <td><span class="<%= survey_status_badge_classes(status_text) %>"><%= status_text %></span></td>

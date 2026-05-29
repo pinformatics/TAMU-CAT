@@ -74,6 +74,28 @@ class Reports::CourseCompetencyReportTest < ActiveSupport::TestCase
     assert_equal "100.0", parsed.first["Met Rate"]
   end
 
+  test "advisor user only sees assigned advisee evidence" do
+    create_evidence!("advisor-student", course_code: "PHPM-601", competency_title: "Policy Analysis", mapped_level: 5, course_target_level: 4)
+    @batch.grade_competency_evidences.create!(
+      grade_import_file: @file,
+      student: students(:other_student),
+      assignment_name: "Assignment other",
+      course_code: "PHPM-999",
+      competency_title: "Systems Thinking",
+      raw_grade: 5,
+      mapped_level: 5,
+      course_target_level: 4,
+      source_key: "course-report-advisor-other",
+      import_fingerprint: "fingerprint-course-report-advisor-other"
+    )
+
+    payload = Reports::CourseCompetencyReport.new(user: users(:advisor)).call
+    courses = payload[:course_contributions].map { |row| row[:course_code] }
+
+    assert_includes courses, "PHPM-601"
+    refute_includes courses, "PHPM-999"
+  end
+
   private
 
   def create_evidence!(suffix, course_code:, competency_title:, mapped_level:, course_target_level:)

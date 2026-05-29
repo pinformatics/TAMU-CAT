@@ -15,7 +15,7 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
     assert_equal Student.count, aggregator.send(:accessible_student_relation).count
 
     aggregator = Reports::DataAggregator.new(user: @advisor, params: {})
-    assert_equal Student.count, aggregator.send(:accessible_student_relation).count
+    assert_equal @advisor.advisor_profile.advisees.count, aggregator.send(:accessible_student_relation).count
 
     aggregator = Reports::DataAggregator.new(user: @student, params: {})
     assert_equal 0, aggregator.send(:accessible_student_relation).count

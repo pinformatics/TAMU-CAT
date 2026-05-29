@@ -8,6 +8,9 @@ class NotificationsController < ApplicationController
   #
   # @return [void]
   def index
+    mark_all_unread_notifications_read!
+    load_notification_state
+
     @page = params.fetch(:page, 1).to_i
     @page = 1 if @page < 1
 
@@ -65,5 +68,9 @@ class NotificationsController < ApplicationController
   # @return [void]
   def mark_notification_read(notification)
     notification.mark_read! unless notification.read?
+  end
+
+  def mark_all_unread_notifications_read!
+    current_user.notifications.unread.update_all(read_at: Time.current)
   end
 end

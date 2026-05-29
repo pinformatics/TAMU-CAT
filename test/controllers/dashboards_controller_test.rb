@@ -654,6 +654,15 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "student navbar includes FAQ" do
+    sign_in users(:student)
+
+    get student_dashboard_path
+
+    assert_response :success
+    assert_select "nav.c-nav-links a.c-nav-link", text: "FAQ"
+  end
+
   test "student dashboard lists recent notifications" do
     user = users(:student)
     sign_in user
@@ -695,7 +704,9 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     get advisor_dashboard_path
 
     assert_response :success
-    assert_includes response.body, "Notifications"
+    document = Nokogiri::HTML.parse(response.body)
+    main = document.at_css("main.c-main--dashboard")
+    refute_includes main.text, "Advisee update"
     assert_includes response.body, "Advisee update"
     assert_includes response.body, notifications_path
   end
@@ -709,7 +720,9 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     get admin_dashboard_path
 
     assert_response :success
-    assert_includes response.body, "Notifications"
+    document = Nokogiri::HTML.parse(response.body)
+    main = document.at_css("main.c-main--dashboard")
+    refute_includes main.text, "Import needs review"
     assert_includes response.body, "Import needs review"
     assert_includes response.body, notifications_path
   end

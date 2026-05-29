@@ -27,7 +27,7 @@ class SurveyNotificationJob < ApplicationJob
     when :past_due
       handle_past_due_notification(survey_assignment_id)
     when :response_submitted
-      handle_response_submitted_notification(survey_assignment_id)
+      handle_response_submitted_notification(survey_assignment_id, metadata)
     when :feedback_received
       handle_feedback_received_notification(feedback_id)
     when :student_revised_after_feedback
@@ -87,17 +87,21 @@ class SurveyNotificationJob < ApplicationJob
     )
   end
 
-  def handle_response_submitted_notification(survey_assignment_id)
-    assignment = assignment_scope.includes(:survey, student: :user).find(survey_assignment_id)
+  def handle_response_submitted_notification(survey_assignment_id, metadata = {})
+    assignment = assignment_scope.includes(:survey, student: :user, advisor: :user).find(survey_assignment_id)
     student_user = assignment.recipient_user
-    return unless student_user
+    revision = ActiveModel::Type::Boolean.new.cast(metadata[:revision])
 
-    Notification.deliver!(
-      user: student_user,
-      title: "Competency Survey Submitted",
-      message: "Thanks! Your responses for '#{assignment.survey.title}' were received.",
-      notifiable: assignment
-    )
+    if student_user
+      Notification.deliver!(
+        user: student_user,
+        title: "Competency Survey Submitted",
+        message: student_submission_message(assignment, revision: revision),
+        notifiable: assignment
+      )
+    end
+
+    notify_advisor_of_student_response(assignment, revision: revision)
   end
 
   def handle_feedback_received_notification(feedback_id)
@@ -202,6 +206,34 @@ class SurveyNotificationJob < ApplicationJob
     title = metadata[:title] || "Notification"
     message = metadata[:message] || "You have a new notification."
     Notification.deliver!(user: user, title: title, message: message)
+  end
+
+  def student_submission_message(assignment, revision:)
+    if revision
+      "Thanks! Your updated responses for '#{assignment.survey.title}' were received."
+    else
+      "Thanks! Your responses for '#{assignment.survey.title}' were received."
+    end
+  end
+
+  def notify_advisor_of_student_response(assignment, revision:)
+    advisor_user = if assignment.respond_to?(:advisor_user)
+      assignment.advisor_user
+    else
+      assignment.advisor&.user
+    end
+    return unless advisor_user
+
+    student_name = assignment.student&.full_name.presence || "An advisee"
+    title = revision ? "Advisee Survey Edited" : "Advisee Survey Submitted"
+    verb = revision ? "updated" : "submitted"
+
+    Notification.deliver!(
+      user: advisor_user,
+      title: title,
+      message: "#{student_name} #{verb} '#{assignment.survey.title}'.",
+      notifiable: assignment
+    )
   end
 
   def participant_users_for_survey(survey_id)

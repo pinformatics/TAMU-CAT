@@ -18,10 +18,25 @@
     <div class="c-two-column-layout">
       <div class="u-stack u-stack--xl u-min-w-0">
         <div class="c-callout c-callout--info">
-          Read-only preview of the survey layout.
+          Interactive preview. You can click through fields and submit the preview. No responses are saved.
         </div>
 
-        <%= render partial: "survey_responses/survey_response", locals: { survey_response: @preview_survey_response, editable: false } %>
+        <%= form_with url: "#", method: :post, local: true, data: { preview_survey_form: true }, class: "survey-form u-stack u-stack--xl" do %>
+          <%= render partial: "survey_responses/survey_response",
+                     locals: {
+                       survey_response: @preview_survey_response,
+                       editable: true,
+                       existing_answers: {},
+                       other_answers: {},
+                       viewer_is_student_owner: true
+                     } %>
+
+          <div class="c-form-actions-bar">
+            <div class="u-actions u-actions--end u-w-full">
+              <%= submit_tag "Submit Preview", class: button_classes(:primary) %>
+            </div>
+          </div>
+        <% end %>
       </div>
 
       <%= render ::SurveyLegendComponent.new(legend: @survey.legend) %>

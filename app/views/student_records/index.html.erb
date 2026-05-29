@@ -336,29 +336,16 @@
                                   <% end %>
 
                                   <% if show_actions && survey_response.present? && admin_can_open %>
-                                    <details class="u-relative">
-                                      <summary
-                                        class="u-list-none <%= button_classes(:secondary) %>"
-                                        aria-label="More actions"
-                                        title="More actions">
-                                        …
-                                      </summary>
+                                    <%= link_to "Edit Response",
+                                                edit_survey_response_path(survey_response, return_to: request.fullpath),
+                                                class: button_classes(:secondary) %>
 
-                                      <div class="c-popover c-popover--actions u-popover-down-right">
-                                        <div class="u-stack u-stack--xs">
-                                          <%= link_to "Edit Response",
-                                                      edit_survey_response_path(survey_response, return_to: request.fullpath),
-                                                      class: "c-popup__item" %>
-
-                                          <%= button_to "Delete",
-                                                      survey_response_path(survey_response),
-                                                      method: :delete,
-                                                      form_class: "u-block",
-                                                      class: "c-popup__item",
-                                                      data: { turbo_confirm: "Delete this student's survey responses? This cannot be undone." } %>
-                                        </div>
-                                      </div>
-                                    </details>
+                                    <%= button_to "Delete",
+                                                survey_response_path(survey_response),
+                                                method: :delete,
+                                                form_class: "u-inline-form",
+                                                class: button_classes(:danger),
+                                                data: { turbo_confirm: "Delete this student's survey responses? This cannot be undone." } %>
                                   <% end %>
                                 </div>
                               </td>

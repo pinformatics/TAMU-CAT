@@ -4,7 +4,8 @@ require "csv"
 
 module Reports
   class CourseCompetencyReport
-    def initialize(params: {})
+    def initialize(user: nil, params: {})
+      @user = user
       @params = params || {}
     end
 
@@ -63,7 +64,7 @@ module Reports
 
     private
 
-    attr_reader :params
+    attr_reader :user, :params
 
     def filtered_rows
       @filtered_rows ||= begin
@@ -78,11 +79,17 @@ module Reports
     end
 
     def base_scope
-      GradeCompetencyEvidence
+      scope = GradeCompetencyEvidence
         .joins(:grade_import_batch)
         .merge(GradeImportBatch.reportable)
         .includes(:student, grade_import_batch: { program_semester: :course_grade_release_date })
         .order(:course_code, :competency_title, :student_id)
+
+      if user&.role_advisor?
+        advisor_id = user.advisor_profile&.advisor_id
+        scope = advisor_id ? scope.joins(:student).where(students: { advisor_id: advisor_id }) : scope.none
+      end
+      scope
     end
 
     def filters

@@ -69,6 +69,7 @@ class Admin::SurveysController < Admin::BaseController
       SurveyTrackAssignment.distinct.pluck(:track)
     ).compact.map(&:to_s).reject(&:blank?).uniq.sort
     @unassigned_track_token = unassigned_track_token
+    @copy_target_semesters = ProgramSemester.operational.ordered
 
     @archived_surveys = Survey.archived.includes(:categories, :track_assignments, :creator, :program_semester).order(updated_at: :desc)
     @archived_survey_groups = surveys_grouped_by_semester(@archived_surveys)

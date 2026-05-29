@@ -83,6 +83,8 @@ class Notification < ApplicationRecord
       feedback_path(notifiable)
     when ProgramSemester
       resolve_program_semester_path(viewer)
+    when GradeImportBatch
+      resolve_grade_import_batch_path(notifiable, viewer)
     else
       nil
     end
@@ -236,6 +238,19 @@ class Notification < ApplicationRecord
       student_competencies_path
     else
       reports_path
+    end
+  end
+
+  def resolve_grade_import_batch_path(batch, viewer)
+    return unless viewer
+
+    case viewer.role
+    when "advisor"
+      reports_path(report_tab: "course_target", course_program_semester_id: batch.program_semester_id)
+    when "admin"
+      admin_grade_import_batch_path(batch)
+    else
+      nil
     end
   end
 

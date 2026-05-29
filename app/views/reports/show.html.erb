@@ -19,13 +19,13 @@
     </section>
 
     <% report_tabs = [
+      ["Program Dashboard", "dashboard", "Analytics dashboard", "Open interactive charts, filters, and report exports."],
       ["Course Target Attainment", "course_target", "Course competency analytics", "Review course evidence against uploaded course targets."],
       ["Cohort Comparison", "cohort_comparison", "Program review", "Compare self, advisor, and course averages by cohort."],
       ["Heatmaps", "domain_heatmap", "Competency heatmaps", "Scan student/course and student/domain patterns together."],
-      ["Student Profile", "portfolio_export", "Student profile", "Export student roster, Google Sites links, and course target outcomes."],
-      ["Program Dashboard", "dashboard", "Analytics dashboard", "Open interactive charts, filters, and report exports."]
+      ["Student Profile", "portfolio_export", "Student profile", "Export student roster, Google Sites links, and course target outcomes."]
     ] %>
-    <% active_report_tab = @report_tab.presence || "course_target" %>
+    <% active_report_tab = @report_tab.presence || "dashboard" %>
     <% active_report_config = report_tabs.find { |_label, value, _eyebrow, _description| value == active_report_tab } || report_tabs.first %>
     <% report_download_params = request.query_parameters.except("report_tab", "format").to_h.symbolize_keys %>
     <% active_download =

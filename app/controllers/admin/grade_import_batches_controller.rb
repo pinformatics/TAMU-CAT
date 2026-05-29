@@ -72,6 +72,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       "Uploaded grade import batch ##{@batch.id} as #{dry_run_requested? ? 'a preview' : 'a committed import'}.",
       file_names: files.map { |file| file.original_filename.to_s }
     )
+    notify_advisors_of_course_data_update!("uploaded") if @batch.reportable?
 
     notice = dry_run_requested? ? "Preview completed. Review the results before committing." : "Grade import batch processed."
     redirect_to admin_grade_import_batch_path(@batch), notice: notice
@@ -157,6 +158,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
     @batch.update!(summary: committed_summary)
     record_grade_import_activity!("commit", "Committed grade import preview ##{@batch.id} so its course competency data is reportable.")
+    notify_advisors_of_course_data_update!("published")
 
     redirect_to admin_grade_import_batch_path(@batch), notice: "Preview committed. This batch now appears in reportable course competency views."
   end
@@ -239,6 +241,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       ).except("rolled_back_at", "rolled_back_by")
     )
     record_grade_import_activity!("recommit", "Recommitted grade import batch ##{@batch.id}; its course competency data is reportable again.")
+    notify_advisors_of_course_data_update!("re-published")
 
     redirect_to admin_grade_import_batch_path(@batch), notice: "Batch recommitted. Its course competency data is visible in the app again."
   end
@@ -690,6 +693,31 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     )
   rescue StandardError => e
     Rails.logger.warn("[GradeImportAudit] Failed to record import activity: #{e.class}: #{e.message}")
+  end
+
+  def notify_advisors_of_course_data_update!(action_label)
+    advisor_counts = Student
+      .where(student_id: @batch.grade_competency_evidences.select(:student_id))
+      .where.not(advisor_id: nil)
+      .group(:advisor_id)
+      .count
+    return if advisor_counts.blank?
+
+    User.advisors.where(id: advisor_counts.keys).find_each do |advisor_user|
+      count = advisor_counts[advisor_user.id].to_i
+      noun = count == 1 ? "advisee" : "advisees"
+      semester_label = @batch.program_semester&.name
+      semester_phrase = semester_label.present? ? " for #{semester_label}" : ""
+      notification = Notification.deliver!(
+        user: advisor_user,
+        title: "Advisee Course Competency Data Updated",
+        message: "Course competency data was #{action_label}#{semester_phrase} for #{count} #{noun} you advise.",
+        notifiable: @batch
+      )
+      NotificationEmailDeliveryJob.perform_later(notification_id: notification.id)
+    end
+  rescue StandardError => e
+    Rails.logger.warn("[GradeImportNotifications] Failed advisor notification for batch #{@batch&.id}: #{e.class}: #{e.message}")
   end
 
   def grade_import_activity_metadata(import_action)

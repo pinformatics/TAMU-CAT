@@ -53,15 +53,33 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
   end
 
   # Test :response_submitted event
-  test "response submitted event thanks student" do
-    assert_difference -> { Notification.count }, 1 do
+  test "response submitted event thanks student and notifies advisor" do
+    assert_difference -> { Notification.count }, 2 do
       SurveyNotificationJob.perform_now(event: :response_submitted, survey_assignment_id: @assignment.id)
     end
 
-    notification = Notification.last
-    assert_equal @assignment.student.user, notification.user
-    assert_equal "Competency Survey Submitted", notification.title
-    assert_match @assignment.survey.title, notification.message
+    student_notification = Notification.find_by!(user: @assignment.student.user, title: "Competency Survey Submitted", notifiable: @assignment)
+    assert_match @assignment.survey.title, student_notification.message
+
+    advisor_notification = Notification.find_by!(user: @assignment.advisor.user, title: "Advisee Survey Submitted", notifiable: @assignment)
+    assert_match @assignment.student.full_name, advisor_notification.message
+    assert_match @assignment.survey.title, advisor_notification.message
+  end
+
+  test "response submitted event labels advisor notification as edited for revisions" do
+    assert_difference -> { Notification.count }, 2 do
+      SurveyNotificationJob.perform_now(
+        event: :response_submitted,
+        survey_assignment_id: @assignment.id,
+        metadata: { revision: true }
+      )
+    end
+
+    student_notification = Notification.find_by!(user: @assignment.student.user, title: "Competency Survey Submitted", notifiable: @assignment)
+    assert_match "updated responses", student_notification.message
+
+    advisor_notification = Notification.find_by!(user: @assignment.advisor.user, title: "Advisee Survey Edited", notifiable: @assignment)
+    assert_match "updated", advisor_notification.message
   end
 
   test "response submitted event does not notify if no student user" do

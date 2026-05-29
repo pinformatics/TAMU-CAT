@@ -17,6 +17,7 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "Student Overview"
     assert_includes response.body, "Student Records and Stats"
+    assert_includes response.body, "Current Students"
     assert_includes response.body, "student-overview-students-tab"
     assert_includes response.body, "student-overview-stats-tab"
     assert_includes response.body, "Students by Domain"
@@ -55,6 +56,7 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, @other_student.user.display_name
+    assert_includes response.body, "Graduated / Inactive Students"
     assert_includes response.body, "Archived"
   end
 

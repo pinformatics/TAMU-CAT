@@ -183,6 +183,44 @@ function initTurboFalseConfirmFallback() {
   }, true)
 }
 
+function initInlineModals() {
+  document.querySelectorAll("[data-open-modal]").forEach((trigger) => {
+    if (trigger.dataset.inlineModalTriggerInitialized === "true") return
+    trigger.dataset.inlineModalTriggerInitialized = "true"
+
+    trigger.addEventListener("click", () => {
+      const modal = document.getElementById(trigger.dataset.openModal || "")
+      if (!modal) return
+
+      modal.classList.remove("hidden")
+      document.body.classList.add("is-modal-open")
+      modal.querySelector("[data-close-modal], button, input, select, textarea, a")?.focus()
+    })
+  })
+
+  document.querySelectorAll("[data-inline-modal]").forEach((modal) => {
+    if (modal.dataset.inlineModalInitialized === "true") return
+    modal.dataset.inlineModalInitialized = "true"
+
+    const close = () => {
+      modal.classList.add("hidden")
+      document.body.classList.remove("is-modal-open")
+    }
+
+    modal.querySelectorAll("[data-close-modal]").forEach((button) => {
+      button.addEventListener("click", close)
+    })
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) close()
+    })
+
+    modal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close()
+    })
+  })
+}
+
 window.AppModal = {
   show: showAppModal,
   confirm: appModalConfirm,
@@ -580,8 +618,8 @@ function initSurveyBranching() {
 
       const update = () => {
         const checked = form.querySelector(`input[name="${inputName}"]:checked`)
-        const currentValue = (checked ? checked.value : "").trim()
-        setChildVisibility(parentId, currentValue === targetValue)
+        const currentValue = (checked ? checked.value : "").trim().toLowerCase()
+        setChildVisibility(parentId, currentValue === targetValue.toLowerCase())
       }
 
       inputs.forEach((input) => {
@@ -736,6 +774,269 @@ function initOtherChoiceInputs() {
       }
 
       sync(qid)
+    })
+  })
+}
+
+function showSurveySubmitModal({ canSaveProgress = true } = {}) {
+  const id = `survey-submit-modal-${++appModalId}`
+
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div")
+    let closed = false
+    backdrop.className = "c-modal-backdrop"
+    backdrop.innerHTML = `
+      <section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="${id}-title">
+        <header class="c-modal__header">
+          <div>
+            <p class="c-eyebrow">Survey submission</p>
+            <h2 id="${id}-title" class="c-modal__title">Ready to submit?</h2>
+          </div>
+          <button type="button" class="c-icon-button c-modal__close" data-survey-submit-choice="edit" aria-label="Close">&times;</button>
+        </header>
+        <div class="c-modal__body">
+          <p>Submit only when your answers are final. You can also save progress and come back later.</p>
+        </div>
+        <footer class="c-modal__footer">
+          <button type="button" class="btn btn-secondary" data-survey-submit-choice="edit">Go back to editing</button>
+          ${canSaveProgress ? '<button type="button" class="btn btn-secondary" data-survey-submit-choice="save">Save and exit</button>' : ""}
+          <button type="button" class="btn btn-primary" data-survey-submit-choice="submit">Submit</button>
+        </footer>
+      </section>
+    `
+
+    const finish = (choice) => {
+      if (closed) return
+      closed = true
+      document.removeEventListener("keydown", escapeHandler)
+      backdrop.remove()
+      document.body.classList.remove("is-modal-open")
+      resolve(choice)
+    }
+
+    const escapeHandler = (event) => {
+      if (event.key === "Escape") finish("edit")
+    }
+
+    backdrop.querySelectorAll("[data-survey-submit-choice]").forEach((button) => {
+      button.addEventListener("click", () => finish(button.dataset.surveySubmitChoice || "edit"))
+    })
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) finish("edit")
+    })
+    document.addEventListener("keydown", escapeHandler)
+
+    document.body.appendChild(backdrop)
+    document.body.classList.add("is-modal-open")
+    backdrop.querySelector('[data-survey-submit-choice="edit"]')?.focus()
+  })
+}
+
+function initSurveyReflectionVisibility() {
+  const forms = document.querySelectorAll(".survey-form")
+  if (!forms.length) return
+
+  forms.forEach((form) => {
+    if (form.dataset.reflectionVisibilityInitialized === "true") return
+    form.dataset.reflectionVisibilityInitialized = "true"
+
+    const reflectionCards = form.querySelectorAll('[data-reflection-question="true"][data-reflection-source-id]')
+    if (!reflectionCards.length) return
+
+    const sourceIds = new Set(Array.from(reflectionCards).map((card) => card.dataset.reflectionSourceId).filter(Boolean))
+
+    const sourceValue = (sourceId) => {
+      const radio = form.querySelector(`input[type="radio"][name$="[${sourceId}]"]:checked`)
+      if (radio) return radio.value.toString().trim()
+
+      const select = form.querySelector(`select[name$="[${sourceId}]"]`)
+      if (select) return select.value.toString().trim()
+
+      const input = form.querySelector(`input[name$="[${sourceId}]"], textarea[name$="[${sourceId}]"]`)
+      return input ? input.value.toString().trim() : ""
+    }
+
+    const setReflectionVisibility = (sourceId) => {
+      const show = sourceValue(sourceId) !== ""
+      form.querySelectorAll(`[data-reflection-question="true"][data-reflection-source-id="${sourceId}"]`).forEach((card) => {
+        card.classList.toggle("hidden", !show)
+        card.setAttribute("aria-hidden", show ? "false" : "true")
+
+        card.querySelectorAll("input, select, textarea, button").forEach((el) => {
+          if (el.getAttribute("type") === "hidden") return
+          el.disabled = !show
+        })
+      })
+    }
+
+    sourceIds.forEach((sourceId) => {
+      const controls = form.querySelectorAll(`input[name$="[${sourceId}]"], select[name$="[${sourceId}]"], textarea[name$="[${sourceId}]"]`)
+      controls.forEach((control) => {
+        control.addEventListener("input", () => setReflectionVisibility(sourceId))
+        control.addEventListener("change", () => setReflectionVisibility(sourceId))
+      })
+      setReflectionVisibility(sourceId)
+    })
+  })
+}
+
+function initStudentSurveyFormAutosave() {
+  const forms = document.querySelectorAll('.survey-form[data-survey-student-form="true"]')
+  if (!forms.length) return
+
+  forms.forEach((form) => {
+    if (form.dataset.studentSurveyAutosaveInitialized === "true") return
+    form.dataset.studentSurveyAutosaveInitialized = "true"
+
+    const saveUrl = form.dataset.surveyAutosaveUrl
+    const autosaveEnabled = form.dataset.surveyAutosaveEnabled === "true" && !!saveUrl
+    const status = form.querySelector("[data-survey-autosave-status]")
+    let timer = null
+    let inFlight = false
+    let pending = false
+    let submitting = false
+    let autosaveController = null
+    let modalOpen = false
+
+    const setStatus = (message) => {
+      if (status) status.textContent = message
+    }
+
+    const clearTimer = () => {
+      if (timer) {
+        window.clearTimeout(timer)
+        timer = null
+      }
+    }
+
+    const abortAutosave = () => {
+      clearTimer()
+      if (autosaveController) {
+        autosaveController.abort()
+        autosaveController = null
+      }
+    }
+
+    const autosaveMessage = async (title, message) => {
+      if (modalOpen) return
+      modalOpen = true
+      try {
+        await alertWithAppModal({ title, message, confirmLabel: "OK" })
+      } finally {
+        modalOpen = false
+      }
+    }
+
+    const performAutosave = async () => {
+      if (!autosaveEnabled || submitting) return
+      if (inFlight) {
+        pending = true
+        return
+      }
+
+      inFlight = true
+      pending = false
+      setStatus("Autosaving...")
+      autosaveController = new AbortController()
+
+      const formData = new FormData(form)
+      formData.append("autosave", "1")
+
+      try {
+        const response = await fetch(saveUrl, {
+          method: "POST",
+          body: formData,
+          signal: autosaveController.signal,
+          headers: {
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || "",
+            "X-Requested-With": "XMLHttpRequest",
+            Accept: "application/json"
+          },
+          credentials: "same-origin"
+        })
+
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || payload.saved === false) {
+          throw new Error(payload.message || "Autosave failed.")
+        }
+
+        setStatus("Autosaved")
+        await autosaveMessage("Progress saved", "Your survey progress was auto-saved.")
+      } catch (error) {
+        if (error.name === "AbortError") return
+
+        setStatus("Autosave failed")
+        await autosaveMessage("Autosave failed", error.message || "Your progress could not be auto-saved. Use Save Progress before leaving.")
+      } finally {
+        inFlight = false
+        autosaveController = null
+
+        if (pending && !submitting) {
+          queueAutosave({ immediate: true })
+        }
+      }
+    }
+
+    const queueAutosave = ({ immediate = false } = {}) => {
+      if (!autosaveEnabled || submitting) return
+      pending = true
+      setStatus("Unsaved changes")
+      clearTimer()
+      timer = window.setTimeout(performAutosave, immediate ? 0 : 12000)
+    }
+
+    const submitToSaveProgress = () => {
+      submitting = true
+      abortAutosave()
+      form.action = saveUrl
+      form.submit()
+    }
+
+    form.addEventListener("input", () => queueAutosave())
+    form.addEventListener("change", () => queueAutosave())
+
+    form.querySelectorAll("[data-survey-save-exit]").forEach((button) => {
+      button.addEventListener("click", () => submitToSaveProgress())
+    })
+
+    form.addEventListener("submit", async (event) => {
+      if (form.dataset.surveySubmitConfirmed === "true") {
+        delete form.dataset.surveySubmitConfirmed
+        submitting = true
+        abortAutosave()
+        return
+      }
+
+      if (submitting) return
+
+      event.preventDefault()
+      const choice = await showSurveySubmitModal({ canSaveProgress: autosaveEnabled })
+      if (choice === "save" && autosaveEnabled) {
+        submitToSaveProgress()
+        return
+      }
+      if (choice !== "submit") return
+
+      submitting = true
+      abortAutosave()
+      form.dataset.surveySubmitConfirmed = "true"
+      form.submit()
+    })
+  })
+}
+
+function initPreviewSurveyForms() {
+  document.querySelectorAll("form[data-preview-survey-form='true']").forEach((form) => {
+    if (form.dataset.previewSurveyFormInitialized === "true") return
+    form.dataset.previewSurveyFormInitialized = "true"
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault()
+      await alertWithAppModal({
+        title: "Preview submitted",
+        message: "This was only a preview. No responses were saved.",
+        confirmLabel: "OK"
+      })
     })
   })
 }
@@ -1484,11 +1785,15 @@ function initGoogleTranslateBarOffset() {
 function initAccessibilityFeatures() {
   installTurboModalConfirm()
   initTurboFalseConfirmFallback()
+  initInlineModals()
   initHighContrastToggle()
   initTTSToggle()
   initSurveyBranching()
+  initSurveyReflectionVisibility()
   initSurveyQuestionKeyboardShortcuts()
   initOtherChoiceInputs()
+  initStudentSurveyFormAutosave()
+  initPreviewSurveyForms()
   initToggleSwitches()
   initComboboxes()
   initImpersonationReadOnlyUI()

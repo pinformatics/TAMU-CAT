@@ -44,7 +44,8 @@
                 <%= link_to "Assign", assignments_survey_path(survey), class: button_classes(:primary, extra_classes: "btn-sm"), data: { turbo: false } %>
               <% end %>
               <%= link_to "Preview", preview_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
-              <%= link_to "Copy", copy_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
+              <% copy_modal_id = "copy-survey-modal-#{survey.id}" %>
+              <button type="button" class="<%= button_classes(:subtle, extra_classes: "btn-sm") %>" data-open-modal="<%= copy_modal_id %>">Copy</button>
               <% unless archived %>
                 <%= link_to "Edit", edit_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
                 <%= button_to "Archive", archive_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Archive '#{survey.title}' and remove it from advisors?" }, class: button_classes(:secondary) %>
@@ -52,6 +53,44 @@
                 <%= button_to "Activate", activate_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Activate '#{survey.title}' for advisors?" }, class: button_classes(:primary) %>
               <% end %>
               <%= button_to "Delete", admin_survey_path(survey), method: :delete, data: { turbo_confirm: "Delete '#{survey.title}' permanently?" }, class: button_classes(:danger) %>
+            </div>
+
+            <% copy_target_semesters = Array(@copy_target_semesters).reject { |semester| semester.id == survey.program_semester_id } %>
+            <div id="<%= copy_modal_id %>" class="c-modal-backdrop hidden" data-inline-modal>
+              <section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="<%= copy_modal_id %>-title">
+                <header class="c-modal__header">
+                  <div>
+                    <p class="c-eyebrow">Copy survey</p>
+                    <h2 id="<%= copy_modal_id %>-title" class="c-modal__title"><%= survey.title %></h2>
+                  </div>
+                  <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                </header>
+                <div class="c-modal__body">
+                  <% if copy_target_semesters.blank? %>
+                    <p>Add another semester in Program Setup before copying this survey.</p>
+                  <% else %>
+                    <%= form_with url: copy_to_semester_admin_survey_path(survey), method: :post, local: true, class: "u-stack u-stack--md" do %>
+                      <div class="c-field">
+                        <%= label_tag "survey_copy_target_program_semester_id_#{survey.id}", "Copy into semester", class: "c-label" %>
+                        <%= select_tag "survey_copy[target_program_semester_id]",
+                                       options_from_collection_for_select(copy_target_semesters, :id, :name, copy_target_semesters.first&.id),
+                                       id: "survey_copy_target_program_semester_id_#{survey.id}",
+                                       class: "c-select u-w-full" %>
+                      </div>
+                      <p class="c-help">This creates a new survey definition only. No students will be assigned.</p>
+                      <footer class="c-modal__footer">
+                        <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+                        <%= submit_tag "Copy Survey", class: button_classes(:primary) %>
+                      </footer>
+                    <% end %>
+                  <% end %>
+                </div>
+                <% if copy_target_semesters.blank? %>
+                  <footer class="c-modal__footer">
+                    <button type="button" class="btn btn-primary" data-close-modal>OK</button>
+                  </footer>
+                <% end %>
+              </section>
             </div>
           </td>
         </tr>

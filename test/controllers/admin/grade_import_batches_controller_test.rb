@@ -164,6 +164,43 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal batch.id, activity.metadata["batch_id"]
   end
 
+  test "commit notifies advisors when advisee course competency data becomes reportable" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: { "dry_run" => true }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "advisor-notification.csv",
+      file_checksum: "checksum-advisor-notification",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Final",
+      course_code: "PHPM-601",
+      competency_title: "Policy Analysis",
+      raw_grade: 5,
+      mapped_level: 5,
+      course_target_level: 4,
+      source_key: "advisor-notification",
+      import_fingerprint: "fingerprint-advisor-notification"
+    )
+
+    assert_difference -> { Notification.where(user: @advisor, title: "Advisee Course Competency Data Updated").count }, 1 do
+      assert_enqueued_jobs 1, only: NotificationEmailDeliveryJob do
+        post commit_admin_grade_import_batch_path(batch)
+      end
+    end
+
+    notification = Notification.where(user: @advisor, title: "Advisee Course Competency Data Updated").order(created_at: :desc).first
+    assert_equal batch, notification.notifiable
+    assert_match "published", notification.message
+    assert_match "1 advisee", notification.message
+  end
+
   test "preview with failed or pending rows must be approved before commit" do
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,

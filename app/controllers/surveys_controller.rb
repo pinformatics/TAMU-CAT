@@ -389,7 +389,11 @@ class SurveysController < ApplicationController
 
       Rails.logger.info "[SUBMIT] Enqueueing notification job"
       begin
-        SurveyNotificationJob.perform_later(event: :response_submitted, survey_assignment_id: assignment.id)
+        SurveyNotificationJob.perform_later(
+          event: :response_submitted,
+          survey_assignment_id: assignment.id,
+          metadata: { revision: was_completed }
+        )
 
         if was_completed && Feedback.exists?(student_id: student.student_id, survey_id: @survey.id)
           SurveyNotificationJob.perform_later(event: :student_revised_after_feedback, survey_assignment_id: assignment.id)
@@ -434,6 +438,10 @@ class SurveysController < ApplicationController
     student = current_student
 
     unless student
+      if autosave_request?
+        render json: { saved: false, message: "Student record not found." }, status: :unprocessable_entity
+        return
+      end
       redirect_to student_dashboard_path, alert: "Student record not found for current user."
       return
     end
@@ -442,8 +450,16 @@ class SurveysController < ApplicationController
     if assignment&.completed_at?
       if !assignment.can_edit_now?
         survey_response = SurveyResponse.build(student: student, survey: @survey)
+        if autosave_request?
+          render json: { saved: false, message: "This survey is closed." }, status: :unprocessable_entity
+          return
+        end
         redirect_to survey_response_path(survey_response), alert: "This survey has already been submitted and is now closed. It can only be viewed."
       else
+        if autosave_request?
+          render json: { saved: false, message: "This submitted survey can only be updated with Submit Survey." }, status: :unprocessable_entity
+          return
+        end
         redirect_to survey_path(@survey), alert: "This survey has already been submitted. Use Submit Survey to update your answers."
       end
       return
@@ -528,7 +544,11 @@ class SurveysController < ApplicationController
       Rails.logger.warn "[SAVE_PROGRESS] Failed to capture survey response version: #{version_error.class}: #{version_error.message}"
     end
 
-    redirect_to student_dashboard_path, notice: notice_message
+    if autosave_request?
+      render json: { saved: true, message: notice_message, saved_count: saved_count }
+    else
+      redirect_to student_dashboard_path, notice: notice_message
+    end
   end
 
   private
@@ -538,6 +558,10 @@ class SurveysController < ApplicationController
   # @return [void]
   def set_survey
     @survey = Survey.includes(:legend, :sections, categories: %i[section questions]).find(params[:id])
+  end
+
+  def autosave_request?
+    params[:autosave].present? || request.xhr? || request.format.json?
   end
 
   def question_ids_in_display_order(category_groups)

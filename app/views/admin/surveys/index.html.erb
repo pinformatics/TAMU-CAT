@@ -30,32 +30,32 @@
 
       <div class="c-panel-header c-panel-header--with-border">
         <div class="u-stack u-stack--sm u-w-full">
-          <div class="c-callout u-w-full">
-              <%= form_with url: admin_surveys_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" do %>
-                <%= hidden_field_tag :sort, @sort_column %>
-                <%= hidden_field_tag :direction, @sort_direction %>
+          <%= form_with url: admin_surveys_path, method: :get, local: true, class: "c-filter-bar u-w-full" do %>
+            <%= hidden_field_tag :sort, @sort_column %>
+            <%= hidden_field_tag :direction, @sort_direction %>
 
-                <div class="c-toolbar__item u-relative u-flex-1 u-min-w-sm">
-                  <%= text_field_tag :q, @search_query, placeholder: "Search by title, semester, or description", class: "c-input c-search-input u-w-full" %>
-                </div>
+            <div class="c-filter-bar__field c-filter-bar__field--wide">
+              <%= label_tag :q, "Search", class: "c-label" %>
+              <%= text_field_tag :q, @search_query, placeholder: "Title, semester, or description", class: "c-input c-search-input u-w-full" %>
+            </div>
 
-                <div class="c-toolbar__item u-min-w-md">
-                  <%= select_tag :track,
-                                 options_for_select([
-                                   ["All tracks", ""],
-                                   ["Unassigned", @unassigned_track_token]
-                                 ] + @track_filter_options.map { |track| [track, track] }, @selected_track),
-                                 class: "c-select u-w-full" %>
-                </div>
+            <div class="c-filter-bar__field">
+              <%= label_tag :track, "Track", class: "c-label" %>
+              <%= select_tag :track,
+                             options_for_select([
+                               ["All tracks", ""],
+                               ["Unassigned", @unassigned_track_token]
+                             ] + @track_filter_options.map { |track| [track, track] }, @selected_track),
+                             class: "c-select u-w-full" %>
+            </div>
 
-                <div class="c-toolbar__item u-flex u-items-center u-gap-md u-shrink-0 u-ml-auto">
-                  <%= submit_tag "Apply", class: button_classes(:primary) %>
-                  <% if @search_query.present? || @selected_track.present? %>
-                    <%= link_to "Reset", admin_surveys_path(sort: @sort_column, direction: @sort_direction), class: button_classes(:subtle) %>
-                  <% end %>
-                </div>
+            <div class="u-actions u-actions--start">
+              <%= submit_tag "Apply", class: button_classes(:primary) %>
+              <% if @search_query.present? || @selected_track.present? %>
+                <%= link_to "Reset", admin_surveys_path(sort: @sort_column, direction: @sort_direction), class: button_classes(:subtle) %>
               <% end %>
-          </div>
+            </div>
+          <% end %>
 
           <% if @search_query.present? || @selected_track.present? %>
             <div class="u-actions u-actions--start">

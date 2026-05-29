@@ -11,8 +11,10 @@ class NotificationsControllerTest < ActionDispatch::IntegrationTest
 
   test "index lists only current user's notifications" do
     sign_in @student
+    assert_nil @student_notification.read_at
 
     get notifications_path
+
     assert_response :success
     assert_includes response.body, @student_notification.title
     refute_includes response.body, @advisor_notification.title
@@ -20,6 +22,8 @@ class NotificationsControllerTest < ActionDispatch::IntegrationTest
     assert_select "th", text: "Notification"
     assert_select "th", text: "Received"
     assert_select "th", text: "Related", count: 0
+    assert_not_nil @student_notification.reload.read_at
+    assert_select ".c-status-badge", text: "Read"
   end
 
   test "index displays cleaned notification copy" do
@@ -78,7 +82,7 @@ class NotificationsControllerTest < ActionDispatch::IntegrationTest
       created_at: Time.current
     )
 
-    get notifications_path
+    get student_dashboard_path
 
     assert_response :success
     menu = Nokogiri::HTML.parse(response.body).at_css(".notifications-menu.u-hover-dropdown")
@@ -91,6 +95,48 @@ class NotificationsControllerTest < ActionDispatch::IntegrationTest
     refute_includes menu.text, "Read nav item"
   end
 
+  test "index renders open only for still-open survey notifications" do
+    sign_in @student
+    Notification.delete_all
+
+    open_assignment = survey_assignments(:residential_assignment)
+    open_assignment.update!(available_until: 2.days.from_now, completed_at: nil)
+    expired_assignment = SurveyAssignment.create!(
+      survey: surveys(:spring_2025),
+      student: students(:student),
+      advisor: advisors(:advisor),
+      assigned_at: 3.days.ago,
+      available_until: 1.day.ago
+    )
+
+    Notification.create!(
+      user: @student,
+      title: "Open survey notice",
+      message: "This survey can still be completed.",
+      notifiable: open_assignment
+    )
+    expired_notification = Notification.create!(
+      user: @student,
+      title: "Expired survey notice",
+      message: "This survey has closed.",
+      notifiable: expired_assignment
+    )
+
+    get notifications_path
+
+    assert_response :success
+    document = Nokogiri::HTML.parse(response.body)
+    open_row = document.css("tbody tr").find { |row| row.text.include?("Open survey notice") }
+    expired_row = document.css("tbody tr").find { |row| row.text.include?("Expired survey notice") }
+
+    assert_not_nil open_row
+    assert_not_nil expired_row
+    assert_includes open_row.css("a").map(&:text).map(&:strip), "Open"
+    refute_includes expired_row.css("a").map(&:text).map(&:strip), "Open"
+    assert_includes expired_row.text, "Read"
+    assert_not_nil expired_notification.reload.read_at
+  end
+
   test "show marks the owner's notification as read" do
     sign_in @student
     assert_nil @student_notification.read_at
@@ -99,6 +145,23 @@ class NotificationsControllerTest < ActionDispatch::IntegrationTest
     expected_target = @student_notification.target_path_for(@student) || notifications_path
     assert_redirected_to expected_target
     assert_not_nil @student_notification.reload.read_at
+  end
+
+  test "show marks expired survey notifications read without opening the survey" do
+    sign_in @student
+    assignment = survey_assignments(:residential_assignment)
+    assignment.update!(available_until: 1.day.ago, completed_at: nil)
+    notification = Notification.create!(
+      user: @student,
+      title: "Expired survey notice",
+      message: "This survey has closed.",
+      notifiable: assignment
+    )
+
+    get notification_path(notification)
+
+    assert_redirected_to notifications_path
+    assert_not_nil notification.reload.read_at
   end
 
   test "show responds 404 when accessing another user's notification" do

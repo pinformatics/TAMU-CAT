@@ -20,22 +20,20 @@
 
         <div class="c-card c-card--flush">
           <div class="c-panel-header c-panel-header--with-border">
-            <div class="c-callout">
-              <%= form_with url: admin_survey_change_logs_path, method: :get, local: true, class: "c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" do %>
-                <div class="c-toolbar__item u-flex u-items-center u-gap-sm">
-                  <label for="action_type" class="c-label">Filter by action</label>
-                  <%= select_tag :action_type,
-                                 options_for_select([["All actions", ""]] + @available_actions.map { |action| [action.titleize, action] }, @action_filter),
-                                 class: "c-select u-w-full" %>
-                </div>
-                <div class="c-toolbar__item u-flex u-items-center u-gap-sm">
-                  <%= submit_tag "Apply", class: button_classes(:primary) %>
-                  <% if @action_filter.present? %>
-                    <%= link_to "Reset", admin_survey_change_logs_path, class: button_classes(:subtle) %>
-                  <% end %>
-                </div>
-              <% end %>
-            </div>
+            <%= form_with url: admin_survey_change_logs_path, method: :get, local: true, class: "c-filter-bar u-w-full" do %>
+              <div class="c-filter-bar__field">
+                <label for="action_type" class="c-label">Action</label>
+                <%= select_tag :action_type,
+                               options_for_select([["All actions", ""]] + @available_actions.map { |action| [action.titleize, action] }, @action_filter),
+                               class: "c-select u-w-full" %>
+              </div>
+              <div class="u-actions u-actions--start">
+                <%= submit_tag "Apply", class: button_classes(:primary) %>
+                <% if @action_filter.present? %>
+                  <%= link_to "Reset", admin_survey_change_logs_path, class: button_classes(:subtle) %>
+                <% end %>
+              </div>
+            <% end %>
           </div>
 
           <% if @logs.blank? %>
@@ -58,7 +56,7 @@
                   <% @logs.each do |log| %>
                     <tr>
                       <td class="u-whitespace-nowrap"><%= l(log.created_at, format: :long) %></td>
-                      <td class="u-whitespace-nowrap c-table__title"><%= log.action.titleize %></td>
+                      <td class="u-whitespace-nowrap"><%= log.action.titleize %></td>
                       <td class="u-whitespace-nowrap"><%= log.admin&.display_name || "Unknown" %></td>
                       <td class="u-whitespace-nowrap">
                         <% display_title = log.survey_title_snapshot.presence || log.survey&.title.presence || "Survey ##{log.survey_id}" %>
