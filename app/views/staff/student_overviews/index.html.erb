@@ -14,6 +14,13 @@
           <div class="u-actions">
             <%= link_to "Back", current_user&.role_admin? ? admin_dashboard_path : advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
             <%= link_to "Survey Records", student_records_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "Download Excel",
+                        export_excel_student_overviews_path(request.query_parameters),
+                        class: button_classes(:secondary),
+                        data: {
+                          turbo: false,
+                          turbo_confirm: ferpa_export_confirmation("student-level overview data")
+                        } %>
           </div>
         </header>
       </section>

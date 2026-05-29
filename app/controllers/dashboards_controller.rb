@@ -31,7 +31,7 @@ class DashboardsController < ApplicationController
     @student = current_student
 
     unless @student
-      redirect_to dashboard_path, alert: "Student profile not found." and return
+      redirect_to dashboard_path, alert: "We could not find that student profile." and return
     end
 
     surveys = surveys_for_student(@student)
@@ -81,9 +81,10 @@ class DashboardsController < ApplicationController
     surveys.each do |survey|
       parent_questions = survey.questions
       parent_questions = parent_questions.parent_questions if parent_questions.respond_to?(:parent_questions)
+      branch_parent_ids = SurveyQuestionRules.branch_parent_ids(survey.questions.to_a)
       parent_question_ids = parent_questions.map(&:id)
 
-      required_ids = parent_questions.select { |question| required_question?(question) }.map(&:id)
+      required_ids = parent_questions.select { |question| required_question?(question, branch_parent_ids:) }.map(&:id)
       responses = responses_matrix[survey.id]
       answered_ids = responses.map { |entry| entry[:question_id] }.uniq & parent_question_ids
       answered_required_count = (answered_ids & required_ids).size
@@ -137,29 +138,20 @@ class DashboardsController < ApplicationController
   end
 
   # Displays advisor-specific information such as advisees and recent feedback.
-  # Handles admin impersonation of advisor dashboards.
   #
   # @return [void]
   def advisor
     @advisor = current_advisor_profile
-    admin_impersonating_advisor = current_user.admin_profile.present? && !current_user.role_admin?
-
-    if admin_impersonating_advisor
-      @advisees = Student.current_records.left_joins(:user).includes(:advisor).order(Arel.sql("LOWER(users.name) ASC"))
-      advisee_ids = @advisees.map(&:student_id)
-      @recent_feedback = Feedback.where(student_id: advisee_ids).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
-      @pending_notifications_count = current_user.notifications.unread.count
-    else
-      @advisees = (@advisor&.advisees || Student.none).current_records.includes(:user)
-      advisee_ids = @advisees.map(&:student_id)
-      @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id, student_id: advisee_ids).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
-      @pending_notifications_count = current_user.notifications.unread.count
-    end
+    @advisees = (@advisor&.advisees || Student.none).current_records.includes(:user)
+    advisee_ids = @advisees.map(&:student_id)
+    @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id, student_id: advisee_ids).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
+    @pending_notifications_count = current_user.notifications.unread.count
 
     @advisee_count = @advisees.size
     @active_survey_count = Survey.count
     advisee_ids = Array(@advisees).map(&:student_id).compact
     @total_reports = advisee_ids.empty? ? 0 : SurveyAssignment.where(student_id: advisee_ids).count
+    @survey_record_counts = survey_record_counts(student_ids: advisee_ids)
     @dashboard_notifications = current_user.notifications.recent.limit(5)
   end
 
@@ -178,6 +170,7 @@ class DashboardsController < ApplicationController
     @total_surveys = Survey.count
     @total_responses = StudentQuestion.count
     @total_reports = SurveyAssignment.count
+    @survey_record_counts = survey_record_counts
     @maintenance_enabled = SiteSetting.maintenance_enabled?
     @dashboard_notifications = current_user.notifications.recent.limit(5)
   end
@@ -312,7 +305,7 @@ class DashboardsController < ApplicationController
     redirect_to people_management_path(tab: "members"), notice: "Removed member #{removed_email}."
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed, ActiveRecord::InvalidForeignKey => e
     Rails.logger.error "Failed to remove user #{params[:id]}: #{e.class} #{e.message}"
-    redirect_to people_management_path(tab: "members"), alert: "Unable to remove member: #{e.message}"
+    redirect_to people_management_path(tab: "members"), alert: "We could not remove that member: #{e.message}"
   end
 
   # Removes multiple member accounts from the system.
@@ -373,7 +366,7 @@ class DashboardsController < ApplicationController
       message += " Failures: #{failed.join(', ')}" if failed.present?
       redirect_to people_management_path(tab: "members"), notice: message
     else
-      redirect_to people_management_path(tab: "members"), alert: "Unable to remove selected members: #{failed.join(', ')}"
+      redirect_to people_management_path(tab: "members"), alert: "We could not remove these selected members: #{failed.join(', ')}"
     end
   end
 
@@ -429,7 +422,7 @@ class DashboardsController < ApplicationController
       end
     rescue StandardError => e
       Rails.logger.error "Role switch failed for user #{current_user.id}: #{e.message}"
-      redirect_back fallback_location: dashboard_path, alert: "Unable to switch roles: #{e.message}" and return
+      redirect_back fallback_location: dashboard_path, alert: "We could not switch roles: #{e.message}" and return
     end
 
     redirect_to dashboard_path_for_role(new_role)
@@ -505,7 +498,7 @@ class DashboardsController < ApplicationController
       )
       redirect_to people_management_path(tab: "students"), notice: "Advisor updated successfully."
     else
-      redirect_to people_management_path(tab: "students"), alert: "Failed to update advisor."
+      redirect_to people_management_path(tab: "students"), alert: "We could not update the advisor."
     end
   end
 
@@ -720,7 +713,7 @@ class DashboardsController < ApplicationController
     if current_user.role_student?
       redirect_to dashboard_path
     else
-      redirect_to dashboard_path, alert: "Access denied. Admin privileges required."
+      redirect_to dashboard_path, alert: "Admin access is required to open this page."
     end
     false
   end
@@ -763,21 +756,10 @@ class DashboardsController < ApplicationController
   #
   # @param question [Question, nil]
   # @return [Boolean]
-  def required_question?(question)
+  def required_question?(question, branch_parent_ids: [])
     return false unless question
 
-    return true if question.required?
-
-    return false unless question.choice_question?
-
-    option_values = question.answer_option_values
-    options = option_values.map(&:strip).map(&:downcase)
-    # Exception: flexibility scale questions (1-5) should remain optional
-    numeric_scale = %w[1 2 3 4 5]
-    has_numeric_scale = (numeric_scale - options).empty?
-    is_flexibility_scale = has_numeric_scale &&
-                           question.question_text.to_s.downcase.include?("flexible")
-    !(options == %w[yes no] || options == %w[no yes] || is_flexibility_scale)
+    SurveyQuestionRules.required_indicator?(question, branch_parent_ids:)
   end
 
   def surveys_for_student(student)
@@ -797,6 +779,22 @@ class DashboardsController < ApplicationController
   rescue StandardError => e
     Rails.logger.error("Dashboard auto-assign failed for student #{student&.student_id}: #{e.class}: #{e.message}")
     Survey.none
+  end
+
+  def survey_record_counts(student_ids: nil)
+    scope = SurveyAssignment.all
+
+    if student_ids
+      ids = Array(student_ids).compact
+      return { assigned: 0, completed: 0 } if ids.empty?
+
+      scope = scope.where(student_id: ids)
+    end
+
+    {
+      assigned: scope.count,
+      completed: scope.where.not(completed_at: nil).count
+    }
   end
 
 

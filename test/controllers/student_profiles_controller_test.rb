@@ -50,7 +50,7 @@ class StudentProfilesControllerTest < ActionDispatch::IntegrationTest
     get student_profile_path
 
     assert_redirected_to root_path
-    assert_equal "Access denied.", flash[:alert]
+    assert_equal "You do not have permission to view that profile.", flash[:alert]
   end
 
   test "edit requires student role" do
@@ -59,7 +59,7 @@ class StudentProfilesControllerTest < ActionDispatch::IntegrationTest
     get edit_student_profile_path
 
     assert_redirected_to root_path
-    assert_equal "Access denied.", flash[:alert]
+    assert_equal "You do not have permission to view that profile.", flash[:alert]
   end
 
   test "update requires student role" do
@@ -68,7 +68,7 @@ class StudentProfilesControllerTest < ActionDispatch::IntegrationTest
     patch student_profile_path, params: { student: { program_year: 2026 } }
 
     assert_redirected_to root_path
-    assert_equal "Access denied.", flash[:alert]
+    assert_equal "You do not have permission to view that profile.", flash[:alert]
   end
 
   test "advisor cannot access show" do
@@ -77,7 +77,7 @@ class StudentProfilesControllerTest < ActionDispatch::IntegrationTest
     get student_profile_path
 
     assert_redirected_to root_path
-    assert_equal "Access denied.", flash[:alert]
+    assert_equal "You do not have permission to view that profile.", flash[:alert]
   end
 
   test "advisor cannot access edit" do
@@ -86,7 +86,7 @@ class StudentProfilesControllerTest < ActionDispatch::IntegrationTest
     get edit_student_profile_path
 
     assert_redirected_to root_path
-    assert_equal "Access denied.", flash[:alert]
+    assert_equal "You do not have permission to view that profile.", flash[:alert]
   end
 
   test "advisor cannot access update" do
@@ -95,7 +95,7 @@ class StudentProfilesControllerTest < ActionDispatch::IntegrationTest
     patch student_profile_path, params: { student: { program_year: 2026 } }
 
     assert_redirected_to root_path
-    assert_equal "Access denied.", flash[:alert]
+    assert_equal "You do not have permission to view that profile.", flash[:alert]
   end
 
   # Show Action Tests

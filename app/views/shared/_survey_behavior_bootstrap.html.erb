@@ -1,0 +1,475 @@
+<script>
+  (function() {
+    window.TamuCatSurveyBehavior = window.TamuCatSurveyBehavior || {};
+    if (window.TamuCatSurveyBehavior.installed) {
+      window.TamuCatSurveyBehavior.syncAll && window.TamuCatSurveyBehavior.syncAll();
+      window.TamuCatSurveyBehavior.installSurveySubmissionForms && window.TamuCatSurveyBehavior.installSurveySubmissionForms();
+      return;
+    }
+
+    function formControlValue(form, questionId) {
+      var suffix = "[" + questionId + "]";
+      var value = "";
+
+      form.querySelectorAll("input, select, textarea").forEach(function(control) {
+        if (value) return;
+        var name = control.getAttribute("name") || "";
+        if (name.slice(-suffix.length) !== suffix) return;
+
+        if ((control.type || "").toLowerCase() === "radio") {
+          if (control.checked) value = control.value || "";
+          return;
+        }
+
+        value = control.value || "";
+      });
+
+      return value.trim().toLowerCase();
+    }
+
+    function selectedChoiceValue(form, questionId) {
+      var suffix = "[" + questionId + "]";
+      var value = "";
+
+      form.querySelectorAll("input, select").forEach(function(control) {
+        if (value) return;
+        var name = control.getAttribute("name") || "";
+        if (name.slice(-suffix.length) !== suffix) return;
+
+        if ((control.type || "").toLowerCase() === "radio") {
+          if (control.checked) value = control.value || "";
+          return;
+        }
+
+        value = control.value || "";
+      });
+
+      return value.trim();
+    }
+
+    function branchContainerHidden(wrapper) {
+      var branchContainer = wrapper.closest("[data-branch-child-of], [data-reflection-question='true']");
+      if (!branchContainer) return false;
+
+      return branchContainer.classList.contains("hidden") || branchContainer.getAttribute("aria-hidden") === "true";
+    }
+
+    function questionCardHidden(card) {
+      return !!card && (card.classList.contains("hidden") || card.getAttribute("aria-hidden") === "true");
+    }
+
+    function setQuestionCardVisible(card, visible) {
+      card.classList.toggle("hidden", !visible);
+      card.setAttribute("aria-hidden", visible ? "false" : "true");
+
+      card.querySelectorAll("input, select, textarea, button").forEach(function(control) {
+        if ((control.getAttribute("type") || "").toLowerCase() === "hidden") return;
+        control.disabled = !visible;
+      });
+    }
+
+    function syncOtherQuestion(form, questionId) {
+      var currentValue = selectedChoiceValue(form, questionId);
+
+      form.querySelectorAll('[data-other-input-wrapper][data-other-for-question-id="' + questionId + '"]').forEach(function(wrapper) {
+        var otherChoiceValue = (wrapper.getAttribute("data-other-choice-value") || "Other").trim();
+        var visible = currentValue !== "" && currentValue === otherChoiceValue && !branchContainerHidden(wrapper);
+
+        wrapper.classList.toggle("hidden", !visible);
+        wrapper.setAttribute("aria-hidden", visible ? "false" : "true");
+
+        wrapper.querySelectorAll("input, textarea").forEach(function(control) {
+          var name = control.getAttribute("name") || "";
+          if (name.indexOf("other_answers[") === 0) {
+            control.disabled = !visible;
+          }
+        });
+      });
+    }
+
+    function syncOtherInputs(form) {
+      var questionIds = {};
+
+      form.querySelectorAll("[data-other-input-wrapper][data-other-for-question-id]").forEach(function(wrapper) {
+        var questionId = wrapper.getAttribute("data-other-for-question-id");
+        if (questionId) questionIds[questionId] = true;
+      });
+
+      Object.keys(questionIds).forEach(function(questionId) {
+        syncOtherQuestion(form, questionId);
+      });
+    }
+
+    function setBranchChildrenVisible(form, parentId, visible) {
+      form.querySelectorAll('[data-branch-child-of="' + parentId + '"]').forEach(function(child) {
+        setQuestionCardVisible(child, visible);
+      });
+    }
+
+    function syncReflectionQuestions(form) {
+      form.querySelectorAll('[data-reflection-question="true"][data-reflection-source-id]').forEach(function(card) {
+        var sourceId = card.getAttribute("data-reflection-source-id");
+        var sourceCard = form.querySelector('[data-question-id="' + sourceId + '"]');
+        var visible = selectedChoiceValue(form, sourceId) !== "" && !questionCardHidden(sourceCard);
+
+        setQuestionCardVisible(card, visible);
+      });
+    }
+
+    function syncForm(form) {
+      if (!form) return;
+
+      form.querySelectorAll("[data-branch-parent='true'][data-branch-parent-id]").forEach(function(parent) {
+        var parentId = parent.getAttribute("data-branch-parent-id");
+        var target = (parent.getAttribute("data-branch-target-value") || "Yes").trim().toLowerCase();
+        if (!parentId) return;
+
+        setBranchChildrenVisible(form, parentId, formControlValue(form, parentId) === target);
+      });
+
+      syncReflectionQuestions(form);
+      syncOtherInputs(form);
+    }
+
+    function syncAll() {
+      document.querySelectorAll("form.survey-form").forEach(syncForm);
+    }
+
+    function escapeModalText(value) {
+      var element = document.createElement("span");
+      element.textContent = value == null ? "" : String(value);
+      return element.innerHTML;
+    }
+
+    function showInlineModal(options) {
+      options = options || {};
+      var showCancel = options.showCancel !== false;
+      var id = "survey-preview-modal-" + Math.random().toString(36).slice(2);
+
+      return new Promise(function(resolve) {
+        var backdrop = document.createElement("div");
+        var closed = false;
+        backdrop.className = "c-modal-backdrop";
+        backdrop.innerHTML = [
+          '<section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="' + id + '-title">',
+          '  <header class="c-modal__header">',
+          '    <div>',
+          '      <p class="c-eyebrow">' + escapeModalText(options.eyebrow || (showCancel ? "Survey preview" : "Preview message")) + '</p>',
+          '      <h2 id="' + id + '-title" class="c-modal__title">' + escapeModalText(options.title || "Survey preview") + '</h2>',
+          '    </div>',
+          '    <button type="button" class="c-icon-button c-modal__close" data-preview-modal-close aria-label="Close">&times;</button>',
+          '  </header>',
+          '  <div class="c-modal__body"><p>' + escapeModalText(options.message || "Continue?") + '</p></div>',
+          '  <footer class="c-modal__footer">',
+          showCancel ? '    <button type="button" class="btn btn-secondary" data-preview-modal-cancel>' + escapeModalText(options.cancelLabel || "Cancel") + '</button>' : '',
+          '    <button type="button" class="btn btn-primary" data-preview-modal-confirm>' + escapeModalText(options.confirmLabel || "OK") + '</button>',
+          '  </footer>',
+          '</section>'
+        ].join("");
+
+        function finish(value) {
+          if (closed) return;
+          closed = true;
+          document.removeEventListener("keydown", escapeHandler);
+          backdrop.remove();
+          document.body.classList.remove("is-modal-open");
+          resolve(value);
+        }
+
+        function escapeHandler(event) {
+          if (event.key === "Escape") finish(!showCancel);
+        }
+
+        backdrop.querySelector("[data-preview-modal-confirm]")?.addEventListener("click", function() { finish(true); });
+        backdrop.querySelector("[data-preview-modal-cancel]")?.addEventListener("click", function() { finish(false); });
+        backdrop.querySelector("[data-preview-modal-close]")?.addEventListener("click", function() { finish(!showCancel); });
+        backdrop.addEventListener("click", function(event) {
+          if (event.target === backdrop) finish(!showCancel);
+        });
+        document.addEventListener("keydown", escapeHandler);
+
+        document.body.appendChild(backdrop);
+        document.body.classList.add("is-modal-open");
+        (showCancel ? backdrop.querySelector("[data-preview-modal-cancel]") : backdrop.querySelector("[data-preview-modal-confirm]"))?.focus();
+      });
+    }
+
+    function surveyAlert(title, message) {
+      if (window.AppModal && typeof window.AppModal.alert === "function") {
+        return window.AppModal.alert({ title: title, message: message, confirmLabel: "OK" });
+      }
+
+      return showInlineModal({
+        title: title,
+        message: message,
+        confirmLabel: "OK",
+        showCancel: false
+      });
+    }
+
+    function surveyConfirm(title, message, options) {
+      options = options || {};
+      var id = "survey-submit-modal-" + Math.random().toString(36).slice(2);
+
+      return new Promise(function(resolve) {
+        var backdrop = document.createElement("div");
+        var closed = false;
+        var saveButton = options.canSaveProgress ? '<button type="button" class="btn btn-secondary" data-survey-submit-choice="save">Save and exit</button>' : "";
+
+        backdrop.className = "c-modal-backdrop";
+        backdrop.innerHTML = [
+          '<section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="' + id + '-title">',
+          '  <header class="c-modal__header">',
+          '    <div>',
+          '      <p class="c-eyebrow">' + escapeModalText(options.eyebrow || "Survey submission") + '</p>',
+          '      <h2 id="' + id + '-title" class="c-modal__title">' + escapeModalText(title) + '</h2>',
+          '    </div>',
+          '    <button type="button" class="c-icon-button c-modal__close" data-survey-submit-choice="edit" aria-label="Close">&times;</button>',
+          '  </header>',
+          '  <div class="c-modal__body"><p>' + escapeModalText(message) + '</p></div>',
+          '  <footer class="c-modal__footer">',
+          '    <button type="button" class="btn btn-secondary" data-survey-submit-choice="edit">Go back to editing</button>',
+          saveButton,
+          '    <button type="button" class="btn btn-primary" data-survey-submit-choice="submit">' + escapeModalText(options.confirmLabel || "Submit") + '</button>',
+          '  </footer>',
+          '</section>'
+        ].join("");
+
+        function finish(choice) {
+          if (closed) return;
+          closed = true;
+          document.removeEventListener("keydown", escapeHandler);
+          backdrop.remove();
+          document.body.classList.remove("is-modal-open");
+          resolve(choice);
+        }
+
+        function escapeHandler(event) {
+          if (event.key === "Escape") finish("edit");
+        }
+
+        backdrop.querySelectorAll("[data-survey-submit-choice]").forEach(function(button) {
+          button.addEventListener("click", function() {
+            finish(button.getAttribute("data-survey-submit-choice") || "edit");
+          });
+        });
+        backdrop.addEventListener("click", function(event) {
+          if (event.target === backdrop) finish("edit");
+        });
+        document.addEventListener("keydown", escapeHandler);
+
+        document.body.appendChild(backdrop);
+        document.body.classList.add("is-modal-open");
+        backdrop.querySelector('[data-survey-submit-choice="edit"]')?.focus();
+      });
+    }
+
+    function isPreviewCardHidden(card) {
+      return card.hidden || card.classList.contains("hidden") || card.getAttribute("aria-hidden") === "true";
+    }
+
+    function previewEditableControls(card) {
+      return Array.prototype.slice.call(card.querySelectorAll("input, select, textarea")).filter(function(control) {
+        var type = (control.getAttribute("type") || "").toLowerCase();
+        var name = control.getAttribute("name") || "";
+
+        return !control.disabled && type !== "hidden" && name.indexOf("answers[") === 0;
+      });
+    }
+
+    function previewQuestionIsBlank(card) {
+      var controls = previewEditableControls(card);
+      if (controls.length === 0) return false;
+
+      var radios = controls.filter(function(control) {
+        return control instanceof HTMLInputElement && control.type === "radio";
+      });
+
+      if (radios.length > 0) {
+        return !radios.some(function(radio) { return radio.checked; });
+      }
+
+      return controls.every(function(control) {
+        return (control.value || "").trim() === "";
+      });
+    }
+
+    function previewIntegerError(card) {
+      var input = previewEditableControls(card).find(function(control) {
+        return control instanceof HTMLInputElement && control.type === "number";
+      });
+      if (!input) return null;
+
+      var value = (input.value || "").trim();
+      if (value === "") return null;
+      if (!/^\d+$/.test(value)) return "Enter a whole number";
+
+      var intValue = Number.parseInt(value, 10);
+      var min = input.getAttribute("min");
+      var max = input.getAttribute("max");
+
+      if (min !== null && min !== "" && intValue < Number.parseInt(min, 10)) return "Enter a number of at least " + min;
+      if (max !== null && max !== "" && intValue > Number.parseInt(max, 10)) return "Enter a number no higher than " + max;
+
+      return null;
+    }
+
+    function previewOtherTextError(card) {
+      var visibleOtherWrappers = Array.prototype.slice.call(card.querySelectorAll("[data-other-input-wrapper]")).filter(function(wrapper) {
+        return !wrapper.classList.contains("hidden") && wrapper.getAttribute("aria-hidden") !== "true";
+      });
+
+      var missingOther = visibleOtherWrappers.some(function(wrapper) {
+        var input = wrapper.querySelector("input:not([disabled]), textarea:not([disabled])");
+        return input && (input.value || "").trim() === "";
+      });
+
+      return missingOther ? "Please describe the Other response" : null;
+    }
+
+    function addPreviewValidationError(card, message) {
+      card.classList.add("c-question-card--error");
+
+      var error = document.createElement("div");
+      error.className = "c-help u-danger";
+      error.dataset.previewValidationError = "true";
+      error.textContent = message;
+      card.appendChild(error);
+    }
+
+    function clearPreviewValidationError(card) {
+      card.classList.remove("c-question-card--error");
+      card.querySelectorAll("[data-preview-validation-error='true']").forEach(function(error) {
+        error.remove();
+      });
+    }
+
+    function validatePreviewSurveyForm(form) {
+      var cards = Array.prototype.slice.call(form.querySelectorAll("[data-question-id]"));
+      var errorCards = [];
+
+      cards.forEach(clearPreviewValidationError);
+
+      cards.forEach(function(card) {
+        if (isPreviewCardHidden(card)) return;
+
+        var required = card.getAttribute("data-survey-required") === "true" || card.getAttribute("data-preview-required") === "true";
+
+        if (required && previewQuestionIsBlank(card)) {
+          addPreviewValidationError(card, "This question is required.");
+          errorCards.push(card);
+          return;
+        }
+
+        var integerError = previewIntegerError(card);
+        if (integerError) {
+          addPreviewValidationError(card, integerError);
+          errorCards.push(card);
+          return;
+        }
+
+        var otherError = previewOtherTextError(card);
+        if (otherError) {
+          addPreviewValidationError(card, otherError);
+          errorCards.push(card);
+        }
+      });
+
+      return {
+        valid: errorCards.length === 0,
+        firstError: errorCards[0] || null
+      };
+    }
+
+    function submitRealSurveyForm(form) {
+      form.dataset.surveyInlineSubmitConfirmed = "true";
+
+      if (typeof form.submit === "function") {
+        form.submit();
+        return;
+      }
+
+      HTMLFormElement.prototype.submit.call(form);
+    }
+
+    function installSurveySubmissionForms() {
+      document.querySelectorAll("form[data-preview-survey-form='true'], form[data-survey-student-form='true']").forEach(function(form) {
+        if (form.dataset.sharedSurveySubmitInitialized === "true") return;
+        form.dataset.sharedSurveySubmitInitialized = "true";
+
+        form.addEventListener("submit", async function(event) {
+          if (form.dataset.surveyInlineSubmitConfirmed === "true") return;
+
+          event.preventDefault();
+          event.stopImmediatePropagation();
+
+          syncForm(form);
+
+          var isPreview = form.getAttribute("data-preview-survey-form") === "true";
+          var validation = validatePreviewSurveyForm(form);
+          if (!validation.valid) {
+            await surveyAlert(
+              isPreview ? "Preview needs attention" : "Survey needs attention",
+              isPreview ? "Review the highlighted required or invalid answers before submitting the preview." : "Review the highlighted required or invalid answers before submitting."
+            );
+            validation.firstError?.scrollIntoView({ behavior: "smooth", block: "center" });
+            validation.firstError?.querySelector("input:not([disabled]), select:not([disabled]), textarea:not([disabled])")?.focus({ preventScroll: true });
+            return;
+          }
+
+          var canSaveProgress = !isPreview && form.getAttribute("data-survey-autosave-enabled") === "true";
+          var choice = await surveyConfirm(
+            "Ready to submit?",
+            isPreview ? "Submit only when your answers are final. This is only a preview, so no responses will be saved." : "Submit only when your answers are final. You can also save progress and come back later.",
+            { canSaveProgress: canSaveProgress }
+          );
+          if (choice === "save") {
+            form.querySelector("[data-survey-save-exit]")?.click();
+            return;
+          }
+          if (choice !== "submit") return;
+
+          if (isPreview) {
+            await surveyAlert("Preview submitted", "This was only a preview. No responses were saved.");
+            return;
+          }
+
+          submitRealSurveyForm(form);
+        });
+      });
+    }
+
+    function installPreviewForms() {
+      installSurveySubmissionForms();
+    }
+
+    function scheduleSync(event) {
+      var form = event.target && event.target.closest ? event.target.closest("form.survey-form") : null;
+      if (!form) return;
+
+      window.requestAnimationFrame(function() { syncForm(form); });
+    }
+
+    window.TamuCatSurveyBehavior.syncForm = syncForm;
+    window.TamuCatSurveyBehavior.syncAll = syncAll;
+    window.TamuCatSurveyBehavior.syncReflectionQuestions = syncReflectionQuestions;
+    window.TamuCatSurveyBehavior.syncOtherInputs = syncOtherInputs;
+    window.TamuCatSurveyBehavior.validatePreviewSurveyForm = validatePreviewSurveyForm;
+    window.TamuCatSurveyBehavior.installSurveySubmissionForms = installSurveySubmissionForms;
+    window.TamuCatSurveyBehavior.installPreviewForms = installPreviewForms;
+    window.TamuCatSurveyBehavior.installed = true;
+
+    document.addEventListener("change", scheduleSync, true);
+    document.addEventListener("click", scheduleSync, true);
+    document.addEventListener("DOMContentLoaded", function() {
+      syncAll();
+      installSurveySubmissionForms();
+    });
+    document.addEventListener("turbo:load", function() {
+      syncAll();
+      installSurveySubmissionForms();
+    });
+    syncAll();
+    installSurveySubmissionForms();
+  })();
+</script>

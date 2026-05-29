@@ -51,7 +51,7 @@ class AdvisorImpersonationsController < ApplicationController
   def require_admin!
     return if current_user&.role_admin?
 
-    redirect_to dashboard_path, alert: "Access denied. Admin privileges required."
+    redirect_to dashboard_path, alert: "Admin access is required to open this page."
   end
 
   def require_impersonating!

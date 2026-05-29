@@ -13,7 +13,7 @@ class AdvisorImpersonationsControllerTest < ActionDispatch::IntegrationTest
     get new_advisor_impersonation_path
 
     assert_redirected_to dashboard_path
-    assert_match(/admin privileges/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "advisor cannot open advisor impersonation page" do
@@ -22,7 +22,7 @@ class AdvisorImpersonationsControllerTest < ActionDispatch::IntegrationTest
     get new_advisor_impersonation_path
 
     assert_redirected_to dashboard_path
-    assert_match(/admin privileges/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "admin can open advisor impersonation page" do

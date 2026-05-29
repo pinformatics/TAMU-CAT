@@ -49,7 +49,7 @@ class StudentProfilesController < ApplicationController
 
   def ensure_student_role
     unless current_user&.role_student?
-      redirect_to root_path, alert: "Access denied."
+      redirect_to root_path, alert: "You do not have permission to view that profile."
     end
   end
 

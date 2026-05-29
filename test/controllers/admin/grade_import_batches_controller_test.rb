@@ -24,7 +24,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     get admin_grade_import_batches_path
 
     assert_redirected_to dashboard_path
-    assert_match(/access denied/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "index filters batch history by course semester uploader status and workflow" do
@@ -633,7 +633,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Import notes:"
     assert_includes response.body, "Canvas export from PHPM 631"
     assert_includes response.body, "Correction file"
-    assert_includes response.body, "Admin approval required:"
+    assert_includes response.body, "Admin review required:"
     refute_includes response.body, "Preview validation:"
     assert_includes response.body, "Review in this order"
     assert_includes response.body, "1. File Summary"
@@ -875,7 +875,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     refute_includes response.body, "Target Warnings Before Commit"
-    refute_includes response.body, "Admin approval required:"
+    refute_includes response.body, "Admin review required:"
 
     post commit_admin_grade_import_batch_path(batch)
 

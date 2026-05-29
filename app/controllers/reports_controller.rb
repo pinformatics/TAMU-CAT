@@ -110,7 +110,7 @@ class ReportsController < ApplicationController
   def ensure_reports_access!
     return if current_user.role_admin? || current_user.role_advisor?
 
-    redirect_to dashboard_path, alert: "Reports are only available to administrators and advisors."
+    redirect_to dashboard_path, alert: "Reports are available only to administrators and advisors."
   end
 
   def aggregator

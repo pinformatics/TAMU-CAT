@@ -70,13 +70,17 @@ module ApplicationHelper
   # @return [String]
   def flash_title(key)
     {
-      notice: "Heads up",
-      info: "Heads up",
+      notice: "Heads Up",
+      info: "Heads Up",
       success: "Success",
-      alert: "Attention",
-      error: "Something went wrong",
-      warning: "Warning"
+      alert: "Needs Attention",
+      error: "Something Went Wrong",
+      warning: "Review Before Continuing"
     }.fetch(key.to_sym, key.to_s.titleize)
+  end
+
+  def ferpa_export_confirmation(record_description = "student-level education records")
+    "FERPA reminder: This download may include #{record_description}. Download only when you have a legitimate educational interest, and store or share the file securely. Continue?"
   end
 
   # Renders question text in plain or rich format based on question config.

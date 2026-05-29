@@ -12,7 +12,7 @@
           </div>
 
           <div class="u-actions">
-            <%= link_to "Export history CSV", competency_history_student_overview_path(@student), class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." } %>
+            <%= link_to "Export history CSV", competency_history_student_overview_path(@student), class: button_classes(:secondary), data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student-level competency data") } %>
             <%= link_to "Detailed competencies", admin_competency_path(@student), class: button_classes(:secondary), data: { turbo: false } %>
             <%= link_to "Back to overviews", student_overviews_path, class: button_classes(:secondary), data: { turbo: false } %>
           </div>
@@ -171,7 +171,7 @@
                 <p class="c-eyebrow">Imported course results</p>
                 <h2 class="c-section-title c-heading-inline">Competency History</h2>
               </div>
-              <%= link_to "Download CSV", competency_history_student_overview_path(@student), class: button_classes(:secondary), data: { turbo: false, turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." } %>
+              <%= link_to "Download CSV", competency_history_student_overview_path(@student), class: button_classes(:secondary), data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student-level competency data") } %>
             </header>
 
             <% if @course_history_rows.present? %>

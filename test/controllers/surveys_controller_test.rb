@@ -78,7 +78,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     post submit_survey_path(@survey), params: { answers: {} }
 
     assert_response :unprocessable_entity
-    assert_match "Unable to submit", flash[:alert]
+    assert_match "We could not submit", flash[:alert]
     assert assigns(:scroll_to_form_top), "Expected scroll_to_form_top to be true when no answers were provided"
     assert_equal question.id, assigns(:first_error_question_id)
   end
@@ -566,6 +566,14 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     get survey_path(@survey)
 
     assert_response :success
+    assert_select "form[data-survey-student-form='true'][data-survey-shared-submit='true'][data-survey-autosave-url='#{save_progress_survey_path(@survey)}'][data-survey-autosave-enabled='true']"
+    assert_select "[data-survey-save-exit]", text: "Save Progress"
+    assert_select "[data-survey-autosave-status]", text: /Autosave/
+    assert_select "[data-survey-autosave-prompt][data-autosave-state='ready']"
+    assert_select "[data-survey-autosave-prompt-title]", text: "Autosave ready"
+    assert_select "[data-survey-autosave-prompt-message]", text: "Your answers will auto-save while you work."
+    assert_includes response.body, "installSurveySubmissionForms"
+    assert_includes response.body, "Survey needs attention"
   end
 
   test "show wires reflection questions to assessment dropdown visibility" do
@@ -589,6 +597,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "article#question-block-#{reflection.id}[data-reflection-question='true'][data-reflection-source-id='#{assessment.id}'].hidden"
+    assert_select "article#question-block-#{reflection.id} .u-danger", text: "*", count: 0
 
     StudentQuestion.create!(
       student_id: @student.student_id,
@@ -602,6 +611,112 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "article#question-block-#{reflection.id}[data-reflection-question='true'][data-reflection-source-id='#{assessment.id}'].hidden", count: 0
     assert_select "article#question-block-#{reflection.id}[data-reflection-question='true'][data-reflection-source-id='#{assessment.id}']"
+    assert_select "article#question-block-#{reflection.id} .u-danger", text: "*", count: 0
+  end
+
+  test "show hides employment child questions until yes is selected" do
+    sign_in @student_user
+    survey, parent, employer, job_title, hours, flexibility = build_employment_branch_survey
+
+    get survey_path(survey)
+
+    assert_response :success
+    assert_select "article#question-block-#{parent.id}[data-branch-parent='true'][data-branch-parent-id='#{parent.id}'][data-branch-target-value='Yes']"
+    [ employer, job_title, hours, flexibility ].each do |question|
+      assert_select "article#question-block-#{question.id}[data-branch-child-of='#{parent.id}'].hidden[aria-hidden='true']"
+      assert_select "article#question-block-#{question.id} .u-danger", text: "*"
+    end
+
+    StudentQuestion.create!(
+      student_id: @student.student_id,
+      advisor_id: @student.advisor_id,
+      question_id: parent.id,
+      answer: "Yes"
+    )
+
+    get survey_path(survey)
+
+    assert_response :success
+    [ employer, job_title, hours, flexibility ].each do |question|
+      assert_select "article#question-block-#{question.id}[data-branch-child-of='#{parent.id}'].hidden", count: 0
+      assert_select "article#question-block-#{question.id}[aria-hidden='false']"
+    end
+  end
+
+  test "submit requires employment child questions only when parent answer is yes" do
+    sign_in @student_user
+    survey, parent, employer, job_title, hours, flexibility = build_employment_branch_survey
+
+    post submit_survey_path(survey), params: {
+      answers: { parent.id.to_s => "Yes" }
+    }
+
+    assert_response :unprocessable_entity
+    missing_ids = Array(assigns(:missing_required)).map(&:to_i)
+    assert_includes missing_ids, employer.id
+    assert_includes missing_ids, job_title.id
+    assert_includes missing_ids, hours.id
+    assert_includes missing_ids, flexibility.id
+
+    post submit_survey_path(survey), params: {
+      answers: { parent.id.to_s => "No" }
+    }
+
+    assert_response :redirect
+    assert SurveyAssignment.find_by!(survey_id: survey.id, student_id: @student.student_id).completed_at?
+  end
+
+  test "submit does not require employment child questions unless they are manually required" do
+    sign_in @student_user
+    survey, parent, _employer, _job_title, _hours, _flexibility = build_employment_branch_survey(parent_required: true, children_required: false)
+
+    post submit_survey_path(survey), params: {
+      answers: { parent.id.to_s => "Yes" }
+    }
+
+    assert_response :redirect
+    assert SurveyAssignment.find_by!(survey_id: survey.id, student_id: @student.student_id).completed_at?
+  end
+
+  test "submit saves other text for flexible work hours" do
+    sign_in @student_user
+    survey, parent, employer, job_title, hours, flexibility = build_employment_branch_survey
+
+    post submit_survey_path(survey), params: {
+      answers: {
+        parent.id.to_s => "Yes",
+        employer.id.to_s => "Texas A&M Health",
+        job_title.id.to_s => "Analyst",
+        hours.id.to_s => "20",
+        flexibility.id.to_s => "Other"
+      },
+      other_answers: { flexibility.id.to_s => "Varies by rotation" }
+    }
+
+    assert_response :redirect
+
+    record = StudentQuestion.find_by!(student_id: @student.student_id, question_id: flexibility.id)
+    assert_equal "Other", record.answer["answer"]
+    assert_equal "Varies by rotation", record.answer["text"]
+  end
+
+  test "submit requires other text when flexible work hours uses other" do
+    sign_in @student_user
+    survey, parent, employer, job_title, hours, flexibility = build_employment_branch_survey
+
+    post submit_survey_path(survey), params: {
+      answers: {
+        parent.id.to_s => "Yes",
+        employer.id.to_s => "Texas A&M Health",
+        job_title.id.to_s => "Analyst",
+        hours.id.to_s => "20",
+        flexibility.id.to_s => "Other"
+      },
+      other_answers: { flexibility.id.to_s => "" }
+    }
+
+    assert_response :unprocessable_entity
+    assert_includes Array(assigns(:missing_required)).map(&:to_i), flexibility.id
   end
 
   test "show pre-populates existing answers" do
@@ -706,7 +821,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     post submit_survey_path(@survey), params: { answers: { integer_question.id.to_s => "-1" } }
 
     assert_response :unprocessable_entity
-    assert_match(/Please fix highlighted integer responses/i, flash[:alert].to_s)
+    assert_match(/Review the highlighted integer responses/i, flash[:alert].to_s)
 
     student_question = StudentQuestion.find_by(
       student_id: @student.student_id,
@@ -941,7 +1056,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     post save_progress_survey_path(@survey), params: { answers: {} }
 
     assert_redirected_to student_dashboard_path
-    assert_equal "Student record not found for current user.", flash[:alert]
+    assert_equal "We could not find a student record for your account.", flash[:alert]
   end
 
   # Index Action Tests
@@ -1365,7 +1480,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     post submit_survey_path(@survey), params: { answers: {} }
 
     assert_redirected_to student_dashboard_path
-    assert_equal "Student record not found for current user.", flash[:alert]
+    assert_equal "We could not find a student record for your account.", flash[:alert]
   end
 
   # Flash Message Tests
@@ -1972,5 +2087,73 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unprocessable_entity
     assert_includes assigns(:invalid_evidence), evidence_question.id
+  end
+
+  private
+
+  def build_employment_branch_survey(parent_required: true, children_required: true)
+    survey = Survey.new(
+      title: "Employment Branch #{Time.current.to_f}",
+      program_semester: program_semesters(:spring_2026),
+      is_active: true,
+      available_until: 1.week.from_now
+    )
+    category = survey.categories.build(name: "Employment")
+    parent = category.questions.build(
+      question_text: "Are you currently employed?",
+      question_order: 1,
+      question_type: "multiple_choice",
+      answer_options: %w[Yes No].to_json,
+      is_required: parent_required
+    )
+    survey.save!
+
+    employer = category.questions.create!(
+      question_text: "If yes, where are you employed? (name and address)",
+      question_order: 1,
+      sub_question_order: 1,
+      parent_question: parent,
+      question_type: "short_answer",
+      is_required: children_required
+    )
+    job_title = category.questions.create!(
+      question_text: "What is your title?",
+      question_order: 1,
+      sub_question_order: 2,
+      parent_question: parent,
+      question_type: "short_answer",
+      is_required: children_required
+    )
+    hours = category.questions.create!(
+      question_text: "How many hours per week do you work on average?",
+      question_order: 1,
+      sub_question_order: 3,
+      parent_question: parent,
+      question_type: "integer",
+      is_required: children_required
+    )
+    flexibility = category.questions.create!(
+      question_text: "How flexible are your work hours?",
+      question_order: 1,
+      sub_question_order: 4,
+      parent_question: parent,
+      question_type: "multiple_choice",
+      answer_options: [
+        { label: "Very flexible", value: "Very flexible" },
+        { label: "Somewhat flexible", value: "Somewhat flexible" },
+        { label: "Other", value: "Other" }
+      ].to_json,
+      is_required: children_required
+    )
+
+    SurveyAssignment.create!(
+      survey: survey,
+      student: @student,
+      advisor: @student.advisor,
+      assigned_at: Time.current,
+      available_until: 1.week.from_now
+    )
+
+    [ survey, parent, employer, job_title, hours, flexibility ]
   end
 end

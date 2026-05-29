@@ -4,105 +4,225 @@
   <%= render "shared/login_navbar" %>
 <% end %>
 
-<div class="c-page c-container c-container--md">
-  <header class="c-page-header">
-    <div>
-      <h1 class="c-page-title c-page-title--brand">Frequently Asked Questions</h1>
-      <p class="c-page-subtitle">Common questions about using <%= app_full_name %>.</p>
-    </div>
-  </header>
+<% faq_sections = [
+  {
+    id: "faq-getting-started",
+    title: "Getting Started",
+    summary: "Login, account, accessibility, and basic support.",
+    items: [
+      {
+        question: "How do I log in as a student or advisor?",
+        answer: "Use the Students or Advisors options at the top of the login page, or the Sign in with Google buttons, depending on your role."
+      },
+      {
+        question: "How do I change my account information?",
+        answer: "Open your profile menu, then choose Account Information or Settings. Some account fields are managed by the institution and cannot be changed in the app."
+      },
+      {
+        question: "What accessibility features are available?",
+        answer: "Use the High Contrast and Read Aloud toggles in the header to improve readability and enable text-to-speech. The site also supports keyboard navigation and screen-reader-friendly markup."
+      },
+      {
+        question: "What should I do if a Google Translate box gets stuck loading?",
+        answer: "Refresh the page first. If it still does not load, open the language menu again or check whether browser extensions, network filtering, or third-party script blocking are preventing Google Translate from loading."
+      },
+      {
+        question: "I found a bug or need help. Who should I contact?",
+        answer: "Contact your program administrator or the support address provided by your institution. Include screenshots and the steps that led to the issue."
+      }
+    ]
+  },
+  {
+    id: "faq-surveys",
+    title: "Surveys",
+    summary: "Completing, saving, submitting, and reopening surveys.",
+    items: [
+      {
+        question: "Who do I contact if I can't see my surveys?",
+        answer: "Reach out to your program administrator so they can verify your role, program profile, and survey assignments."
+      },
+      {
+        question: "How do I complete and submit a survey?",
+        answer: "Open the survey from the Survey tab, answer each question, and submit it at the end. You can save progress and return later before submitting."
+      },
+      {
+        question: "What does auto-save do?",
+        answer: "Auto-save stores draft answers while you work so progress is less likely to be lost. You should still use the regular save or submit button when you are ready to leave or finish the survey."
+      },
+      {
+        question: "Why did a survey disappear from my Survey page?",
+        answer: "Surveys only appear while they are available to you or after they have been submitted. If a survey is past its close date and was not submitted, it may no longer be open for completion."
+      },
+      {
+        question: "Can I edit a survey after submitting it?",
+        answer: "Submitted surveys can be reopened only while the survey is still inside its allowed availability window. Once the survey closes, submitted responses become read-only."
+      },
+      {
+        question: "Why do some survey questions appear only after I answer another question?",
+        answer: "Some questions are conditional. For example, employment follow-up questions appear only when you answer that you are currently employed. Required follow-up questions apply only when the related condition is met."
+      }
+    ]
+  },
+  {
+    id: "faq-competencies",
+    title: "Competencies",
+    summary: "Self-assessment, course evidence, and target rules.",
+    items: [
+      {
+        question: "What are course competency results?",
+        answer: "Course competency results come from faculty or Canvas course files. They show the competency level assessed in a course and, when available, the target level expected for that course."
+      },
+      {
+        question: "Why can't I see a recent course result yet?",
+        answer: "Course results may be held until the program release date for that semester or course. If a result is not released yet, it may still be under review by program staff."
+      },
+      {
+        question: "What is the difference between a course target and a program target?",
+        answer: "A course target is the expected level for a specific course. A program target is the expected end-of-program level. They can be different because courses build toward the final program expectation over time."
+      },
+      {
+        question: "Why might program targets differ by semester?",
+        answer: "Program targets are tied to the semester, track, and class year rules in program configuration. A student's target should be compared against the semester being reviewed, not only the current calendar date."
+      },
+      {
+        question: "Why do self, advisor, and course scores look different?",
+        answer: "They come from different sources. Self scores come from survey responses, advisor scores may reflect historical advisor feedback, and course scores come from imported course competency evidence."
+      },
+      {
+        question: "How do I view my competency history?",
+        answer: "Use the Competencies tab to see current results and program-level summaries. For a detailed history, open a competency view or request the available export for your role."
+      },
+      {
+        question: "Can I download my competency information?",
+        answer: "When exports are enabled for your view, use the available CSV or PDF download options. Advisors and admins may also export student-level records for advising or program review."
+      }
+    ]
+  },
+  {
+    id: "faq-advisors",
+    title: "Advisor And Staff Views",
+    summary: "Student Overview, Survey Records, Reports, and scoped access.",
+    items: [
+      {
+        question: "What should advisors use first?",
+        answer: "Advisors can start with Student Overview for a compact advisee list, Survey Records for submitted survey history, and Competencies for self, course, advisor, and target comparisons."
+      },
+      {
+        question: "Why do advisors only see some students?",
+        answer: "Advisor views are scoped to assigned advisees. If a student is missing from an advisor view, an administrator should verify the student's advisor assignment and lifecycle status."
+      },
+      {
+        question: "What is Student Overview?",
+        answer: "Student Overview brings profile information, survey progress, competency target status, and heatmap summaries into one staff-facing workspace. Admins see all students; advisors see assigned advisees."
+      },
+      {
+        question: "What is Survey Records?",
+        answer: "Survey Records shows survey assignments, completion status, submitted responses, and advisor feedback status. It is useful for advising follow-up and checking whether surveys were completed."
+      },
+      {
+        question: "What is the Reports page for?",
+        answer: "Reports is the program review workspace. It includes program dashboards, cohort comparisons, course contribution reports, target attainment summaries, heatmaps, and export options."
+      },
+      {
+        question: "What happens to students after graduation?",
+        answer: "Graduated or inactive students can be separated from current students in staff views. Historical records remain available to authorized staff when the appropriate student status filter is selected."
+      }
+    ]
+  },
+  {
+    id: "faq-notifications",
+    title: "Notifications",
+    summary: "In-app alerts, email availability, and notification state.",
+    items: [
+      {
+        question: "How do notifications work?",
+        answer: "Unread notifications appear in the header menu. Opening the Notifications page marks unread items as read. Some notifications can also open the related survey or record when that item is still available."
+      },
+      {
+        question: "Will I get email notifications?",
+        answer: "Email notifications are controlled by program settings and may not be enabled in every environment. In-app notifications are still available from the header and Notifications page."
+      }
+    ]
+  },
+  {
+    id: "faq-privacy",
+    title: "Privacy And Exports",
+    summary: "Student-level data, FERPA reminders, and authorized use.",
+    items: [
+      {
+        question: "Who can see my survey responses and competency results?",
+        answer: "Responses are visible to authorized program staff according to program privacy settings. Advisors and admins may see aggregated or student-level data for advising and accreditation purposes."
+      },
+      {
+        question: "Which exports contain student-level data?",
+        answer: "Student profile, survey record, student overview, competency history, and detailed report exports may include identifiable student information. Use those exports only for legitimate educational or program review purposes."
+      },
+      {
+        question: "Why do I see a FERPA reminder before exporting?",
+        answer: "The reminder appears before downloads that may include student-level data. It helps confirm that the export is being used for an authorized advising, administrative, or program review purpose."
+      }
+    ]
+  }
+] %>
 
-  <section class="u-stack">
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">How do I log in as a student or advisor?</span></summary>
-      <p class="mt-sm c-lede">
-        Use the "Students" or "Advisors" options at the top of the login page or the
-        "Sign in with Google" buttons, depending on your role.
-      </p>
-    </details>
+<% total_items = faq_sections.sum { |section| section[:items].size } %>
 
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">Who do I contact if I can't see my surveys?</span></summary>
-      <p class="mt-sm c-lede">
-        Reach out to your program administrator so they can verify your role and survey assignments.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">What are course competency results?</span></summary>
-      <p class="mt-sm c-lede">
-        Course competency results come from faculty or Canvas course files. They show the competency level assessed in a course and, when available, the target level expected for that course.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">Why can't I see a recent course result yet?</span></summary>
-      <p class="mt-sm c-lede">
-        Course results may be held until the program release date for that semester or course. If a result is not released yet, it may still be under review by program staff.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">What is the difference between a course target and a program target?</span></summary>
-      <p class="mt-sm c-lede">
-        A course target is the expected level for a specific course. A program target is the expected end-of-program level. They can be different because courses build toward the final program expectation over time.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">Why do self, advisor, and course scores look different?</span></summary>
-      <p class="mt-sm c-lede">
-        They come from different sources. Self scores come from your survey responses, advisor scores may reflect historical advisor feedback, and course scores come from imported course competency evidence.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">Can I download my competency information?</span></summary>
-      <p class="mt-sm c-lede">
-        When exports are enabled for your view, use the available CSV or PDF download options. Advisors and admins may also export student-level records for advising or program review.
-      </p>
-    </details>
-    
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">How do I complete and submit a survey?</span></summary>
-      <p class="mt-sm c-lede">
-        Open the survey from the "Survey" tab, answer each question, and click "Submit" at the end. You can save progress and return later using the "Save progress" button.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">How do I view my competency history?</span></summary>
-      <p class="mt-sm c-lede">
-        Use the "Competencies" tab to see current results and program-level summaries. For a detailed history, open a competency and review the history or request a portfolio export.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">Who can see my survey responses and competency results?</span></summary>
-      <p class="mt-sm c-lede">
-        Your responses are visible to program staff according to your program's privacy settings. Advisors and admins may see aggregated or student-level data for advising and accreditation purposes.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">How do I change my account information?</span></summary>
-      <p class="mt-sm c-lede">
-        Click your profile in the top-right, then choose "Account Information" or go to the "Settings" page to update your contact details. Some fields are managed by your institution and cannot be changed here.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">What accessibility features are available?</span></summary>
-      <p class="mt-sm c-lede">
-        Use the "High Contrast" and "Read Aloud" toggles in the header to improve readability and enable text-to-speech. Screen-reader-friendly markup and keyboard navigation are supported across the site.
-      </p>
-    </details>
-
-    <details class="c-card c-card--muted c-card--tight">
-      <summary class="cursor-pointer"><span class="c-value">I found a bug or need help — who should I contact?</span></summary>
-      <p class="mt-sm c-lede">
-        Contact your program administrator or email the support address provided by your institution. Include screenshots and steps to reproduce the issue to help us resolve it faster.
-      </p>
-    </details>
+<div class="c-page c-container c-container--wide u-stack u-stack--xl">
+  <section class="c-card c-card--brand">
+    <header class="c-page-header">
+      <div>
+        <p class="c-eyebrow">Help center</p>
+        <h1 class="c-page-title c-page-title--brand">Frequently Asked Questions</h1>
+        <p class="c-page-subtitle">Common questions about using <%= app_full_name %>.</p>
+      </div>
+      <div class="u-actions u-actions--start">
+        <span class="c-pill c-pill--primary"><%= pluralize(total_items, "answer") %></span>
+        <span class="c-pill c-pill--muted"><%= pluralize(faq_sections.size, "section") %></span>
+      </div>
+    </header>
   </section>
+
+  <nav class="u-grid u-grid--dense" aria-label="FAQ sections">
+    <% faq_sections.each do |section| %>
+      <%= link_to "##{section[:id]}", class: "c-card c-card--interactive c-card--hover c-card--tight c-tile c-tile--compact" do %>
+        <span class="c-tile__link">
+          <span class="c-tile__icon" aria-hidden="true">?</span>
+          <span class="c-tile__title"><%= section[:title] %></span>
+          <span class="c-tile__description"><%= pluralize(section[:items].size, "question") %></span>
+        </span>
+      <% end %>
+    <% end %>
+  </nav>
+
+  <% faq_sections.each do |section| %>
+    <section id="<%= section[:id] %>" class="c-card c-card--spacious u-stack u-stack--md">
+      <header class="c-panel-header">
+        <div class="u-actions u-actions--split">
+          <div>
+            <p class="c-eyebrow">FAQ category</p>
+            <h2 class="c-section-title c-heading-inline"><%= section[:title] %></h2>
+            <p class="c-panel-subtitle"><%= section[:summary] %></p>
+          </div>
+          <span class="c-pill c-pill--muted"><%= pluralize(section[:items].size, "question") %></span>
+        </div>
+      </header>
+
+      <div class="u-stack u-stack--sm">
+        <% section[:items].each do |item| %>
+          <details class="c-accordion">
+            <summary class="c-accordion__summary c-accordion__summary--wrap">
+              <span class="c-accordion__title"><%= item[:question] %></span>
+              <span class="c-accordion__action" aria-hidden="true">
+                <span class="c-accordion__action-closed">Show</span>
+                <span class="c-accordion__action-open">Hide</span>
+              </span>
+            </summary>
+            <div class="c-panel-body">
+              <p class="c-lede"><%= item[:answer] %></p>
+            </div>
+          </details>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
 </div>

@@ -42,7 +42,7 @@
               checked: @maintenance_enabled,
               label: nil,
               confirm_on: "Turn ON maintenance mode? Non-admin users will be redirected to the maintenance page.",
-              confirm_off: "Turn OFF maintenance mode? Users will regain access immediately."
+              confirm_off: "Turn OFF maintenance mode? Students and advisors will regain access immediately."
             ) %>
           <% end %>
         </div>
@@ -153,7 +153,7 @@
                               normalize_target_levels_admin_maintenance_path,
                               method: :post,
                               class: button_classes(:secondary),
-                              data: { turbo_confirm: "Normalize legacy target levels into cohort-specific records? This removes only the legacy duplicate rows after replacements exist." } %>
+                              data: { turbo_confirm: "Normalize legacy target levels into cohort-specific records? Legacy duplicate rows will be removed only after replacement records exist." } %>
               </div>
             </div>
           <% end %>

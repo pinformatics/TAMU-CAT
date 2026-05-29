@@ -1,0 +1,21 @@
+<% if flash.any? %>
+  <div class="c-flash-stack" aria-live="polite" aria-atomic="false">
+    <% flash.each.with_index do |(key, value), index| %>
+      <% messages = Array(value).map(&:to_s).reject(&:blank?) %>
+      <% next if messages.blank? %>
+      <% flash_control_id = "flash-dismiss-#{key.to_s.parameterize.presence || "message"}-#{index}" %>
+
+      <input type="checkbox" id="<%= flash_control_id %>" class="sr-only c-flash-dismiss-control" aria-hidden="true" tabindex="-1">
+      <section class="<%= [flash_classes(key), "c-flash-toast"].join(" ") %>" role="alert" data-dismissible-flash>
+        <div class="c-flash-toast__content">
+          <p class="text-xs font-semibold uppercase tracking-wide"><%= flash_title(key) %></p>
+          <div class="mt-1 text-sm leading-relaxed">
+            <%= safe_join(messages.map { |msg| tag.span(msg.html_safe) }, tag.br) %>
+          </div>
+        </div>
+
+        <label class="c-icon-button c-flash-toast__close" for="<%= flash_control_id %>" role="button" data-dismiss-flash aria-label="Dismiss message">&times;</label>
+      </section>
+    <% end %>
+  </div>
+<% end %>

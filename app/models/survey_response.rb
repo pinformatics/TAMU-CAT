@@ -159,7 +159,7 @@ class SurveyResponse
   # @return [Array<Question>] questions that are considered required
   def required_questions
     @required_questions ||= begin
-      branch_parent_ids = progress_questions.select(&:sub_question?).map(&:parent_question_id).compact.uniq
+      branch_parent_ids = SurveyQuestionRules.branch_parent_ids(progress_questions)
       progress_questions.select { |question| required_for_completion?(question, branch_parent_ids: branch_parent_ids) }
     end
   end
@@ -241,43 +241,11 @@ class SurveyResponse
   # @param branch_parent_ids [Array<Integer>]
   # @return [Boolean]
   def required_for_completion?(question, branch_parent_ids: [])
-    required = question.is_required?
-
-    if question.question_type == "dropdown" && question.category&.section&.mha_competency?
-      required = true
-    end
-
-    # Parent selectors for branch flows (e.g., Yes/No) are required.
-    if branch_parent_ids.include?(question.id)
-      required = true
-    end
-
-    # Child branch questions are required only when parent is answered Yes.
-    if question.respond_to?(:sub_question?) && question.sub_question?
-      parent_answer = normalized_answer_value(answers[question.parent_question_id])
-      return false unless parent_answer.casecmp?("yes")
-      required = true
-    end
-
-    return true if required
-    return false unless question.choice_question?
-
-    option_values = question.answer_option_values
-    options = option_values.map(&:strip).map(&:downcase)
-    numeric_scale = %w[1 2 3 4 5]
-    has_numeric_scale = (numeric_scale - options).empty?
-    is_flexibility_scale = has_numeric_scale &&
-                           question.question_text.to_s.downcase.include?("flexible")
-    !(options == %w[yes no] || options == %w[no yes] || is_flexibility_scale)
+    SurveyQuestionRules.required_for_submission?(question, answers:, branch_parent_ids:)
   end
 
   def normalized_answer_value(value)
-    case value
-    when Hash
-      (value["answer"] || value[:answer] || value["text"] || value[:text] || value["value"] || value[:value]).to_s.strip
-    else
-      value.to_s.strip
-    end
+    SurveyQuestionRules.normalize_answer_value(value)
   end
 
   # Determines whether a stored answer should count as present for statistics.

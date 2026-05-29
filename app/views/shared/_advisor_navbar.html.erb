@@ -41,6 +41,14 @@
         <%= link_to "Student Overview",
                     student_overviews_path,
                     class: "c-nav-link #{'active' if local_assigns[:active_page] == 'student_overviews'}" %>
+
+        <%= link_to "Competencies",
+                    admin_competencies_path,
+                    class: "c-nav-link #{'active' if local_assigns[:active_page] == 'competencies'}" %>
+
+        <%= link_to "FAQ",
+                    faq_path,
+                    class: "c-nav-link #{'active' if current_page?(faq_path)}" %>
       </nav>
     </div>
 
@@ -95,7 +103,7 @@
           </div>
 
           <div class="c-profile-actions">
-            <%= link_to edit_account_path, class: "c-profile-action" do %>
+            <%= link_to account_path, class: "c-profile-action" do %>
             <div class="c-profile-action__icon" aria-hidden="true">👤</div>
             <span>Account Information</span>
           <% end %>

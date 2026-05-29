@@ -108,9 +108,9 @@ class SurveysController < ApplicationController
     end
 
     @category_groups.each do |category|
-      category_branch_parent_ids = category.questions.select(&:sub_question?).map(&:parent_question_id).compact.uniq
+      category_branch_parent_ids = SurveyQuestionRules.branch_parent_ids(category.questions)
       category.questions.each do |question|
-        @computed_required[question.id] = required_for_submission?(
+        @computed_required[question.id] = SurveyQuestionRules.required_for_submission?(
           question,
           answers: @existing_answers,
           branch_parent_ids: category_branch_parent_ids
@@ -130,7 +130,7 @@ class SurveysController < ApplicationController
     student = current_student
 
     unless student
-      redirect_to student_dashboard_path, alert: "Student record not found for current user."
+      redirect_to student_dashboard_path, alert: "We could not find a student record for your account."
       return
     end
 
@@ -187,7 +187,7 @@ class SurveysController < ApplicationController
     missing_required = []
     invalid_links = []
     invalid_integer_responses = []
-    branch_parent_ids = questions_map.values.select(&:sub_question?).map(&:parent_question_id).compact.uniq
+    branch_parent_ids = SurveyQuestionRules.branch_parent_ids(questions_map.values)
 
     questions_map.each_value do |question|
       submitted_value = answers[question.id.to_s]
@@ -202,9 +202,9 @@ class SurveysController < ApplicationController
         end
       end
 
-      required = required_for_submission?(question, answers:, branch_parent_ids:)
+      required = SurveyQuestionRules.required_for_submission?(question, answers:, branch_parent_ids:)
 
-      if required && submitted_value.to_s.strip.blank?
+      if required && SurveyQuestionRules.blank_required_response?(question, submitted_value)
         missing_required << question
       end
 
@@ -263,19 +263,19 @@ class SurveysController < ApplicationController
                                         "survey-category-#{first_error_category.id}"
         end
       end
-      alert_parts = [ "Unable to submit your responses." ]
-      alert_parts << "Please answer all required questions." if missing_required.any?
+      alert_parts = [ "We could not submit your responses yet." ]
+      alert_parts << "Answer all required questions before submitting." if missing_required.any?
       if invalid_links.any?
-        alert_parts << "Please fix the highlighted evidence links by setting sharing to 'Anyone with the link can view.'"
+        alert_parts << "Review the highlighted evidence links and set sharing to 'Anyone with the link can view.'"
       end
       if invalid_integer_responses.any?
-        alert_parts << "Please fix highlighted integer responses (whole-number format and min/max limits)."
+        alert_parts << "Review the highlighted integer responses and use whole numbers within the allowed range."
       end
       flash.now[:alert] = alert_parts.join(" ")
       @category_groups.each do |category|
-        category_branch_parent_ids = category.questions.select(&:sub_question?).map(&:parent_question_id).compact.uniq
+        category_branch_parent_ids = SurveyQuestionRules.branch_parent_ids(category.questions)
         category.questions.each do |question|
-          @computed_required[question.id] = required_for_submission?(
+          @computed_required[question.id] = SurveyQuestionRules.required_for_submission?(
             question,
             answers:,
             branch_parent_ids: category_branch_parent_ids
@@ -439,10 +439,10 @@ class SurveysController < ApplicationController
 
     unless student
       if autosave_request?
-        render json: { saved: false, message: "Student record not found." }, status: :unprocessable_entity
+        render json: { saved: false, message: "We could not find a student record for your account." }, status: :unprocessable_entity
         return
       end
-      redirect_to student_dashboard_path, alert: "Student record not found for current user."
+      redirect_to student_dashboard_path, alert: "We could not find a student record for your account."
       return
     end
 
@@ -619,44 +619,15 @@ class SurveysController < ApplicationController
   end
 
   def required_for_submission?(question, answers:, branch_parent_ids: [])
-    required = question.is_required?
+    SurveyQuestionRules.required_for_submission?(question, answers:, branch_parent_ids:)
+  end
 
-    # Competency ratings are mandatory on submit.
-    if question.question_type == "dropdown" && question.category&.section&.mha_competency?
-      required = true
-    end
-
-    # Parent branch selectors (e.g., Employment Yes/No) are mandatory.
-    if branch_parent_ids.include?(question.id)
-      required = true
-    end
-
-    # Branch children are required only when parent answer is Yes.
-    if question.respond_to?(:sub_question?) && question.sub_question?
-      parent_answer = normalized_answer_value(answers[question.parent_question_id.to_s])
-      return false unless parent_answer.casecmp?("yes")
-      required = true
-    end
-
-    if !required && question.choice_question?
-      option_values = question.answer_option_values
-      options = option_values.map(&:strip).map(&:downcase)
-      numeric_scale = %w[1 2 3 4 5]
-      has_numeric_scale = (numeric_scale - options).empty?
-      is_flexibility_scale = has_numeric_scale && question.question_text.to_s.downcase.include?("flexible")
-      required = !(options == %w[yes no] || options == %w[no yes] || is_flexibility_scale)
-    end
-
-    required
+  def blank_required_response?(question, submitted_value)
+    SurveyQuestionRules.blank_required_response?(question, submitted_value)
   end
 
   def normalized_answer_value(value)
-    case value
-    when Hash
-      (value["answer"] || value[:answer] || value["text"] || value[:text] || value["value"] || value[:value]).to_s.strip
-    else
-      value.to_s.strip
-    end
+    SurveyQuestionRules.normalize_answer_value(value)
   end
 
   def normalized_integer_draft_value(value)

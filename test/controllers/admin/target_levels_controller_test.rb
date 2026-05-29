@@ -149,7 +149,7 @@ class Admin::TargetLevelsControllerTest < ActionDispatch::IntegrationTest
 
     follow_redirect!
     assert_response :success
-    assert_match(/Warning:/i, response.body)
+    assert_match(/Review before continuing:/i, response.body)
     assert_match(/Target levels changed/i, response.body)
     assert_match(/after 1 student/i, Notification.where(title: "Target Levels Changed After Submissions").last.message)
   end

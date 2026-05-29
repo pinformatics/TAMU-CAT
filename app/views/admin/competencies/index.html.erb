@@ -41,7 +41,7 @@
                 class: button_classes(:secondary),
                 data: {
                   turbo: false,
-                  turbo_confirm: "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest."
+                  turbo_confirm: ferpa_export_confirmation("student-level competency data")
                 } %>
         </div>
       </header>

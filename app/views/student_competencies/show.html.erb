@@ -12,7 +12,7 @@
 <% filter_params = { semester: selected_semester_value, sources: visible_sources } %>
 <% export_path = @competency_export_path.presence || student_competencies_path(filter_params.merge(format: :csv)) %>
 <% pdf_path = @competency_pdf_path.presence || student_competencies_path(filter_params.merge(format: :pdf)) %>
-<% staff_export_confirm = (current_user&.role_admin? || current_user&.role_advisor?) ? "FERPA reminder: this export includes student-level competency data. Continue only for a legitimate educational interest." : nil %>
+<% staff_export_confirm = (current_user&.role_admin? || current_user&.role_advisor?) ? ferpa_export_confirmation("student-level competency data") : nil %>
 <% staff_competency_view = current_user&.role_admin? || current_user&.role_advisor? %>
 <% semester_options = [["All semesters", @payload[:all_semesters_value]]] + @payload[:semesters].map { |semester| [semester, semester] } %>
 <% change_summary = @payload[:change_summary] || {} %>

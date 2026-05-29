@@ -15,7 +15,7 @@ module Advisors
     def require_advisor!
       return if current_user&.role_advisor? || current_user&.role_admin?
 
-      redirect_to dashboard_path, alert: "Advisor access required."
+      redirect_to dashboard_path, alert: "Advisor access is required to open this page."
     end
 
     # @return [Boolean] whether the signed-in user is currently an advisor

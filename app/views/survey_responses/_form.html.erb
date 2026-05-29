@@ -76,7 +76,7 @@
             <% end %>
             <%# 必填题未填写时提示 %>
             <% if question.is_required? && (qr.response_value.blank? || qr.response_value.nil?) && survey_response.errors.any? %>
-              <div class="c-help u-danger">This question is required</div>
+              <div class="c-help u-danger">This question is required.</div>
             <% end %>
           </div>
         <% end %>

@@ -9,7 +9,7 @@
   <% if @post_save_warning.present? %>
     <div class="c-callout c-callout--warning" role="alert">
       <p>
-        <span class="c-callout__title">Warning:</span>
+        <span class="c-callout__title">Review before continuing:</span>
         <%= @post_save_warning %>
       </p>
     </div>
@@ -124,7 +124,7 @@
                             },
                             class: button_classes(:secondary),
                             data: {
-                              turbo_confirm: "Copy configured target levels from #{selected_semester&.name || 'the selected semester'} to #{current_semester.name} for #{@selected_track}, Class of #{@selected_class_of}? Existing current-semester values for these competencies will be updated."
+                              turbo_confirm: "Copy configured target levels from #{selected_semester&.name || 'the selected semester'} to #{current_semester.name} for #{@selected_track}, Class of #{@selected_class_of}? Existing values for the current semester will be updated."
                             } %>
             <% end %>
 
@@ -138,7 +138,7 @@
                             class_of: @selected_class_of
                           },
                           class: button_classes(:secondary),
-                          data: { turbo_confirm: "Fill only blank target levels from db/data/default_target_levels.yml for this selected context?" } %>
+                          data: { turbo_confirm: "Fill only blank target levels for this selected context from the default target file?" } %>
             <% end %>
           </div>
         <% end %>
@@ -146,7 +146,7 @@
     <% end %>
 
     <% confirm_message = if @submitted_students_count.to_i.positive?
-      "Warning: #{@submitted_students_count} student(s) have already submitted surveys for this cohort. Saving target levels may change how reports are interpreted. Continue?"
+      "#{@submitted_students_count} student(s) have already submitted surveys for this cohort. Saving target levels may change how reports and exports are interpreted. Continue?"
     else
       "Save target levels?"
     end %>

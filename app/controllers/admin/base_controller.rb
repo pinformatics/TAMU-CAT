@@ -22,7 +22,7 @@ class Admin::BaseController < ApplicationController
     if current_user&.role_student?
       redirect_to dashboard_path
     else
-      redirect_to dashboard_path, alert: "Access denied. Admin privileges required."
+      redirect_to dashboard_path, alert: "Admin access is required to open this page."
     end
   end
 

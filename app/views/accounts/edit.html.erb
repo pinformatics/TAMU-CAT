@@ -10,113 +10,120 @@
                   "User"
                 end %>
 
-<% full_name = @user.name.presence || @user.email %>
-<% email = @user.email %>
+<% full_name = @user.name.presence || @user.email || "User" %>
+<% email = @user.email.presence || "Not provided" %>
 <% member_since = @user.created_at ? @user.created_at.strftime("%b %-d, %Y") : "Recently" %>
-<% updated_text = @user.updated_at ? time_ago_in_words(@user.updated_at) + " ago" : "Just now" %>
-<% initials = full_name.to_s.split.first(2).map { |part| part.first&.upcase }.join.presence || email.to_s.first&.upcase %>
-<% avatar_url = @user.avatar_url.presence if @user.respond_to?(:avatar_url) %>
+<% updated_text = @user.updated_at ? "#{time_ago_in_words(@user.updated_at)} ago" : "Just now" %>
+<% initials = full_name.to_s.split.first(2).map { |part| part.first&.upcase }.join.presence || "U" %>
+<% avatar_url = @user.respond_to?(:avatar_url) ? @user.avatar_url.presence : nil %>
 
-<div class="py-6 sm:py-8">
-  <div class="u-stack u-stack--lg">
-    <section class="c-hero c-hero--maroon c-hero--compact">
-      <div class="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-8">
-          <div class="space-y-4">
-            <p class="c-eyebrow c-eyebrow--inverse">Account settings</p>
-            <h1 class="c-h1 c-h1--inverse"><%= full_name %></h1>
-            <p class="c-lede c-lede--inverse max-w-2xl">Update your display name used across dashboards and exports.</p>
-          </div>
-
-          <div class="flex flex-wrap gap-3">
-            <span class="c-pill c-pill--inverse">
-              <span class="c-pill__dot c-pill__dot--inverse" aria-hidden="true"></span>
-              Role · <%= role_label %>
-            </span>
-            <span class="c-pill c-pill--inverse">Member since <%= member_since %></span>
-            <span class="c-pill c-pill--inverse">Updated <%= updated_text %></span>
-          </div>
+<main class="c-main c-page">
+  <section class="c-card c-card--brand c-card--spacious u-stack u-stack--lg">
+    <header class="c-page-header">
+      <div class="u-stack u-stack--md">
+        <div>
+          <p class="c-eyebrow">Account settings</p>
+          <h1 class="c-page-title c-page-title--brand"><%= full_name %></h1>
+          <p class="c-page-subtitle">Review the identity details connected to your sign-in account.</p>
         </div>
 
-        <div class="flex flex-col gap-8 sm:flex-row sm:items-start lg:flex-col lg:items-end">
-          <div class="space-y-5">
-            <div>
-              <p class="c-eyebrow c-eyebrow--inverse">Primary email</p>
-              <p class="c-value c-value--xl c-value--inverse"><%= email %></p>
-            </div>
-          </div>
-
-          <div class="c-avatar-tile c-avatar-tile--inverse h-24 w-24 text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@user)}\"" unless avatar_url %>>
-            <% if avatar_url %>
-              <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(@user) %>" loading="lazy">
-            <% else %>
-              <span aria-hidden="true"><%= initials %></span>
-              <span class="sr-only"><%= avatar_aria_label(@user) %></span>
-            <% end %>
-          </div>
+        <div class="u-actions u-actions--start u-gap-xs">
+          <span class="c-status-pill c-status-pill--success">Account active</span>
+          <span class="c-pill c-pill--muted"><%= role_label %></span>
+          <span class="c-pill c-pill--muted">Updated <%= updated_text %></span>
         </div>
       </div>
-    </section>
 
-    <div>
-      <section class="c-card c-card--tight space-y-8">
-        <header>
-          <p class="c-eyebrow">Overview</p>
-          <h2 class="c-h2">Account Information</h2>
-        </header>
-
-        <%= form_with model: @user, url: account_path, method: :patch, local: true, class: "u-stack u-stack--lg" do |form| %>
-          <% if @user.errors.any? %>
-            <div class="c-card c-card--tight border border-rose-200 bg-rose-50 text-rose-800 shadow-none">
-              <h3 class="c-h3 u-danger">
-                <%= pluralize(@user.errors.count, "error") %> need your attention before saving
-              </h3>
-              <ul class="mt-2 list-disc pl-5">
-                <% @user.errors.full_messages.each do |message| %>
-                  <li><%= message %></li>
-                <% end %>
-              </ul>
-            </div>
+      <div class="u-responsive-row u-items-center">
+        <div class="c-avatar-tile u-size-2xl text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@user)}\"" unless avatar_url %>>
+          <% if avatar_url %>
+            <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(@user) %>" loading="lazy">
+          <% else %>
+            <span aria-hidden="true"><%= initials %></span>
+            <span class="sr-only"><%= avatar_aria_label(@user) %></span>
           <% end %>
+        </div>
+      </div>
+    </header>
 
-          <div class="space-y-8">
-            <div class="space-y-4">
-              <p class="c-h3">Profile</p>
-
-              <div class="u-grid" style="--u-grid-min: 260px">
-                <div class="c-kv c-kv--compact" style="grid-column: 1 / -1;">
-                  <div class="c-field">
-                    <%= form.label :name, "Display name", class: "c-label" %>
-                    <%= form.text_field :name,
-                          placeholder: "John Doe",
-                          required: true,
-                          class: "c-input" %>
-                    <small class="c-help">Used on dashboards and communications.</small>
-                  </div>
-                </div>
-
-                <div class="c-kv c-kv--compact">
-                  <dt class="c-eyebrow">Email</dt>
-                  <dd class="c-value c-value--lg"><%= email %></dd>
-                </div>
-
-                <div class="c-kv c-kv--compact">
-                  <dt class="c-eyebrow">Role</dt>
-                  <dd class="c-value c-value--lg"><%= role_label %></dd>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="c-form-actions u-actions u-actions--split border-t border-slate-100 pt-6">
-            <%= link_to dashboard_path, class: button_classes(:secondary) do %>
-              Cancel
-            <% end %>
-
-            <%= form.submit "Save changes", class: button_classes(:primary) %>
-          </div>
-        <% end %>
-      </section>
+    <div class="u-grid u-grid--stats">
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Primary email</p>
+        <p class="c-value c-value--lg"><%= email %></p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Role</p>
+        <p class="c-value c-value--lg"><%= role_label %></p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Member since</p>
+        <p class="c-value c-value--lg"><%= member_since %></p>
+      </article>
+      <article class="c-kv c-kv--compact">
+        <p class="c-eyebrow">Last updated</p>
+        <p class="c-value c-value--lg"><%= updated_text %></p>
+      </article>
     </div>
-  </div>
-</div>
+  </section>
+
+  <section class="c-student-overview-layout">
+    <aside class="c-student-overview-sidebar c-card c-card--tight u-stack u-stack--lg">
+      <header class="u-stack u-stack--sm">
+        <p class="c-eyebrow">Account</p>
+        <h2 class="c-section-title">Identity</h2>
+      </header>
+
+      <dl class="c-key-value-list">
+        <div>
+          <dt>Full name</dt>
+          <dd><%= full_name %></dd>
+        </div>
+        <div>
+          <dt>Email</dt>
+          <dd><%= email %></dd>
+        </div>
+        <div>
+          <dt>Role</dt>
+          <dd><%= role_label %></dd>
+        </div>
+        <div>
+          <dt>Member since</dt>
+          <dd><%= member_since %></dd>
+        </div>
+      </dl>
+    </aside>
+
+    <section class="c-student-overview-main c-card c-card--tight u-stack u-stack--lg">
+      <header class="u-stack u-stack--sm">
+        <p class="c-eyebrow">Profile</p>
+        <h2 class="c-section-title">Account Information</h2>
+        <p class="c-help">Account information is read-only here and comes from your authenticated sign-in account.</p>
+      </header>
+
+      <dl class="c-key-value-list">
+        <div>
+          <dt>Display name</dt>
+          <dd><%= full_name %></dd>
+        </div>
+        <div>
+          <dt>Email</dt>
+          <dd><%= email %></dd>
+        </div>
+        <div>
+          <dt>Role</dt>
+          <dd><%= role_label %></dd>
+        </div>
+        <div>
+          <dt>Last updated</dt>
+          <dd><%= updated_text %></dd>
+        </div>
+      </dl>
+
+      <div class="u-actions u-actions--start u-section-divider">
+        <%= link_to dashboard_path, class: button_classes(:secondary) do %>
+          Back to dashboard
+        <% end %>
+      </div>
+    </section>
+  </section>
+</main>

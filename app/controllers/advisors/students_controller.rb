@@ -16,7 +16,7 @@ module Advisors
 
       unless incoming && valid_keys.include?(incoming)
         redirect_back fallback_location: student_records_path,
-                      alert: "Unable to change track: the student's track is missing or cannot be determined."
+                      alert: "We could not change the track because the student's current track is missing or cannot be determined."
         return
       end
 

@@ -95,7 +95,7 @@ const FALLBACK_EXPORT_URLS = {
   excel: "/reports/export_excel"
 }
 
-const FERPA_EXPORT_CONFIRMATION = "FERPA reminder: this export may include student-level education records. Download only when you have a legitimate educational interest and store/share it securely. Continue?"
+const FERPA_EXPORT_CONFIRMATION = "FERPA reminder: This download may include student-level education records. Download only when you have a legitimate educational interest, and store or share the file securely. Continue?"
 
 const EMPTY_OPTIONS = Object.freeze({
   tracks: [],
@@ -1226,7 +1226,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
       setEmployment(employmentRes)
     } catch (err) {
       console.error(err)
-      setError(err.message || "Unable to load reports data")
+      setError(err.message || "We could not load the report data.")
     } finally {
       setLoading(false)
     }
@@ -1251,7 +1251,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
     } catch (err) {
       console.error(err)
       setOptions(EMPTY_OPTIONS)
-      setError(err.message || "Unable to load filters")
+      setError(err.message || "We could not load the report filters.")
       setLoading(false)
     }
   }, [ loadData ])

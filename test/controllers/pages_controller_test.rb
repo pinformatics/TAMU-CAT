@@ -121,6 +121,18 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_not @response.redirect?
   end
 
+  test "faq page includes workflow and export guidance" do
+    get faq_path
+
+    assert_response :success
+    assert_includes response.body, "How do notifications work?"
+    assert_includes response.body, "What should advisors use first?"
+    assert_includes response.body, "What is the Reports page for?"
+    assert_includes response.body, "Why might program targets differ by semester?"
+    assert_includes response.body, "Which exports contain student-level data?"
+    assert_includes response.body, "What should I do if a Google Translate box gets stuck loading?"
+  end
+
   # Maintenance page tests
   test "maintenance page returns service unavailable" do
     get maintenance_path

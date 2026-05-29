@@ -34,6 +34,7 @@ Rails.application.routes.draw do
   get "student_records", to: "student_records#index", as: :student_records
   get "student_records/export_excel", to: "student_records#export_excel", as: :export_student_records_excel
   resources :student_overviews, only: %i[index show] do
+    get :export_excel, on: :collection
     get :competency_history, on: :member
   end
   resource :student_competencies, only: :show
@@ -141,7 +142,8 @@ Rails.application.routes.draw do
   resource :student_profile, only: %i[show edit update]
 
   # Account settings (all roles share this page)
-  resource :account, only: %i[edit update]
+  resource :account, only: %i[show update]
+  get "account/edit", to: redirect("/account"), as: :edit_account
 
   resources :surveys do
     post :submit, on: :member

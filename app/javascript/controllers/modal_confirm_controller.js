@@ -11,16 +11,19 @@ export default class extends Controller {
 
   connect() {
     this.confirmed = false
+    this.submitter = null
   }
 
   submit(event) {
     if (this.confirmed) {
       this.confirmed = false
+      this.submitter = null
       return
     }
 
     event.preventDefault()
     event.stopImmediatePropagation()
+    this.submitter = event.submitter || null
     this.open()
   }
 
@@ -52,7 +55,11 @@ export default class extends Controller {
   confirm() {
     this.confirmed = true
     this.close()
-    this.element.requestSubmit()
+    if (typeof this.element.requestSubmit === "function") {
+      this.element.requestSubmit(this.submitter || undefined)
+    } else {
+      this.element.submit()
+    }
   }
 
   close() {
@@ -101,7 +108,7 @@ export default class extends Controller {
   }
 
   messageHtml() {
-    const lines = (this.messageValue || "Are you sure you want to continue?")
+    const lines = (this.messageValue || "Review this action before continuing.")
       .split(/\r?\n/)
       .map((line) => line.trim())
 
@@ -182,7 +189,7 @@ export default class extends Controller {
   bodyLines() {
     const title = this.titleValue || ""
 
-    return (this.messageValue || "Are you sure you want to continue?")
+    return (this.messageValue || "Review this action before continuing.")
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line, index) => {

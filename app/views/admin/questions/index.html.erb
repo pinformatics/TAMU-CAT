@@ -69,7 +69,7 @@
                     <div class="u-actions u-actions--nowrap">
                       <%= link_to "Edit", edit_admin_question_path(question), class: button_classes(:secondary) %>
                       <%= link_to "Delete", admin_question_path(question),
-                        data: { turbo_method: :delete, turbo_confirm: "Delete this question? It will be removed from any surveys it's assigned to." },
+                        data: { turbo_method: :delete, turbo_confirm: "Delete this question? It will be removed from every survey that uses it." },
                         class: button_classes(:danger) %>
                     </div>
                   </td>

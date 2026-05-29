@@ -12,7 +12,7 @@ class ImpersonationsControllerTest < ActionDispatch::IntegrationTest
     get new_impersonation_path
 
     assert_redirected_to dashboard_path
-    assert_match(/admin privileges/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "admin can open impersonation page with searchable selects" do

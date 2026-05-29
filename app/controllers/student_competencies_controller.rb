@@ -50,6 +50,6 @@ class StudentCompetenciesController < ApplicationController
   def require_student!
     return if current_user&.role_student? && current_user.student_profile.present?
 
-    redirect_to dashboard_path, alert: "Student competency dashboard is only available to students."
+    redirect_to dashboard_path, alert: "The student competency dashboard is available only to students."
   end
 end

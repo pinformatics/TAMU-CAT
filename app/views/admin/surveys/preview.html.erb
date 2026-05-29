@@ -21,7 +21,7 @@
           Interactive preview. You can click through fields and submit the preview. No responses are saved.
         </div>
 
-        <%= form_with url: "#", method: :post, local: true, data: { preview_survey_form: true }, class: "survey-form u-stack u-stack--xl" do %>
+        <%= form_with url: "#", method: :post, local: true, data: { preview_survey_form: true, survey_shared_submit: true }, class: "survey-form u-stack u-stack--xl" do %>
           <%= render partial: "survey_responses/survey_response",
                      locals: {
                        survey_response: @preview_survey_response,
@@ -43,3 +43,5 @@
     </div>
   </div>
 </main>
+
+<%= render "shared/survey_behavior_bootstrap" %>

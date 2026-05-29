@@ -45,6 +45,15 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to dashboard_path
   end
 
+  test "edit form uses modal confirmation before saving" do
+    get edit_admin_survey_path(@survey)
+
+    assert_response :success
+    assert_select "form[data-controller~='modal-confirm'][data-action*='submit->modal-confirm#submit']"
+    assert_select "form[data-modal-confirm-title-value='Save survey changes?']"
+    assert_select "form[data-modal-confirm-cancel-label-value='Go back to editing']"
+  end
+
   test "requires admin role for update" do
     sign_out @admin_user
     sign_in @advisor_user
@@ -1436,9 +1445,12 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_select "form[data-preview-survey-form='true']"
+    assert_select "form[data-preview-survey-form='true'][data-survey-shared-submit='true']"
     assert_select "input[type='submit'][value='Submit Preview']"
     assert_includes response.body, "No responses are saved"
+    assert_includes response.body, "installPreviewForms"
+    assert_includes response.body, "installSurveySubmissionForms"
+    assert_includes response.body, "Preview needs attention"
   end
 
   test "preview with categories and questions" do
@@ -1466,6 +1478,91 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
 
     get preview_admin_survey_path(@survey)
     assert_response :success
+  end
+
+  test "preview wires employment branch children for interactive reveal" do
+    category = @survey.categories.first || @survey.categories.create!(name: "Employment")
+    parent = category.questions.create!(
+      question_text: "Are you currently employed?",
+      question_type: "multiple_choice",
+      answer_options: %w[Yes No].to_json,
+      question_order: 900,
+      is_required: true
+    )
+    child = category.questions.create!(
+      question_text: "If yes, where are you employed? (name and address)",
+      question_type: "short_answer",
+      question_order: 900,
+      parent_question: parent,
+      sub_question_order: 1,
+      is_required: true
+    )
+
+    get preview_admin_survey_path(@survey)
+
+    assert_response :success
+    assert_select "form[data-preview-survey-form='true'].survey-form"
+    assert_select "article#question-block-#{parent.id}[data-branch-parent='true'][data-branch-parent-id='#{parent.id}'][data-branch-target-value='Yes'][data-preview-required='true']"
+    assert_select "article#question-block-#{child.id}[data-branch-child-of='#{parent.id}'][data-preview-required='true'].hidden[aria-hidden='true']"
+    assert_select "article#question-block-#{child.id} .u-danger", text: "*"
+    assert_includes response.body, "TamuCatSurveyBehavior"
+  end
+
+  test "preview wires other text choice for interactive reveal" do
+    category = @survey.categories.first || @survey.categories.create!(name: "Employment")
+    parent = category.questions.create!(
+      question_text: "Are you currently employed?",
+      question_type: "multiple_choice",
+      answer_options: %w[Yes No].to_json,
+      question_order: 901,
+      is_required: false
+    )
+    question = category.questions.create!(
+      question_text: "How flexible are your work hours?",
+      question_type: "dropdown",
+      answer_options: [
+        { label: "Very flexible", value: "very_flexible" },
+        { label: "Other — Please describe the flexibility of your work schedule.", value: "other", requires_text: true }
+      ].to_json,
+      question_order: 901,
+      parent_question: parent,
+      sub_question_order: 1,
+      is_required: false
+    )
+
+    get preview_admin_survey_path(@survey)
+
+    assert_response :success
+    assert_select "article#question-block-#{question.id}[data-branch-child-of='#{parent.id}'].hidden[aria-hidden='true']"
+    assert_select "div[data-other-input-wrapper][data-other-for-question-id='#{question.id}'][data-other-choice-value='other'].hidden[aria-hidden='true']"
+    assert_select "input[name='other_answers[#{question.id}]'][disabled]"
+    assert_includes response.body, "syncOtherInputs"
+  end
+
+  test "preview wires reflection questions to assessment dropdown visibility" do
+    category = @survey.categories.first || @survey.categories.create!(name: "Reflection")
+    assessment = category.questions.create!(
+      question_text: "Communication",
+      question_type: "dropdown",
+      answer_options: [ [ "Beginner (1)", "1" ], [ "Capable (3)", "3" ] ].to_json,
+      question_order: 902,
+      is_required: true
+    )
+    reflection = category.questions.create!(
+      question_text: "Communication Reflection",
+      question_type: "short_answer",
+      question_order: 902,
+      parent_question: assessment,
+      sub_question_order: 1,
+      is_required: false
+    )
+
+    get preview_admin_survey_path(@survey)
+
+    assert_response :success
+    assert_select "article#question-block-#{reflection.id}[data-reflection-question='true'][data-reflection-source-id='#{assessment.id}'][data-preview-required='false'].hidden[aria-hidden='true']"
+    assert_select "article#question-block-#{reflection.id} .u-danger", text: "*", count: 0
+    assert_includes response.body, "syncReflectionQuestions"
   end
 
   test "preview with flexibility scale questions" do

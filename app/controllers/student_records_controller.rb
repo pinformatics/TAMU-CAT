@@ -65,7 +65,7 @@ class StudentRecordsController < ApplicationController
   def require_staff_access!
     return if current_user&.role_admin? || current_user&.role_advisor?
 
-    redirect_to dashboard_path, alert: "Advisor or admin access required."
+    redirect_to dashboard_path, alert: "Advisor or admin access is required to open this page."
   end
 
   # Loads students accessible to the current staff member.
@@ -433,17 +433,7 @@ class StudentRecordsController < ApplicationController
   def required_question?(question)
     return false unless question
 
-    return true if question.required?
-
-     return false unless question.choice_question?
-
-     option_values = question.answer_option_values
-     options = option_values.map(&:strip).map(&:downcase)
-     numeric_scale = %w[1 2 3 4 5]
-     has_numeric_scale = (numeric_scale - options).empty?
-     is_flexibility_scale = has_numeric_scale &&
-                            question.question_text.to_s.downcase.include?("flexible")
-    !(options == %w[yes no] || options == %w[no yes] || is_flexibility_scale)
+    SurveyQuestionRules.required_indicator?(question, branch_parent_ids: [])
   end
 
   # Preloads feedback entries for the provided student and survey ids.
@@ -557,6 +547,7 @@ class StudentRecordsController < ApplicationController
     package = Axlsx::Package.new
     workbook = package.workbook
     used_sheet_names = {}
+    worksheet_count = 0
 
     Array(student_records).each do |semester_block|
       semester_name = semester_block[:semester]
@@ -566,6 +557,7 @@ class StudentRecordsController < ApplicationController
         rows = Array(survey_block[:rows])
         base_name = survey.title.to_s.strip.presence || "Survey #{survey.id}"
         sheet_name = unique_worksheet_name(base_name, used_sheet_names)
+        worksheet_count += 1
 
         workbook.add_worksheet(name: sheet_name) do |sheet|
           sheet.add_row [ "Survey", survey.title ]
@@ -616,7 +608,35 @@ class StudentRecordsController < ApplicationController
       end
     end
 
+    add_empty_student_records_sheet(workbook) if worksheet_count.zero?
+
     package
+  end
+
+  def add_empty_student_records_sheet(workbook)
+    workbook.add_worksheet(name: "Survey Records") do |sheet|
+      sheet.add_row [ "Survey Records Export" ]
+      sheet.add_row [ "Generated At", Time.current.iso8601 ]
+      sheet.add_row [ "Result", "No survey records matched the current filters." ]
+      sheet.add_row []
+      sheet.add_row [ "Filter", "Value" ]
+      student_records_export_filters.each do |label, value|
+        sheet.add_row [ label, value ]
+      end
+    end
+  end
+
+  def student_records_export_filters
+    [
+      [ "Search students", @search_query.presence || "All students" ],
+      [ "Search surveys", @survey_query.presence || "All surveys" ],
+      [ "Survey", @survey_filter_id.presence || "All surveys" ],
+      [ "Semester", @semester_filter.presence || "All semesters" ],
+      [ "Status", @status_filter.presence&.titleize || "All statuses" ],
+      [ "Track", @track_filter.presence || "All tracks" ],
+      [ "Program year", @program_year_filter.presence || "All years" ],
+      [ "Student status", @student_lifecycle_filter.presence || "Active" ]
+    ]
   end
 
   def unique_worksheet_name(base_name, used_sheet_names)

@@ -17,9 +17,9 @@
         <%= link_to "Back", admin_surveys_path, class: button_classes(:secondary) %>
         <%= link_to "Preview as student", preview_admin_survey_path(@survey), class: button_classes(:subtle) %>
         <% if @survey.is_active? %>
-          <%= button_to "Archive survey", archive_admin_survey_path(@survey), method: :patch, data: { turbo_confirm: "Archive '#{@survey.title}' and remove it from advisors?" }, class: button_classes(:subtle) %>
+          <%= button_to "Archive survey", archive_admin_survey_path(@survey), method: :patch, data: { turbo_confirm: "Archive '#{@survey.title}'? Advisors will no longer be able to assign it." }, class: button_classes(:subtle) %>
         <% else %>
-          <%= button_to "Activate survey", activate_admin_survey_path(@survey), method: :patch, data: { turbo_confirm: "Make '#{@survey.title}' active for advisors?" }, class: button_classes(:primary) %>
+          <%= button_to "Activate survey", activate_admin_survey_path(@survey), method: :patch, data: { turbo_confirm: "Activate '#{@survey.title}' so advisors can assign it?" }, class: button_classes(:primary) %>
         <% end %>
       </div>
     </header>

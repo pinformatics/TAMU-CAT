@@ -6,7 +6,14 @@
 <%= form_with(model: [:admin, survey],
               local: true,
               class: "survey-form u-w-full u-stack u-stack--xl",
-              data: { controller: "survey-tabs" }) do |form| %>
+              data: {
+                controller: "survey-tabs modal-confirm",
+                action: "submit->modal-confirm#submit",
+                "modal-confirm-title-value": survey.persisted? ? "Save survey changes?" : "Create survey?",
+                "modal-confirm-message-value": survey.persisted? ? "Review your changes before updating this survey." : "Review the setup before creating this survey.",
+                "modal-confirm-confirm-label-value": survey.persisted? ? "Save changes" : "Create survey",
+                "modal-confirm-cancel-label-value": "Go back to editing"
+              }) do |form| %>
   <% if survey.errors.any? %>
     <div class="c-callout c-callout--danger">
       <h2 class="c-panel-title"><%= pluralize(survey.errors.count, "error") %> prevented this survey from being saved:</h2>
@@ -50,7 +57,7 @@
                          type: "submit",
                          name: "force_deadline_for_everyone",
                          value: "1",
-                         data: { turbo_confirm: "Clear all individual assignment deadlines and make everyone follow the survey due date, including completed responses?" },
+                         data: { turbo_confirm: "Clear all individual assignment deadlines? All students, including those with completed responses, will follow the survey due date." },
                          class: button_classes(:secondary) %>
         <% end %>
         <%= form.submit(survey.persisted? ? "Update survey" : "Create survey", class: button_classes(:primary)) %>

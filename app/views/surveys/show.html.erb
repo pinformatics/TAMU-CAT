@@ -10,14 +10,6 @@
   <% can_edit_by_availability = available_until_for_edit.blank? || available_until_for_edit >= Time.current %>
   <% editing_mode = @return_to.present? || (@survey_assignment&.completed_at? && can_edit_by_availability) %>
 
-  <% if editing_mode %>
-    <div class="c-card c-card--tight">
-      <div class="u-actions u-actions--start">
-        <%= link_to "Cancel", cancel_path, class: button_classes(:secondary) %>
-      </div>
-    </div>
-  <% end %>
-
   <header class="c-document-hero">
     <div class="u-stack u-stack--md">
       <p class="c-eyebrow"><%= app_full_name %> survey</p>
@@ -36,7 +28,7 @@
   <% flash_alert_present = flash[:alert].present? || flash.now[:alert].present? %>
   <% if @invalid_evidence.present? && !flash_alert_present %>
     <div class="c-callout c-callout--warning">
-      <p class="c-callout__title">Please fix the highlighted items:</p>
+      <p class="c-callout__title">Review the highlighted items:</p>
       <ul>
         <li>Use a published Google Sites link only (sites.google.com).</li>
       </ul>
@@ -45,7 +37,7 @@
 
   <% if @invalid_integer.present? && !flash_alert_present %>
     <div class="c-callout c-callout--warning">
-      <p class="c-callout__title">Please fix the highlighted items:</p>
+      <p class="c-callout__title">Review the highlighted items:</p>
       <ul>
         <li>Integer responses must be whole numbers within the allowed range.</li>
       </ul>
@@ -59,10 +51,21 @@
                 data: {
                   turbo: false,
                   survey_student_form: true,
+                  survey_shared_submit: true,
                   survey_autosave_url: save_progress_survey_path(@survey),
                   survey_autosave_enabled: allow_save_progress.to_s
                 },
                 class: "u-stack u-stack--xl survey-form" do |form| %>
+    <% if allow_save_progress %>
+      <div class="c-floating-status c-floating-status--info" data-survey-autosave-prompt data-autosave-state="ready" role="status" aria-live="polite">
+        <span class="c-floating-status__dot" aria-hidden="true"></span>
+        <span class="c-floating-status__body">
+          <strong data-survey-autosave-prompt-title>Autosave ready</strong>
+          <span data-survey-autosave-prompt-message>Your answers will auto-save while you work.</span>
+        </span>
+      </div>
+    <% end %>
+
     <% rendered_section_ids = [] %>
     <% section_question_numbers = Hash.new(0) %>
     <% invalid_evidence_ids = Array(@invalid_evidence).map(&:to_s) %>
@@ -95,12 +98,14 @@
           <% end %>
         </header>
 
-        <div class="c-form-section__body">
+        <div class="c-form-section__body c-question-list">
           <% number_key = section&.id || category.id %>
           <% ordered_questions = category.questions.ordered.to_a %>
-          <% branch_parent_ids = ordered_questions.select(&:sub_question?).map(&:parent_question_id).compact.uniq %>
+          <% branch_parent_ids = SurveyQuestionRules.branch_parent_ids(ordered_questions) %>
+          <% branch_parent_target_by_id = SurveyQuestionRules.branch_parent_target_by_id(ordered_questions) %>
           <% ordered_questions.each do |question| %>
             <% is_sub_question = question.sub_question? %>
+            <% branch_child_of = SurveyQuestionRules.branch_child_parent_id(question, branch_parent_target_by_id:) %>
             <% question_number = section_question_numbers[number_key] %>
             <% question_number = (section_question_numbers[number_key] += 1) unless is_sub_question %>
             <% field_name = "answers[#{question.id}]" %>
@@ -122,32 +127,24 @@
             <% invalid_evidence_error = question.question_type == "evidence" && invalid_evidence_ids.include?(question.id.to_s) %>
             <% invalid_integer_error = question.question_type == "integer" && invalid_integer_ids.include?(question.id.to_s) %>
             <% has_error = missing_required_error || invalid_evidence_error || invalid_integer_error %>
-            <% reflection_source_question = nil %>
-            <% if (reflection_match = question.question_text.to_s.squish.match(/\A(.+?)\s+Reflection\z/i)) %>
-              <% reflection_base = reflection_match[1].to_s.squish.downcase %>
-              <% reflection_source_question = ordered_questions.find do |candidate|
-                   candidate.id != question.id &&
-                     candidate.question_type == "dropdown" &&
-                     candidate.question_text.to_s.squish.downcase == reflection_base
-                 end %>
-            <% end %>
-            <% reflection_visible = reflection_source_question.blank? || @existing_answers[reflection_source_question.id.to_s].present? %>
+            <% reflection_source_question = SurveyQuestionRules.reflection_source_question(question, ordered_questions) %>
+            <% reflection_visible = SurveyQuestionRules.reflection_visible?(question, answers: @existing_answers, questions: ordered_questions) %>
+            <% branch_child_visible = SurveyQuestionRules.branch_child_visible?(question, answers: @existing_answers, branch_parent_target_by_id:) %>
+            <% card_hidden = (branch_child_of.present? && !branch_child_visible) || (reflection_source_question.present? && !reflection_visible) %>
+            <% aria_hidden = (branch_child_of.present? || reflection_source_question.present?) ? (card_hidden ? "true" : "false") : nil %>
             <% article_classes = ["c-question-card"] %>
             <% article_classes << "c-question-card--nested" if question.sub_question? %>
             <% article_classes << "c-question-card--error" if has_error %>
-            <% article_classes << "hidden" if reflection_source_question.present? && !reflection_visible %>
+            <% article_classes << "hidden" if card_hidden %>
 
-            <% is_branch_parent = !is_sub_question && question.question_type == "multiple_choice" && branch_parent_ids.include?(question.id) %>
-            <% if is_branch_parent %>
-              <% option_values = question.answer_options_list.map { |opt| opt.to_s.strip.downcase } %>
-              <% is_branch_parent = option_values.include?("yes") && option_values.include?("no") %>
-            <% end %>
-            <% branch_target_value = is_branch_parent ? "Yes" : nil %>
-            <% branch_child_of = is_sub_question ? question.parent_question_id : nil %>
+            <% is_branch_parent = branch_parent_target_by_id.key?(question.id) %>
+            <% branch_target_value = branch_parent_target_by_id[question.id] %>
+            <% display_required = SurveyQuestionRules.required_indicator?(question, branch_parent_ids:) %>
 
             <article id="question-block-<%= question.id %>"
                      class="<%= article_classes.join(' ') %>"
                      data-question-id="<%= question.id %>"
+                     data-survey-required="<%= display_required ? "true" : "false" %>"
                      <% if is_branch_parent %>
                        data-branch-parent="true"
                        data-branch-parent-id="<%= question.id %>"
@@ -159,7 +156,9 @@
                      <% if reflection_source_question.present? %>
                        data-reflection-question="true"
                        data-reflection-source-id="<%= reflection_source_question.id %>"
-                       aria-hidden="<%= reflection_visible ? "false" : "true" %>"
+                     <% end %>
+                     <% if aria_hidden.present? %>
+                       aria-hidden="<%= aria_hidden %>"
                      <% end %>
                      >
             <% desc_text = question.description.to_s.strip.presence %>
@@ -176,7 +175,7 @@
                 <span class="c-question-card__content">
                   <span class="c-question-card__prompt-row">
                     <span class="c-question-card__prompt"><%= render_question_prompt(question) %></span>
-                    <% if required %>
+                    <% if display_required %>
                       <span class="u-danger" aria-hidden="true">*</span>
                     <% end %>
                   </span>
@@ -299,7 +298,7 @@
                   Fix: In Google Sites, open your site and go to Publish → Manage (Who can view) → select "Anyone with the link" → Publish again, then resubmit.
                 </div>
               <% elsif missing_required_error %>
-                <div class="c-help u-danger">This question is required</div>
+                <div class="c-help u-danger">This question is required.</div>
               <% end %>
               
             <% else %>
@@ -316,7 +315,7 @@
             <% end %>
 
             <% if missing_required_error && question.question_type != "evidence" %>
-              <div class="c-help u-danger">This question is required</div>
+              <div class="c-help u-danger">This question is required.</div>
             <% end %>
 
             </article>
@@ -419,3 +418,5 @@
     <%= render ::SurveyLegendComponent.new(legend: @survey.legend) %>
   </div>
 </div>
+
+<%= render "shared/survey_behavior_bootstrap" %>

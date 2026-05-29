@@ -309,7 +309,7 @@
             var missingRatings = markMissingRequiredRatings(form);
             if (missingRatings.length > 0) {
               event.preventDefault();
-              showModalAlert('Required ratings missing', 'Please complete all required Advisor Rating fields before submitting.').then(function() {
+              showModalAlert('Required ratings are missing', 'Complete all required Advisor Rating fields before submitting.').then(function() {
                 missingRatings[0].focus();
               });
               return;
@@ -349,7 +349,7 @@
             if (!isDirty()) return;
 
             event.preventDefault();
-            showModalConfirm('Leave without saving?', 'Are you sure you want to leave? Any unsaved progress will be lost.').then(function(confirmed) {
+            showModalConfirm('Leave without saving?', 'Leave this page? Any unsaved progress will be lost.').then(function(confirmed) {
               if (!confirmed) return;
 
               bypassBeforeUnload = true;
@@ -363,7 +363,7 @@
         if (isSubmitting || bypassBeforeUnload || !isDirty()) return;
 
         event.preventDefault();
-        event.returnValue = 'Are you sure you want to leave? Any unsaved progress will be lost.';
+        event.returnValue = 'Leave this page? Any unsaved progress will be lost.';
       });
     }
 

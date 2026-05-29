@@ -109,7 +109,7 @@
         <%= link_to reports_path, class: "c-tile__link" do %>
           <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-reports"></use></svg></div>
           <div class="c-tile__title">Reports</div>
-          <div class="c-tile__description"><%= @total_reports || 0 %> generated</div>
+          <div class="c-tile__description">Program review dashboards and exports</div>
         <% end %>
       </div>
 
@@ -123,9 +123,12 @@
 
       <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
         <%= link_to student_records_path, class: "c-tile__link" do %>
+          <% survey_record_counts = @survey_record_counts || {} %>
+          <% assigned_count = survey_record_counts.fetch(:assigned, 0) %>
+          <% completed_count = survey_record_counts.fetch(:completed, 0) %>
           <div class="c-tile__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><use href="#icon-student-records"></use></svg></div>
           <div class="c-tile__title">Survey Records</div>
-          <div class="c-tile__description">Completion and feedback by survey</div>
+          <div class="c-tile__description"><%= pluralize(assigned_count, "assigned survey") %>, <%= completed_count %> completed</div>
         <% end %>
       </div>
 

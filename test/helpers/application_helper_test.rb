@@ -14,6 +14,15 @@ class ApplicationHelperTest < ActionView::TestCase
     assert_equal "Custom Key", flash_title(:custom_key)
   end
 
+  test "ferpa_export_confirmation gives consistent export warning copy" do
+    message = ferpa_export_confirmation("student-level competency data")
+
+    assert_includes message, "FERPA reminder"
+    assert_includes message, "student-level competency data"
+    assert_includes message, "legitimate educational interest"
+    assert_includes message, "store or share the file securely"
+  end
+
   test "app names expose short browser name and full display name" do
     assert_equal "TAMU CAT", app_short_name
     assert_equal "TAMU Competency Assessment Tracking", app_full_name

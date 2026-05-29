@@ -14,7 +14,7 @@ module Assignments
     def require_assignment_access!
       return if current_user&.role_advisor? || current_user&.role_admin?
 
-      redirect_to dashboard_path, alert: "Access denied. Advisor or admin privileges required."
+      redirect_to dashboard_path, alert: "Advisor or admin access is required to open this page."
     end
   end
 end

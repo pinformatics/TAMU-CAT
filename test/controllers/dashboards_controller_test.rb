@@ -95,7 +95,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/access denied/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "people_management requires admin for students" do
@@ -115,7 +115,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/access denied/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "people_management loads members tab for admin" do
@@ -326,7 +326,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/access denied/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "destroy_members requires admin (blocks students)" do
@@ -350,7 +350,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/access denied/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "debug_users returns expected json" do
@@ -372,7 +372,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/access denied/i, flash[:alert].to_s)
+    assert_match(/admin access is required/i, flash[:alert].to_s)
   end
 
   test "manage_students for admin shows assignment controls" do
@@ -658,6 +658,15 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     sign_in users(:student)
 
     get student_dashboard_path
+
+    assert_response :success
+    assert_select "nav.c-nav-links a.c-nav-link", text: "FAQ"
+  end
+
+  test "advisor navbar includes FAQ" do
+    sign_in users(:advisor)
+
+    get advisor_dashboard_path
 
     assert_response :success
     assert_select "nav.c-nav-links a.c-nav-link", text: "FAQ"
@@ -997,7 +1006,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match "Student profile not found", flash[:alert].to_s
+    assert_match "We could not find that student profile", flash[:alert].to_s
   end
 
   test "update_student_advisors reports no changes when payload matches current state" do
@@ -1154,7 +1163,8 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     get advisor_dashboard_path
     assert_response :success
-  assert_includes response.body, "Advisor Dashboard"
+    assert_includes response.body, "Advisor Dashboard"
+    assert_equal "0 advisees, 0 assigned, 0 completed", extract_feature_description(response.body, "Survey Records")
   ensure
     @admin.update!(role: "admin")
   end
@@ -1174,7 +1184,8 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     reports_description = extract_feature_description(response.body, "Reports")
-    assert_equal "1 generated", reports_description
+    assert_equal "Program review dashboards and exports", reports_description
+    assert_equal "1 advisee, 1 assigned, 0 completed", extract_feature_description(response.body, "Survey Records")
   end
 
   test "advisor dashboard excludes graduated advisees from current workload counts" do
@@ -1184,8 +1195,8 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     get advisor_dashboard_path
 
     assert_response :success
-    assert_equal "0 generated", extract_feature_description(response.body, "Reports")
-    assert_equal "0 assigned students", extract_feature_description(response.body, "Survey Records")
+    assert_equal "Program review dashboards and exports", extract_feature_description(response.body, "Reports")
+    assert_equal "0 advisees, 0 assigned, 0 completed", extract_feature_description(response.body, "Survey Records")
   end
 
   test "admin dashboard shows total reports count" do
@@ -1195,7 +1206,8 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     reports_description = extract_feature_description(response.body, "Reports")
-    assert_equal "3 generated", reports_description
+    assert_equal "Program review dashboards and exports", reports_description
+    assert_equal "3 assigned surveys, 1 completed", extract_feature_description(response.body, "Survey Records")
   end
 
   test "admin dashboard includes recent activities tile" do

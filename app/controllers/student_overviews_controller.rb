@@ -1,21 +1,31 @@
 # frozen_string_literal: true
 
+require "caxlsx"
+
 # Staff-facing student overview hub. Admins see all students; advisors see only
 # assigned advisees.
 class StudentOverviewsController < ApplicationController
   before_action :require_staff_access!
 
   def index
-    @filters = overview_filters
-    @track_options = ProgramTrack.names
-    @student_lifecycle_filter_options = Student.lifecycle_filter_options
-    @program_year_options = available_program_years
-    @students = filtered_students.to_a
-    insights = Reports::CompetencyInsights.new(user: current_user, params: heatmap_params).call
-    @student_rows = overview_rows_for(@students, competency_attainment_lookup(insights[:target_attainment]))
-    @heatmap_rows = insights[:heatmap]
+    load_index_context
 
     render "staff/student_overviews/index"
+  end
+
+  def export_excel
+    load_index_context
+    package = build_student_overviews_workbook
+    record_export_audit!(
+      export_type: "student_overviews_excel",
+      description: "Exported student overview workbook.",
+      metadata: { student_count: @students.size }
+    )
+
+    send_data package.to_stream.read,
+              filename: "student-overviews-#{Time.current.strftime('%Y%m%d-%H%M')}.xlsx",
+              disposition: "attachment",
+              type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   end
 
   def show
@@ -53,10 +63,21 @@ class StudentOverviewsController < ApplicationController
 
   private
 
+  def load_index_context
+    @filters = overview_filters
+    @track_options = ProgramTrack.names
+    @student_lifecycle_filter_options = Student.lifecycle_filter_options
+    @program_year_options = available_program_years
+    @students = filtered_students.to_a
+    insights = Reports::CompetencyInsights.new(user: current_user, params: heatmap_params).call
+    @student_rows = overview_rows_for(@students, competency_attainment_lookup(insights[:target_attainment]))
+    @heatmap_rows = insights[:heatmap]
+  end
+
   def require_staff_access!
     return if current_user&.role_admin? || current_user&.role_advisor?
 
-    redirect_to dashboard_path, alert: "Advisor or admin access required."
+    redirect_to dashboard_path, alert: "Advisor or admin access is required to open this page."
   end
 
   def overview_filters
@@ -309,5 +330,99 @@ class StudentOverviewsController < ApplicationController
     return normalized if normalized.match?(/\A\d{4}\z/)
 
     nil
+  end
+
+  def build_student_overviews_workbook
+    package = Axlsx::Package.new
+    workbook = package.workbook
+
+    add_student_overview_students_sheet(workbook)
+    add_student_overview_heatmap_sheet(workbook)
+    add_student_overview_filters_sheet(workbook)
+
+    package
+  end
+
+  def add_student_overview_students_sheet(workbook)
+    workbook.add_worksheet(name: "Students") do |sheet|
+      sheet.add_row [ "Student Overview Export" ]
+      sheet.add_row [ "Generated At", Time.current.iso8601 ]
+      sheet.add_row []
+      sheet.add_row [
+        "Student",
+        "Email",
+        "UIN",
+        "Track",
+        "Year",
+        "Status",
+        "Advisor",
+        "Assigned Surveys",
+        "Completed Surveys",
+        "Survey Completion Rate",
+        "Competencies Meeting Target",
+        "Competencies Total"
+      ]
+
+      Array(@student_rows).each do |row|
+        student = row[:student]
+        attainment = row[:competency_attainment] || {}
+
+        sheet.add_row [
+          student&.user&.display_name || student&.student_id,
+          student&.user&.email,
+          student&.uin,
+          student&.track,
+          student&.program_year,
+          student&.lifecycle_label,
+          student&.advisor&.display_name || "Unassigned",
+          row[:assigned_count],
+          row[:completed_count],
+          row[:completion_rate],
+          attainment[:met_count],
+          attainment[:total_count]
+        ]
+      end
+    end
+  end
+
+  def add_student_overview_heatmap_sheet(workbook)
+    domain_names = Array(@heatmap_rows).first&.dig(:domains)&.map { |domain| domain[:name] }
+    domain_names = Reports::DataAggregator::REPORT_DOMAINS if domain_names.blank?
+
+    workbook.add_worksheet(name: "Domain Heatmap") do |sheet|
+      sheet.add_row [ "Student Domain Heatmap" ]
+      sheet.add_row [ "Generated At", Time.current.iso8601 ]
+      sheet.add_row []
+      sheet.add_row [ "Student", "Track", "Year", *domain_names ]
+
+      Array(@heatmap_rows).each do |row|
+        domain_lookup = Array(row[:domains]).index_by { |domain| domain[:name] }
+
+        sheet.add_row [
+          row[:student_name],
+          row[:track],
+          row[:program_year],
+          *domain_names.map { |domain_name| domain_lookup.dig(domain_name, :average) }
+        ]
+      end
+    end
+  end
+
+  def add_student_overview_filters_sheet(workbook)
+    workbook.add_worksheet(name: "Filters") do |sheet|
+      sheet.add_row [ "Filter", "Value" ]
+      student_overview_export_filters.each do |label, value|
+        sheet.add_row [ label, value ]
+      end
+    end
+  end
+
+  def student_overview_export_filters
+    [
+      [ "Search students", @filters[:q].presence || "All students" ],
+      [ "Track", @filters[:track].presence || "All tracks" ],
+      [ "Program year", @filters[:program_year].presence || "All years" ],
+      [ "Student status", @filters[:student_status].presence || "Active" ]
+    ]
   end
 end

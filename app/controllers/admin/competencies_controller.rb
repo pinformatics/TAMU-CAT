@@ -96,7 +96,7 @@ class Admin::CompetenciesController < ApplicationController
     if current_user&.role_student?
       redirect_to dashboard_path
     else
-      redirect_to dashboard_path, alert: "Access denied. Admin or advisor privileges required."
+      redirect_to dashboard_path, alert: "Admin or advisor access is required to open this page."
     end
   end
 
@@ -196,6 +196,6 @@ class Admin::CompetenciesController < ApplicationController
   def require_admin_for_course_rule!
     return if current_user&.role_admin?
 
-    redirect_to dashboard_path, alert: "Access denied. Admin privileges required."
+    redirect_to dashboard_path, alert: "Admin access is required to open this page."
   end
 end

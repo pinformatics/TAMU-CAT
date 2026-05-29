@@ -57,7 +57,7 @@ class SurveysControllerAdditionalTest < ActionDispatch::IntegrationTest
     post submit_survey_path(survey), params: { answers: { required_q.id.to_s => "", optional_q.id.to_s => "some" } }
 
     assert_response :unprocessable_entity
-    assert_match(/Unable to submit/i, response.body)
+    assert_match(/We could not submit/i, response.body)
 
     saved = StudentQuestion.find_by(student_id: @student.student_id, question_id: optional_q.id)
     assert_not_nil saved

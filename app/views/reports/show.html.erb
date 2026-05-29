@@ -34,38 +34,38 @@
         {
           label: "Download CSV",
           path: export_course_competency_reports_path(report_download_params),
-          confirm: "FERPA reminder: this export may include student-level course competency summaries. Continue only for a legitimate educational interest."
+          confirm: ferpa_export_confirmation("student-level course competency summaries")
         }
       when "cohort_comparison"
         {
           label: "Download CSV",
           path: export_report_tab_path(report_download_params.merge(report_tab: "cohort_comparison", format: :csv)),
-          confirm: "FERPA reminder: this export may include student-level cohort summaries. Continue only for a legitimate educational interest."
+          confirm: ferpa_export_confirmation("student-level cohort summaries")
         }
       when "domain_heatmap"
         {
           label: "Download CSV",
           path: export_report_tab_path(report_download_params.merge(report_tab: "domain_heatmap", format: :csv)),
-          confirm: "FERPA reminder: this export may include student-level heatmap data. Continue only for a legitimate educational interest."
+          confirm: ferpa_export_confirmation("student-level heatmap data")
         }
       when "portfolio_export"
         {
           label: "Download Excel",
           path: export_reports_portfolio_path(report_download_params),
-          confirm: "FERPA reminder: this export includes student-level profile and portfolio data. Continue only for a legitimate educational interest."
+          confirm: ferpa_export_confirmation("student-level profile and portfolio data")
         }
       else
         {
           label: "Download Excel",
           path: export_reports_excel_path(report_download_params.merge(section: "dashboard")),
-          confirm: "FERPA reminder: this export may include student-level records. Continue only for a legitimate educational interest."
+          confirm: ferpa_export_confirmation("student-level records")
         }
       end %>
 
     <section class="c-card c-card--compact u-stack u-stack--md">
       <div class="c-callout c-callout--warning c-callout--compact">
         <p>
-          <strong>FERPA reminder:</strong> Reports and exports may include student-level education records. Confirm the requester has a legitimate educational interest before downloading or sharing PDF, Excel, or CSV files.
+          <strong>FERPA reminder:</strong> Reports and exports may include student-level education records. Download or share files only when there is a legitimate educational interest, and store them securely.
         </p>
       </div>
 
@@ -101,7 +101,7 @@
         ></div>
 
         <noscript>
-          <p class="c-callout c-callout--warning">Analytics require JavaScript. Please enable it to view the interactive dashboard.</p>
+          <p class="c-callout c-callout--warning">JavaScript is required to view the interactive analytics dashboard. Please enable JavaScript and reload this page.</p>
         </noscript>
       <% elsif active_report_tab == "course_target" %>
         <% course_filters = @course_competency_report[:filters] || {} %>

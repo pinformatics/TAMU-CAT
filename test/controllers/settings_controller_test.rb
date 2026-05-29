@@ -49,6 +49,39 @@ class SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "edit displays notification settings without email control when system email is disabled" do
+    sign_in @student
+    ENV.delete("EMAIL_NOTIFICATIONS_ENABLED")
+
+    get settings_path
+
+    assert_response :success
+    assert_includes response.body, "Notification Settings"
+    assert_includes response.body, "System email delivery"
+    assert_includes response.body, "EMAIL_NOTIFICATIONS_ENABLED"
+    assert_includes response.body, "In-app notifications"
+    assert_select "select[name='user[notifications_enabled]']", count: 0
+    assert_select "input#user_notifications_enabled", count: 0
+    assert_select "input#system_email_delivery_toggle[disabled]"
+    assert_select "input#in_app_notifications_toggle[disabled][checked]"
+    assert_select "a[href=?]", notifications_path, text: "Open notifications"
+  end
+
+  test "edit displays email notification control when system email is enabled" do
+    sign_in @student
+    previous = ENV["EMAIL_NOTIFICATIONS_ENABLED"]
+    ENV["EMAIL_NOTIFICATIONS_ENABLED"] = "true"
+
+    get settings_path
+
+    assert_response :success
+    assert_includes response.body, "Email notifications"
+    assert_select "select[name='user[notifications_enabled]']", count: 0
+    assert_select "input#user_notifications_enabled[type='checkbox']"
+  ensure
+    previous.nil? ? ENV.delete("EMAIL_NOTIFICATIONS_ENABLED") : ENV["EMAIL_NOTIFICATIONS_ENABLED"] = previous
+  end
+
   test "edit assigns current user" do
     sign_in @admin
 

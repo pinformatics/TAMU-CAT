@@ -9,6 +9,8 @@ import "controllers"
 
 let appModalId = 0
 let turboFalseConfirmFallbackInstalled = false
+let dismissibleFlashesInstalled = false
+let surveyBranchingEventsInstalled = false
 
 function escapeModalText(value) {
   const element = document.createElement("span")
@@ -60,7 +62,7 @@ function modalBodyHtml(message) {
 
 function showAppModal(options = {}) {
   const title = options.title || (options.showCancel === false ? "Notice" : "Confirm action")
-  const message = options.message || "Are you sure you want to continue?"
+  const message = options.message || "Review this action before continuing."
   const confirmLabel = options.confirmLabel || (options.showCancel === false ? "OK" : "Continue")
   const cancelLabel = options.cancelLabel || "Cancel"
   const showCancel = options.showCancel !== false
@@ -139,6 +141,10 @@ function confirmWithAppModal(message, options = {}) {
 }
 
 function alertWithAppModal(message, options = {}) {
+  if (message && typeof message === "object" && !Array.isArray(message)) {
+    return appModalAlert(message)
+  }
+
   if (window.AppModal && typeof window.AppModal.alert === "function") {
     return window.AppModal.alert({ message, ...options })
   }
@@ -175,7 +181,7 @@ function initTurboFalseConfirmFallback() {
     }
 
     event.preventDefault()
-    const confirmed = await confirmWithAppModal(trigger.dataset.turboConfirm || "Are you sure you want to continue?")
+    const confirmed = await confirmWithAppModal(trigger.dataset.turboConfirm || "Review this action before continuing.")
     if (!confirmed) return
 
     trigger.dataset.appModalConfirmed = "true"
@@ -255,6 +261,25 @@ function applyHighContrast(enabled) {
     if (el.dataset.toggleInitialized === "true") {
       el.dataset.togglePrev = enabled ? "true" : "false"
     }
+  })
+}
+
+function initDismissibleFlashes() {
+  if (dismissibleFlashesInstalled) return
+  dismissibleFlashesInstalled = true
+
+  document.addEventListener("click", (event) => {
+    const target = event.target
+    const targetElement = target instanceof Element ? target : (target instanceof Node ? target.parentElement : null)
+    const trigger = targetElement?.closest("[data-dismiss-flash]")
+    if (!trigger) return
+
+    const flash = trigger.closest("[data-dismissible-flash]")
+    if (!flash || flash.dataset.dismissibleFlashDismissed === "true") return
+
+    flash.dataset.dismissibleFlashDismissed = "true"
+    flash.classList.add("is-dismissing")
+    window.setTimeout(() => flash.remove(), 170)
   })
 }
 
@@ -480,7 +505,7 @@ function stopReading() {
 
 function startReading() {
   if (!("speechSynthesis" in window)) {
-    alertWithAppModal("Text-to-speech is not supported in this browser.", {
+    alertWithAppModal("Text-to-speech is not available in this browser.", {
       title: "Read Aloud unavailable"
     })
     stopReading()
@@ -495,7 +520,7 @@ function startReading() {
   ttsHighlightState.text = text
 
   if (!text || !text.trim()) {
-    alertWithAppModal("There is no readable content on this page.", {
+    alertWithAppModal("No readable content was found on this page.", {
       title: "Nothing to read"
     })
     stopReading()
@@ -587,48 +612,60 @@ function initSurveyBranching() {
   if (!forms.length) return
 
   forms.forEach((form) => {
-    if (form.dataset.branchInitialized === "true") return
-    form.dataset.branchInitialized = "true"
+    syncSurveyBranchingForForm(form)
+  })
+}
 
-    const parents = form.querySelectorAll('[data-branch-parent="true"]')
-    if (!parents.length) return
+function syncSurveyBranchingForForm(form) {
+  if (!(form instanceof HTMLFormElement)) return
 
-    const setChildVisibility = (parentId, shouldShow) => {
-      const children = form.querySelectorAll(`[data-branch-child-of="${parentId}"]`)
-      children.forEach((child) => {
-        child.classList.toggle("hidden", !shouldShow)
-        child.setAttribute("aria-hidden", shouldShow ? "false" : "true")
+  const parents = form.querySelectorAll('[data-branch-parent="true"][data-branch-parent-id]')
+  if (!parents.length) return
 
-        const inputs = child.querySelectorAll("input, select, textarea, button")
-        inputs.forEach((el) => {
-          if (el.getAttribute("type") === "hidden") return
-          el.disabled = !shouldShow
-        })
-      })
-    }
+  parents.forEach((parent) => {
+    const parentId = parent.dataset.branchParentId
+    const targetValue = (parent.dataset.branchTargetValue || "").trim().toLowerCase()
+    if (!parentId || !targetValue) return
 
-    parents.forEach((parent) => {
-      const parentId = parent.dataset.branchParentId
-      const targetValue = (parent.dataset.branchTargetValue || "").trim()
-      if (!parentId || !targetValue) return
+    const inputName = `answers[${parentId}]`
+    const checked = form.querySelector(`input[name="${inputName}"]:checked`)
+    const select = form.querySelector(`select[name="${inputName}"]`)
+    const currentValue = (checked ? checked.value : (select ? select.value : "")).trim().toLowerCase()
 
-      const inputName = `answers[${parentId}]`
-      const inputs = form.querySelectorAll(`input[name="${inputName}"]`)
-      if (!inputs.length) return
+    setSurveyBranchChildrenVisibility(form, parentId, currentValue === targetValue)
+  })
+}
 
-      const update = () => {
-        const checked = form.querySelector(`input[name="${inputName}"]:checked`)
-        const currentValue = (checked ? checked.value : "").trim().toLowerCase()
-        setChildVisibility(parentId, currentValue === targetValue.toLowerCase())
-      }
+function setSurveyBranchChildrenVisibility(form, parentId, shouldShow) {
+  const children = form.querySelectorAll(`[data-branch-child-of="${parentId}"]`)
+  children.forEach((child) => {
+    child.classList.toggle("hidden", !shouldShow)
+    child.setAttribute("aria-hidden", shouldShow ? "false" : "true")
 
-      inputs.forEach((input) => {
-        input.addEventListener("change", update)
-      })
-
-      update()
+    const inputs = child.querySelectorAll("input, select, textarea, button")
+    inputs.forEach((el) => {
+      if (el.getAttribute("type") === "hidden") return
+      el.disabled = !shouldShow
     })
   })
+}
+
+function installSurveyBranchingEventFallback() {
+  if (surveyBranchingEventsInstalled) return
+  surveyBranchingEventsInstalled = true
+
+  const scheduleSync = (event) => {
+    const target = event.target
+    if (!(target instanceof Element)) return
+
+    const form = target.closest(".survey-form")
+    if (!(form instanceof HTMLFormElement)) return
+
+    window.requestAnimationFrame(() => syncSurveyBranchingForForm(form))
+  }
+
+  document.addEventListener("change", scheduleSync, true)
+  document.addEventListener("click", scheduleSync, true)
 }
 
 // -----------------------------
@@ -733,53 +770,65 @@ function initOtherChoiceInputs() {
     const wrappers = form.querySelectorAll("[data-other-input-wrapper]")
     if (!wrappers.length) return
 
-    const sync = (questionId) => {
-      // Support both editable survey forms (answers[ID]) and read-only displays
-      // (readonly_answers[ID]) by matching on the trailing [ID].
-      const selectedRadio = form.querySelector(`input[type="radio"][name$="[${questionId}]"]:checked`)
-      const select = form.querySelector(`select[name$="[${questionId}]"]`)
-      const currentValue = (selectedRadio ? selectedRadio.value : (select ? select.value : "")).trim()
-
-      const matchingWrappers = form.querySelectorAll(`[data-other-input-wrapper][data-other-for-question-id="${questionId}"]`)
-      if (!matchingWrappers.length) return
-
-      matchingWrappers.forEach((wrapper) => {
-        const otherChoiceValue = (wrapper.dataset.otherChoiceValue || "Other").trim()
-        const isOther = currentValue && currentValue === otherChoiceValue
-
-        wrapper.classList.toggle("hidden", !isOther)
-        wrapper.setAttribute("aria-hidden", isOther ? "false" : "true")
-
-        const input = wrapper.querySelector("input")
-        // Only manage disabled state for editable inputs (other_answers[ID]).
-        // Read-only pages intentionally keep inputs disabled.
-        if (input && (input.name || "").startsWith("other_answers[")) {
-          input.disabled = !isOther
-        }
-      })
-    }
-
     wrappers.forEach((wrapper) => {
       const qid = wrapper.dataset.otherForQuestionId
       if (!qid) return
 
       const radios = form.querySelectorAll(`input[type="radio"][name$="[${qid}]"]`)
       radios.forEach((radio) => {
-        radio.addEventListener("change", () => sync(qid))
+        radio.addEventListener("change", () => syncOtherChoiceInputsForQuestion(form, qid))
       })
 
       const select = form.querySelector(`select[name$="[${qid}]"]`)
       if (select) {
-        select.addEventListener("change", () => sync(qid))
+        select.addEventListener("change", () => syncOtherChoiceInputsForQuestion(form, qid))
       }
 
-      sync(qid)
+      syncOtherChoiceInputsForQuestion(form, qid)
     })
+  })
+}
+
+function syncOtherChoiceInputsForForm(form) {
+  const questionIds = new Set()
+  form.querySelectorAll("[data-other-input-wrapper][data-other-for-question-id]").forEach((wrapper) => {
+    if (wrapper.dataset.otherForQuestionId) questionIds.add(wrapper.dataset.otherForQuestionId)
+  })
+
+  questionIds.forEach((questionId) => syncOtherChoiceInputsForQuestion(form, questionId))
+}
+
+function syncOtherChoiceInputsForQuestion(form, questionId) {
+  // Support both editable survey forms (answers[ID]) and read-only displays
+  // (readonly_answers[ID]) by matching on the trailing [ID].
+  const selectedRadio = form.querySelector(`input[type="radio"][name$="[${questionId}]"]:checked`)
+  const select = form.querySelector(`select[name$="[${questionId}]"]`)
+  const currentValue = (selectedRadio ? selectedRadio.value : (select ? select.value : "")).trim()
+
+  const matchingWrappers = form.querySelectorAll(`[data-other-input-wrapper][data-other-for-question-id="${questionId}"]`)
+  if (!matchingWrappers.length) return
+
+  matchingWrappers.forEach((wrapper) => {
+    const otherChoiceValue = (wrapper.dataset.otherChoiceValue || "Other").trim()
+    const isOther = currentValue && currentValue === otherChoiceValue
+
+    wrapper.classList.toggle("hidden", !isOther)
+    wrapper.setAttribute("aria-hidden", isOther ? "false" : "true")
+
+    const input = wrapper.querySelector("input")
+    // Only manage disabled state for editable inputs (other_answers[ID]).
+    // Read-only pages intentionally keep inputs disabled.
+    if (input && (input.name || "").startsWith("other_answers[")) {
+      input.disabled = !isOther
+    }
   })
 }
 
 function showSurveySubmitModal({ canSaveProgress = true } = {}) {
   const id = `survey-submit-modal-${++appModalId}`
+  const bodyMessage = canSaveProgress
+    ? "Submit only when your answers are final. You can also save progress and come back later."
+    : "Submit only when your answers are final."
 
   return new Promise((resolve) => {
     const backdrop = document.createElement("div")
@@ -795,7 +844,7 @@ function showSurveySubmitModal({ canSaveProgress = true } = {}) {
           <button type="button" class="c-icon-button c-modal__close" data-survey-submit-choice="edit" aria-label="Close">&times;</button>
         </header>
         <div class="c-modal__body">
-          <p>Submit only when your answers are final. You can also save progress and come back later.</p>
+          <p>${bodyMessage}</p>
         </div>
         <footer class="c-modal__footer">
           <button type="button" class="btn btn-secondary" data-survey-submit-choice="edit">Go back to editing</button>
@@ -857,7 +906,9 @@ function initSurveyReflectionVisibility() {
     }
 
     const setReflectionVisibility = (sourceId) => {
-      const show = sourceValue(sourceId) !== ""
+      const sourceCard = form.querySelector(`[data-question-id="${sourceId}"]`)
+      const sourceHidden = sourceCard && (sourceCard.classList.contains("hidden") || sourceCard.getAttribute("aria-hidden") === "true")
+      const show = sourceValue(sourceId) !== "" && !sourceHidden
       form.querySelectorAll(`[data-reflection-question="true"][data-reflection-source-id="${sourceId}"]`).forEach((card) => {
         card.classList.toggle("hidden", !show)
         card.setAttribute("aria-hidden", show ? "false" : "true")
@@ -890,7 +941,10 @@ function initStudentSurveyFormAutosave() {
 
     const saveUrl = form.dataset.surveyAutosaveUrl
     const autosaveEnabled = form.dataset.surveyAutosaveEnabled === "true" && !!saveUrl
-    const status = form.querySelector("[data-survey-autosave-status]")
+    const statusTargets = Array.from(form.querySelectorAll("[data-survey-autosave-status]"))
+    const prompt = form.querySelector("[data-survey-autosave-prompt]")
+    const promptTitle = prompt?.querySelector("[data-survey-autosave-prompt-title]")
+    const promptMessage = prompt?.querySelector("[data-survey-autosave-prompt-message]")
     let timer = null
     let inFlight = false
     let pending = false
@@ -898,8 +952,24 @@ function initStudentSurveyFormAutosave() {
     let autosaveController = null
     let modalOpen = false
 
-    const setStatus = (message) => {
-      if (status) status.textContent = message
+    const autosaveTime = () => {
+      return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    }
+
+    const setStatus = (message, options = {}) => {
+      const state = options.state || "ready"
+      const title = options.title || message
+      const detail = options.detail || ""
+
+      statusTargets.forEach((target) => {
+        target.textContent = message
+      })
+
+      if (prompt) {
+        prompt.dataset.autosaveState = state
+        if (promptTitle) promptTitle.textContent = title
+        if (promptMessage) promptMessage.textContent = detail
+      }
     }
 
     const clearTimer = () => {
@@ -917,11 +987,18 @@ function initStudentSurveyFormAutosave() {
       }
     }
 
-    const autosaveMessage = async (title, message) => {
+    const autosaveMessage = async (title, message, options = {}) => {
+      setStatus(title, {
+        state: options.state || "saved",
+        title,
+        detail: message
+      })
+
+      if (!options.modal) return
       if (modalOpen) return
       modalOpen = true
       try {
-        await alertWithAppModal({ title, message, confirmLabel: "OK" })
+        await alertWithAppModal(message, { title, confirmLabel: "OK" })
       } finally {
         modalOpen = false
       }
@@ -936,7 +1013,11 @@ function initStudentSurveyFormAutosave() {
 
       inFlight = true
       pending = false
-      setStatus("Autosaving...")
+      setStatus("Autosaving...", {
+        state: "saving",
+        title: "Autosaving",
+        detail: "Saving your latest answers..."
+      })
       autosaveController = new AbortController()
 
       const formData = new FormData(form)
@@ -960,13 +1041,14 @@ function initStudentSurveyFormAutosave() {
           throw new Error(payload.message || "Autosave failed.")
         }
 
-        setStatus("Autosaved")
-        await autosaveMessage("Progress saved", "Your survey progress was auto-saved.")
+        await autosaveMessage("Progress auto-saved", `Saved at ${autosaveTime()}.`, { state: "saved" })
       } catch (error) {
         if (error.name === "AbortError") return
 
-        setStatus("Autosave failed")
-        await autosaveMessage("Autosave failed", error.message || "Your progress could not be auto-saved. Use Save Progress before leaving.")
+        await autosaveMessage("Autosave failed", error.message || "Your progress could not be auto-saved. Use Save Progress before leaving.", {
+          state: "error",
+          modal: true
+        })
       } finally {
         inFlight = false
         autosaveController = null
@@ -980,7 +1062,11 @@ function initStudentSurveyFormAutosave() {
     const queueAutosave = ({ immediate = false } = {}) => {
       if (!autosaveEnabled || submitting) return
       pending = true
-      setStatus("Unsaved changes")
+      setStatus("Unsaved changes", {
+        state: "dirty",
+        title: "Unsaved changes",
+        detail: immediate ? "Autosaving now..." : "Autosave will run shortly."
+      })
       clearTimer()
       timer = window.setTimeout(performAutosave, immediate ? 0 : 12000)
     }
@@ -998,6 +1084,8 @@ function initStudentSurveyFormAutosave() {
     form.querySelectorAll("[data-survey-save-exit]").forEach((button) => {
       button.addEventListener("click", () => submitToSaveProgress())
     })
+
+    if (form.dataset.surveySharedSubmit === "true") return
 
     form.addEventListener("submit", async (event) => {
       if (form.dataset.surveySubmitConfirmed === "true") {
@@ -1027,18 +1115,142 @@ function initStudentSurveyFormAutosave() {
 
 function initPreviewSurveyForms() {
   document.querySelectorAll("form[data-preview-survey-form='true']").forEach((form) => {
+    if (form.dataset.surveySharedSubmit === "true") return
     if (form.dataset.previewSurveyFormInitialized === "true") return
     form.dataset.previewSurveyFormInitialized = "true"
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault()
-      await alertWithAppModal({
+      syncSurveyBranchingForForm(form)
+      window.TamuCatSurveyBehavior?.syncForm?.(form)
+      initOtherChoiceInputs()
+      syncOtherChoiceInputsForForm(form)
+
+      const validation = validatePreviewSurveyForm(form)
+      if (!validation.valid) {
+        await alertWithAppModal("Review the highlighted required or invalid answers before submitting the preview.", {
+          title: "Preview needs attention",
+          confirmLabel: "OK"
+        })
+        validation.firstError?.scrollIntoView({ behavior: "smooth", block: "center" })
+        validation.firstError?.querySelector("input:not([disabled]), select:not([disabled]), textarea:not([disabled])")?.focus({ preventScroll: true })
+        return
+      }
+
+      const choice = await showSurveySubmitModal({ canSaveProgress: false })
+      if (choice !== "submit") return
+
+      await alertWithAppModal("This was only a preview. No responses were saved.", {
         title: "Preview submitted",
-        message: "This was only a preview. No responses were saved.",
         confirmLabel: "OK"
       })
     })
   })
+}
+
+function validatePreviewSurveyForm(form) {
+  const cards = Array.from(form.querySelectorAll("[data-question-id]"))
+  const errorCards = []
+
+  cards.forEach((card) => clearPreviewValidationError(card))
+
+  cards.forEach((card) => {
+    if (isPreviewCardHidden(card)) return
+
+    const required = card.dataset.previewRequired === "true"
+    const missing = required && previewQuestionIsBlank(card)
+    if (missing) {
+      addPreviewValidationError(card, "This question is required.")
+      errorCards.push(card)
+      return
+    }
+
+    const integerError = previewIntegerError(card)
+    if (integerError) {
+      addPreviewValidationError(card, integerError)
+      errorCards.push(card)
+      return
+    }
+
+    const otherError = previewOtherTextError(card)
+    if (otherError) {
+      addPreviewValidationError(card, otherError)
+      errorCards.push(card)
+    }
+  })
+
+  return {
+    valid: errorCards.length === 0,
+    firstError: errorCards[0] || null
+  }
+}
+
+function isPreviewCardHidden(card) {
+  return card.hidden || card.classList.contains("hidden") || card.getAttribute("aria-hidden") === "true"
+}
+
+function previewEditableControls(card) {
+  return Array.from(card.querySelectorAll("input, select, textarea")).filter((control) => {
+    if (control.disabled) return false
+    const type = (control.getAttribute("type") || "").toLowerCase()
+    if (type === "hidden") return false
+    return (control.getAttribute("name") || "").startsWith("answers[")
+  })
+}
+
+function previewQuestionIsBlank(card) {
+  const controls = previewEditableControls(card)
+  if (!controls.length) return false
+
+  const radios = controls.filter((control) => control instanceof HTMLInputElement && control.type === "radio")
+  if (radios.length) return !radios.some((radio) => radio.checked)
+
+  return controls.every((control) => (control.value || "").trim() === "")
+}
+
+function previewIntegerError(card) {
+  const input = previewEditableControls(card).find((control) => control instanceof HTMLInputElement && control.type === "number")
+  if (!input) return null
+
+  const value = (input.value || "").trim()
+  if (value === "") return null
+  if (!/^\d+$/.test(value)) return "Enter a whole number"
+
+  const intValue = Number.parseInt(value, 10)
+  const min = input.getAttribute("min")
+  const max = input.getAttribute("max")
+
+  if (min !== null && min !== "" && intValue < Number.parseInt(min, 10)) return `Enter a number of at least ${min}`
+  if (max !== null && max !== "" && intValue > Number.parseInt(max, 10)) return `Enter a number no higher than ${max}`
+
+  return null
+}
+
+function previewOtherTextError(card) {
+  const visibleOtherWrappers = Array.from(card.querySelectorAll("[data-other-input-wrapper]")).filter((wrapper) => {
+    return !wrapper.classList.contains("hidden") && wrapper.getAttribute("aria-hidden") !== "true"
+  })
+
+  const missingOther = visibleOtherWrappers.some((wrapper) => {
+    const input = wrapper.querySelector("input:not([disabled]), textarea:not([disabled])")
+    return input && (input.value || "").trim() === ""
+  })
+
+  return missingOther ? "Please describe the Other response" : null
+}
+
+function addPreviewValidationError(card, message) {
+  card.classList.add("c-question-card--error")
+  const error = document.createElement("div")
+  error.className = "c-help u-danger"
+  error.dataset.previewValidationError = "true"
+  error.textContent = message
+  card.appendChild(error)
+}
+
+function clearPreviewValidationError(card) {
+  card.classList.remove("c-question-card--error")
+  card.querySelectorAll("[data-preview-validation-error='true']").forEach((error) => error.remove())
 }
 
 // -----------------------------
@@ -1783,9 +1995,11 @@ function initGoogleTranslateBarOffset() {
 // -----------------------------
 
 function initAccessibilityFeatures() {
+  installSurveyBranchingEventFallback()
   installTurboModalConfirm()
   initTurboFalseConfirmFallback()
   initInlineModals()
+  initDismissibleFlashes()
   initHighContrastToggle()
   initTTSToggle()
   initSurveyBranching()
@@ -1804,6 +2018,8 @@ function initAccessibilityFeatures() {
   initGoogleTranslateBarOffset()
 }
 
+installSurveyBranchingEventFallback()
+initDismissibleFlashes()
 document.addEventListener("turbo:load", initAccessibilityFeatures)
 document.addEventListener("DOMContentLoaded", initAccessibilityFeatures)
 

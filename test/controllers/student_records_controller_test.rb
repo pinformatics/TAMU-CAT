@@ -1,4 +1,6 @@
 require "test_helper"
+require "roo"
+require "tempfile"
 
 class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   setup do
@@ -28,6 +30,35 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
     assert_includes response.headers["Content-Disposition"], "survey-records"
     assert_includes response.headers["Content-Disposition"], ".xlsx"
+
+    open_xlsx_response do |workbook|
+      assert_includes workbook.sheets, surveys(:fall_2025).title.first(31)
+      workbook.default_sheet = surveys(:fall_2025).title.first(31)
+      assert_equal "Student", workbook.cell(4, 1)
+      assert_equal users(:student).name, workbook.cell(5, 1)
+    end
+  end
+
+  test "advisor export with no advisees returns readable xlsx" do
+    advisor_user = User.create!(
+      email: "advisor-empty@example.com",
+      name: "Empty Advisor",
+      role: "advisor",
+      uid: "advisor-empty-uid"
+    )
+    sign_in advisor_user
+
+    get export_student_records_excel_path
+
+    assert_response :success
+    assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
+
+    open_xlsx_response do |workbook|
+      assert_equal [ "Survey Records" ], workbook.sheets
+      workbook.default_sheet = "Survey Records"
+      assert_equal "Survey Records Export", workbook.cell(1, 1)
+      assert_equal "No survey records matched the current filters.", workbook.cell(3, 2)
+    end
   end
 
   test "advisor only sees their assigned students" do
@@ -197,7 +228,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     get student_records_path
 
     assert_redirected_to dashboard_path
-    assert_match "Advisor or admin access required", flash[:alert]
+    assert_match "Advisor or admin access is required", flash[:alert]
   end
 
   test "student record status remains assigned until submission completed" do
@@ -256,5 +287,13 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
       end
     end
     nil
+  end
+
+  def open_xlsx_response
+    Tempfile.create([ "student-records", ".xlsx" ], binmode: true) do |file|
+      file.write(response.body)
+      file.flush
+      yield Roo::Excelx.new(file.path)
+    end
   end
 end

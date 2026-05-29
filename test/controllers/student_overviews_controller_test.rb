@@ -1,4 +1,6 @@
 require "test_helper"
+require "roo"
+require "tempfile"
 
 class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
   setup do
@@ -30,6 +32,32 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, @student.user.display_name
     assert_includes response.body, @other_student.user.display_name
     assert_includes response.body, student_overview_path(@student)
+    assert_includes response.body, export_excel_student_overviews_path
+  end
+
+  test "admin can export filtered student overview workbook" do
+    create_met_competency_for(@student)
+    sign_in @admin
+
+    get export_excel_student_overviews_path(q: @student.user.name)
+
+    assert_response :success
+    assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
+    assert_includes response.headers["Content-Disposition"], "student-overviews"
+    assert_includes response.headers["Content-Disposition"], ".xlsx"
+
+    open_xlsx_response do |workbook|
+      assert_equal [ "Students", "Domain Heatmap", "Filters" ], workbook.sheets
+
+      students_sheet = workbook.sheet("Students")
+      assert_equal "Student", students_sheet.cell(4, 1)
+      assert_includes students_sheet.column(1), @student.user.display_name
+      assert_not_includes students_sheet.column(1), @other_student.user.display_name
+
+      heatmap_sheet = workbook.sheet("Domain Heatmap")
+      assert_equal "Student", heatmap_sheet.cell(4, 1)
+      assert_includes heatmap_sheet.row(4), Reports::DataAggregator::REPORT_DOMAINS.first
+    end
   end
 
   test "advisor only sees assigned advisees" do
@@ -40,6 +68,20 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, @student.user.display_name
     assert_not_includes response.body, @other_student.user.display_name
+  end
+
+  test "advisor export only includes assigned advisees" do
+    sign_in @advisor
+
+    get export_excel_student_overviews_path
+
+    assert_response :success
+
+    open_xlsx_response do |workbook|
+      students_sheet = workbook.sheet("Students")
+      assert_includes students_sheet.column(1), @student.user.display_name
+      assert_not_includes students_sheet.column(1), @other_student.user.display_name
+    end
   end
 
   test "student overview hides archived students by default and can include them explicitly" do
@@ -121,7 +163,7 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     get student_overviews_path
 
     assert_redirected_to dashboard_path
-    assert_match "Advisor or admin access required", flash[:alert]
+    assert_match "Advisor or admin access is required", flash[:alert]
   end
 
   private
@@ -182,5 +224,13 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
       source_key: "student-overview-history-#{student.student_id}",
       import_fingerprint: "student-overview-history-#{student.student_id}"
     )
+  end
+
+  def open_xlsx_response
+    Tempfile.create([ "student-overviews", ".xlsx" ], binmode: true) do |file|
+      file.write(response.body)
+      file.flush
+      yield Roo::Excelx.new(file.path)
+    end
   end
 end

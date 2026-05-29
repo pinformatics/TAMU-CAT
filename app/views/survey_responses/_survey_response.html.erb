@@ -113,21 +113,23 @@
           </header>
 
           <% if category.questions.any? %>
-            <div class="u-stack u-stack--lg">
+            <div class="c-question-list">
               <% number_key = section&.id || category.id %>
                 <% ordered_questions = category.questions.ordered.to_a %>
                 <% questions_by_id = ordered_questions.index_by(&:id) %>
-                <% branch_parent_ids = ordered_questions.select(&:sub_question?).map(&:parent_question_id).compact.uniq %>
+                <% branch_parent_ids = SurveyQuestionRules.branch_parent_ids(ordered_questions) %>
+                <% branch_parent_target_by_id = SurveyQuestionRules.branch_parent_target_by_id(ordered_questions) %>
                 <% ordered_questions.each_with_index do |question, q_index| %>
                   <% is_sub_question = question.sub_question? %>
                   <% next_question = ordered_questions[q_index + 1] %>
 
-                  <% parent = is_sub_question ? questions_by_id[question.parent_question_id] : nil %>
-                  <% parent_raw = parent ? (existing_answers[parent.id] || existing_answers[parent.id.to_s]) : nil %>
-                  <% parent_value = parent_raw.is_a?(Hash) ? (parent_raw["answer"] || parent_raw[:answer] || parent_raw["value"] || parent_raw[:value] || parent_raw["text"] || parent_raw[:text] || parent_raw["link"] || parent_raw[:link]).to_s : parent_raw.to_s %>
-                  <% parent_options = parent ? parent.answer_options_list.map { |opt| opt.to_s.strip.downcase } : [] %>
-                  <% conditional_yes_no_child = parent.present? && parent.question_type == "multiple_choice" && parent_options.include?("yes") && parent_options.include?("no") %>
-                  <% hide_branch_child = is_sub_question && conditional_yes_no_child && !parent_value.casecmp?("Yes") %>
+                  <% branch_child_of = SurveyQuestionRules.branch_child_parent_id(question, branch_parent_target_by_id:) %>
+                  <% conditional_branch_child = branch_child_of.present? %>
+                  <% hide_branch_child = conditional_branch_child && !SurveyQuestionRules.branch_child_visible?(question, answers: existing_answers, branch_parent_target_by_id:) %>
+                  <% reflection_source_question = SurveyQuestionRules.reflection_source_question(question, ordered_questions) %>
+                  <% conditional_reflection_child = reflection_source_question.present? %>
+                  <% hide_reflection_child = conditional_reflection_child && !SurveyQuestionRules.reflection_visible?(question, answers: existing_answers, questions: ordered_questions) %>
+                  <% hide_question_card = hide_branch_child || hide_reflection_child %>
 
                   <% question_number = section_question_numbers[number_key] %>
                   <% question_number = (section_question_numbers[number_key] += 1) unless is_sub_question %>
@@ -150,24 +152,18 @@
                   <% desc_text = question.description.to_s.strip.presence %>
                   <% formatted_desc = desc_text.present? ? render_markdown(desc_text) : nil %>
 
-                <% # Compute if this question is required using the same logic as the controller %>
-                <% required = question.is_required? %>
-                <% if !required && question.choice_question? %>
-                  <% options = question.answer_option_values.map(&:strip).map(&:downcase) %>
-                  <% is_yes_no = (options == %w[yes no] || options == %w[no yes]) %>
-                  <% is_flexibility_scale = question.question_text.to_s.downcase.include?("flexible") && (%w[1 2 3 4 5] - options).empty? %>
-                  <% required = !(is_yes_no || is_flexibility_scale) %>
-                <% end %>
+                <% required = SurveyQuestionRules.required_indicator?(question, branch_parent_ids:) %>
+                <% is_branch_parent = branch_parent_target_by_id.key?(question.id) %>
+                <% branch_target_value = branch_parent_target_by_id[question.id] %>
 
-                <% is_branch_parent = !is_sub_question && question.question_type == "multiple_choice" && branch_parent_ids.include?(question.id) %>
-                <% if is_branch_parent %>
-                  <% option_values = question.answer_options_list.map { |opt| opt.to_s.strip.downcase } %>
-                  <% is_branch_parent = option_values.include?("yes") && option_values.include?("no") %>
-                <% end %>
-                <% branch_target_value = is_branch_parent ? "Yes" : nil %>
-                <% branch_child_of = is_sub_question ? question.parent_question_id : nil %>
-
-                <article class="c-question-card <%= question.sub_question? ? 'c-question-card--nested' : '' %> <%= hide_branch_child ? 'hidden' : '' %>"
+                <article id="question-block-<%= question.id %>"
+                         class="c-question-card <%= question.sub_question? ? 'c-question-card--nested' : '' %> <%= hide_question_card ? 'hidden' : '' %>"
+                         data-question-id="<%= question.id %>"
+                         data-survey-required="<%= required ? "true" : "false" %>"
+                         data-preview-required="<%= required ? "true" : "false" %>"
+                         <% if conditional_branch_child || conditional_reflection_child %>
+                           aria-hidden="<%= hide_question_card ? "true" : "false" %>"
+                         <% end %>
                          <% if is_branch_parent %>
                            data-branch-parent="true"
                            data-branch-parent-id="<%= question.id %>"
@@ -175,6 +171,10 @@
                          <% end %>
                          <% if branch_child_of.present? %>
                            data-branch-child-of="<%= branch_child_of %>"
+                         <% end %>
+                         <% if reflection_source_question.present? %>
+                           data-reflection-question="true"
+                           data-reflection-source-id="<%= reflection_source_question.id %>"
                          <% end %>>
                   <% question_prefix = section&.mha_competency? ? "#" : "Q" %>
 
@@ -472,11 +472,6 @@
                     <% end %>
                   <% end %>
                 <% end %>
-                  <% if branch_child_of.present? && conditional_yes_no_child %>
-                    <div class="u-h-spacer <%= hide_branch_child ? 'hidden' : '' %>" aria-hidden="true" data-branch-child-of="<%= branch_child_of %>"></div>
-                  <% else %>
-                    <div class="u-h-spacer" aria-hidden="true"></div>
-                  <% end %>
               <% end %>
             </div>
           <% else %>
@@ -485,7 +480,6 @@
         </section>
         </div>
         <%# per-question feedback inputs are rendered inline with each question above %>
-        <div class="u-h-spacer-lg" aria-hidden="true"></div>
       <% end %>
     </div>
   <% else %>

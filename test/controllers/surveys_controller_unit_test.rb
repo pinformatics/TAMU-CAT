@@ -98,7 +98,7 @@ class SurveysControllerUnitTest < ActionController::TestCase
     end
 
     assert_redirected_to student_dashboard_path
-    assert flash[:alert].to_s.include?("Student record not found")
+    assert flash[:alert].to_s.include?("student record for your account")
   end
 
   test "submit highlights evidence link when access check fails" do
@@ -203,7 +203,7 @@ class SurveysControllerUnitTest < ActionController::TestCase
     end
 
     assert_redirected_to student_dashboard_path
-    assert_match "Student record not found", flash[:alert]
+    assert_match "student record for your account", flash[:alert]
   end
 
   test "submit redirects to read-only response when already completed and closed" do
@@ -264,7 +264,7 @@ class SurveysControllerUnitTest < ActionController::TestCase
     assert_equal false, computed[flexibility.id]
   end
 
-  test "employment-style sub questions are required only when parent answer is yes" do
+  test "employment-style sub questions require manual flag and visible parent answer" do
     parent = @category.questions.create!(
       question_text: "Are you currently employed?",
       question_order: 12,
@@ -280,6 +280,11 @@ class SurveysControllerUnitTest < ActionController::TestCase
       parent_question: parent,
       sub_question_order: 1
     )
+
+    assert_equal false, @controller.send(:required_for_submission?, child, answers: { parent.id.to_s => "Yes" }, branch_parent_ids: [ parent.id ])
+    assert_equal false, @controller.send(:required_for_submission?, child, answers: { parent.id.to_s => "No" }, branch_parent_ids: [ parent.id ])
+
+    child.update!(is_required: true)
 
     assert_equal true, @controller.send(:required_for_submission?, child, answers: { parent.id.to_s => "Yes" }, branch_parent_ids: [ parent.id ])
     assert_equal false, @controller.send(:required_for_submission?, child, answers: { parent.id.to_s => "No" }, branch_parent_ids: [ parent.id ])

@@ -10,7 +10,7 @@ class ConfidentialAdvisorNotesController < ApplicationController
   def update
     advisor_id = note_owner_advisor_id
     unless advisor_id
-      redirect_back fallback_location: survey_response_path(@survey_response), alert: "Unable to save confidential note."
+      redirect_back fallback_location: survey_response_path(@survey_response), alert: "We could not save the confidential note."
       return
     end
 
@@ -33,7 +33,7 @@ class ConfidentialAdvisorNotesController < ApplicationController
 
     redirect_to return_path, notice: "Confidential note saved."
   rescue ActiveRecord::RecordInvalid
-    redirect_to return_path, alert: "Unable to save confidential note."
+    redirect_to return_path, alert: "We could not save the confidential note."
   end
 
   private

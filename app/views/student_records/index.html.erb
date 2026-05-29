@@ -37,16 +37,14 @@
                     class: button_classes(:secondary),
                     data: {
                       turbo: false,
-                      turbo_confirm: "FERPA reminder: this export includes student-level records. Continue only for a legitimate educational interest."
+                      turbo_confirm: ferpa_export_confirmation("student-level records")
                     } %>
       </div>
     </header>
     </section>
 
     <section class="c-card c-card--spacious u-stack u-stack--xl">
-    <div class="c-toolbar">
-      <div class="c-toolbar__row u-w-full">
-        <div class="c-callout u-w-full">
+    <div class="c-callout u-w-full">
         <%= form_with url: student_records_path, method: :get, local: true, class: "u-w-full u-stack u-stack--md" do %>
           <div class="c-filter-bar">
             <div class="c-filter-bar__field c-filter-bar__field--wide">
@@ -147,9 +145,6 @@
             </div>
           </div>
         <% end %>
-        </div>
-      </div>
-
     </div>
 
     <% if @students.blank? %>
@@ -345,7 +340,7 @@
                                                 method: :delete,
                                                 form_class: "u-inline-form",
                                                 class: button_classes(:danger),
-                                                data: { turbo_confirm: "Delete this student's survey responses? This cannot be undone." } %>
+                                                data: { turbo_confirm: "Delete this student's survey responses? This action cannot be undone." } %>
                                   <% end %>
                                 </div>
                               </td>

@@ -66,23 +66,7 @@
         </div>
       <% end %>
 
-      <% if flash.any? %>
-        <div class="u-w-full px-2 pt-6 sm:px-3 lg:px-4">
-          <div class="mx-auto u-w-full space-y-3">
-            <% flash.each do |key, value| %>
-              <% messages = Array(value).map(&:to_s) %>
-              <section class="<%= flash_classes(key) %>" role="alert">
-                <div class="flex-1">
-                  <p class="text-xs font-semibold uppercase tracking-wide"><%= flash_title(key) %></p>
-                  <div class="mt-1 text-sm leading-relaxed">
-                    <%= safe_join(messages.map { |msg| tag.span(msg.html_safe) }, tag.br) %>
-                  </div>
-                </div>
-              </section>
-            <% end %>
-          </div>
-        </div>
-      <% end %>
+      <%= render "shared/flash_stack" %>
 
       <main class="flex flex-1 flex-col items-center justify-center gap-12 px-2 py-14 sm:px-3 lg:px-4 md:gap-16">
         <%= yield %>

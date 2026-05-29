@@ -34,7 +34,7 @@ class Advisors::StudentsControllerTest < ActionDispatch::IntegrationTest
 
     patch advisors_student_path(@student), params: { student: { track: "" } }
     assert_redirected_to student_records_path
-    assert_match "Unable to change track", flash[:alert]
+    assert_match "We could not change the track", flash[:alert]
   end
 
   test "update handles missing student" do
@@ -50,6 +50,6 @@ class Advisors::StudentsControllerTest < ActionDispatch::IntegrationTest
 
     get advisors_student_path(@student)
     assert_redirected_to dashboard_path
-    assert_equal "Advisor access required.", flash[:alert]
+    assert_equal "Advisor access is required to open this page.", flash[:alert]
   end
 end

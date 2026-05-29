@@ -345,7 +345,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_redirected_to dashboard_path
-    assert_equal "Reports are only available to administrators and advisors.", flash[:alert]
+    assert_equal "Reports are available only to administrators and advisors.", flash[:alert]
   end
 
   # Access Control Tests - export_pdf action
@@ -377,7 +377,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get export_reports_pdf_path(section: "all")
 
     assert_redirected_to dashboard_path
-    assert_equal "Reports are only available to administrators and advisors.", flash[:alert]
+    assert_equal "Reports are available only to administrators and advisors.", flash[:alert]
   end
 
   # Access Control Tests - export_excel action
@@ -411,7 +411,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get export_reports_excel_path
 
     assert_redirected_to dashboard_path
-    assert_equal "Reports are only available to administrators and advisors.", flash[:alert]
+    assert_equal "Reports are available only to administrators and advisors.", flash[:alert]
   end
 
   # PDF Export Tests

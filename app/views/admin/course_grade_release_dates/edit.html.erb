@@ -41,7 +41,7 @@
             <div class="c-form-actions u-actions u-actions--start">
               <%= f.submit @release_date.persisted? ? "Update" : "Create", class: button_classes(:primary) %>
               <% if @release_date.persisted? %>
-                <%= link_to "Delete", admin_course_grade_release_date_path(@release_date), method: :delete, class: button_classes(:danger), data: { turbo_confirm: "Are you sure?" } %>
+                <%= link_to "Delete", admin_course_grade_release_date_path(@release_date), method: :delete, class: button_classes(:danger), data: { turbo_confirm: "Delete this course release date? Students may see affected course competency results immediately if no other release date applies." } %>
               <% end %>
             </div>
           <% end %>
@@ -64,7 +64,7 @@
 
           <div class="c-callout c-callout--info">
             <p>
-              <strong>Note:</strong> This release date applies to all surveys in this semester. Students cannot see course-derived competency results until the date passes.
+              <strong>Note:</strong> This release date applies to all surveys in this semester. Students will not see course-derived competency results until the date passes.
             </p>
           </div>
         </aside>

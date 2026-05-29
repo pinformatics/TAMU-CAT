@@ -15,7 +15,7 @@ export default class extends Controller {
       return
     }
 
-    const message = this.messageValue || "Are you sure you want to continue?"
+    const message = this.messageValue || "Review this action before continuing."
     event.preventDefault()
     event.stopImmediatePropagation()
 

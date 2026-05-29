@@ -106,7 +106,7 @@ class ConfidentialAdvisorNotesControllerTest < ActionDispatch::IntegrationTest
           params: { confidential_advisor_note: { body: "note" } }
 
     assert_redirected_to survey_response_path(survey_response)
-    assert_match(/unable to save confidential note/i, flash[:alert].to_s)
+    assert_match(/could not save the confidential note/i, flash[:alert].to_s)
   ensure
     orphan_user&.destroy
   end

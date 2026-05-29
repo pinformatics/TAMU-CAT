@@ -80,7 +80,7 @@
                               </div>
                             <% end %>
                             <div class="u-section-divider u-pt-sm">
-                              <%= button_to "Delete", admin_program_track_path(track), method: :delete, data: { turbo_confirm: "Delete #{track.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                              <%= button_to "Delete", admin_program_track_path(track), method: :delete, data: { turbo_confirm: "Delete #{track.name}? This removes the track from future setup lists." }, class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
                           </div>
                         </section>
@@ -144,7 +144,7 @@
                               <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
                             <% end %>
                             <div class="u-section-divider u-pt-sm">
-                              <%= button_to "Delete", admin_major_path(major), method: :delete, data: { turbo_confirm: "Delete #{major.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                              <%= button_to "Delete", admin_major_path(major), method: :delete, data: { turbo_confirm: "Delete #{major.name}? This removes the major from future setup lists." }, class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
                           </div>
                         </section>
@@ -210,7 +210,7 @@
                             <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
                           <% end %>
                           <div class="u-section-divider u-pt-sm">
-                            <%= button_to "Delete", admin_program_year_path(year), method: :delete, data: { turbo_confirm: "Delete Class of #{year.value}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                            <%= button_to "Delete", admin_program_year_path(year), method: :delete, data: { turbo_confirm: "Delete Class of #{year.value}? This removes the cohort from future setup lists." }, class: button_classes(:danger, extra_classes: "btn-sm") %>
                           </div>
                         </div>
                       </section>
@@ -283,7 +283,7 @@
                               <div class="u-actions u-actions--start"><%= form.submit "Save changes", class: button_classes(:primary, extra_classes: "btn-sm") %></div>
                             <% end %>
                             <div class="u-section-divider u-pt-sm">
-                              <%= button_to "Delete", admin_program_semester_path(semester), method: :delete, data: { turbo_confirm: "Delete #{semester.name}?" }, class: button_classes(:danger, extra_classes: "btn-sm") %>
+                              <%= button_to "Delete", admin_program_semester_path(semester), method: :delete, data: { turbo_confirm: "Delete #{semester.name}? This removes the semester from future setup lists." }, class: button_classes(:danger, extra_classes: "btn-sm") %>
                             </div>
                             </div>
                           </section>

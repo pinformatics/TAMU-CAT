@@ -13,7 +13,7 @@
     <% if @post_save_warning.present? %>
       <div class="c-callout c-callout--warning" role="alert">
         <p>
-          <strong>Warning:</strong>
+          <strong>Review before continuing:</strong>
           <%= @post_save_warning %>
         </p>
       </div>
@@ -58,7 +58,7 @@
 
     <% if @selected_semester_id.present? && @selected_track.present? %>
       <% confirm_message = if @submitted_students_count.to_i.positive?
-        "Warning: #{@submitted_students_count} student(s) have already submitted surveys for this cohort. Saving target levels may change how reports are interpreted. Continue?"
+        "#{@submitted_students_count} student(s) have already submitted surveys for this cohort. Saving target levels may change how reports and exports are interpreted. Continue?"
       else
         "Save target levels?"
       end %>

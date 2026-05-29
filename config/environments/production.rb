@@ -69,8 +69,9 @@ Rails.application.configure do
     protocol: ENV.fetch("APP_PROTOCOL", "https")
   }
 
-  # TAMU/SMTP email delivery. Configure these environment variables in production:
-  # SMTP_ADDRESS, SMTP_PORT, SMTP_DOMAIN, SMTP_USER_NAME, SMTP_PASSWORD, MAILER_FROM.
+  # TAMU/SMTP email delivery. Emails are only sent when EMAIL_NOTIFICATIONS_ENABLED=true.
+  # Configure these environment variables in production when enabling email:
+  # EMAIL_NOTIFICATIONS_ENABLED, SMTP_ADDRESS, SMTP_PORT, SMTP_DOMAIN, SMTP_USER_NAME, SMTP_PASSWORD, MAILER_FROM.
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.raise_delivery_errors = true
   config.action_mailer.smtp_settings = {
