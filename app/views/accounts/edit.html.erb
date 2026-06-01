@@ -1,35 +1,34 @@
-<% content_for :title, "Account Information" %>
+<% content_for :title, "Edit Account Information" %>
 
-<% role_label = if @user.respond_to?(:role_admin?) && @user.role_admin?
-                  "Administrator"
-                elsif @user.respond_to?(:role_advisor?) && @user.role_advisor?
-                  "Advisor"
-                elsif @user.respond_to?(:role_student?) && @user.role_student?
-                  "Student"
-                else
-                  "User"
-                end %>
-
-<% full_name = @user.name.presence || @user.email || "User" %>
+<% full_name = @student.full_name.presence || @student.user&.name || @user.name || "Student" %>
 <% email = @user.email.presence || "Not provided" %>
-<% member_since = @user.created_at ? @user.created_at.strftime("%b %-d, %Y") : "Recently" %>
-<% updated_text = @user.updated_at ? "#{time_ago_in_words(@user.updated_at)} ago" : "Just now" %>
-<% initials = full_name.to_s.split.first(2).map { |part| part.first&.upcase }.join.presence || "U" %>
+<% uin = @student.uin.presence || "Not provided" %>
+<% track = @student.track.present? ? @student.track.to_s.titleize : "Not assigned" %>
+<% program_year = @student.program_year.presence || "Not set" %>
+<% major = @student.major.presence || "Program TBD" %>
+<% advisor_name = @student.advisor&.display_name || @student.advisor&.name || "Advisor pending" %>
+<% updated_text = @student.updated_at ? "#{time_ago_in_words(@student.updated_at)} ago" : "Just now" %>
+<% initials = full_name.to_s.split.first(2).map { |part| part.first&.upcase }.join.presence || "ST" %>
 <% avatar_url = @user.respond_to?(:avatar_url) ? @user.avatar_url.presence : nil %>
+<% profile_complete = @student.profile_complete? %>
+<% major_names = (@majors.to_a.map(&:name) + [@student.major]).compact.map(&:to_s).map(&:strip).reject(&:blank?).uniq.sort %>
 
 <main class="c-main c-page">
   <section class="c-card c-card--brand c-card--spacious u-stack u-stack--lg">
     <header class="c-page-header">
       <div class="u-stack u-stack--md">
         <div>
-          <p class="c-eyebrow">Account settings</p>
+          <p class="c-eyebrow">Edit account information</p>
           <h1 class="c-page-title c-page-title--brand"><%= full_name %></h1>
-          <p class="c-page-subtitle">Review the identity details connected to your sign-in account.</p>
+          <p class="c-page-subtitle">Update the student program details used for assignments, advising, and reporting.</p>
         </div>
 
         <div class="u-actions u-actions--start u-gap-xs">
-          <span class="c-status-pill c-status-pill--success">Account active</span>
-          <span class="c-pill c-pill--muted"><%= role_label %></span>
+          <span class="c-status-pill <%= profile_complete ? 'c-status-pill--success' : 'c-status-pill--warning' %>">
+            <%= profile_complete ? "Profile complete" : "Profile needs updates" %>
+          </span>
+          <span class="c-pill c-pill--muted"><%= track %></span>
+          <span class="c-pill c-pill--muted"><%= program_year %></span>
           <span class="c-pill c-pill--muted">Updated <%= updated_text %></span>
         </div>
       </div>
@@ -48,82 +47,137 @@
 
     <div class="u-grid u-grid--stats">
       <article class="c-kv c-kv--compact">
-        <p class="c-eyebrow">Primary email</p>
-        <p class="c-value c-value--lg"><%= email %></p>
+        <p class="c-eyebrow">Major / Program</p>
+        <p class="c-value c-value--lg"><%= major %></p>
       </article>
       <article class="c-kv c-kv--compact">
-        <p class="c-eyebrow">Role</p>
-        <p class="c-value c-value--lg"><%= role_label %></p>
+        <p class="c-eyebrow">Program year</p>
+        <p class="c-value c-value--lg"><%= program_year %></p>
       </article>
       <article class="c-kv c-kv--compact">
-        <p class="c-eyebrow">Member since</p>
-        <p class="c-value c-value--lg"><%= member_since %></p>
+        <p class="c-eyebrow">Advisor</p>
+        <p class="c-value c-value--lg"><%= advisor_name %></p>
       </article>
       <article class="c-kv c-kv--compact">
-        <p class="c-eyebrow">Last updated</p>
-        <p class="c-value c-value--lg"><%= updated_text %></p>
+        <p class="c-eyebrow">UIN</p>
+        <p class="c-value c-value--lg"><%= uin %></p>
       </article>
     </div>
   </section>
 
-  <section class="c-student-overview-layout">
-    <aside class="c-student-overview-sidebar c-card c-card--tight u-stack u-stack--lg">
-      <header class="u-stack u-stack--sm">
-        <p class="c-eyebrow">Account</p>
-        <h2 class="c-section-title">Identity</h2>
-      </header>
+  <%= form_with model: @student, url: account_path, method: :patch, local: true do |form| %>
+    <section class="c-student-overview-layout">
+      <aside class="c-student-overview-sidebar c-card c-card--tight u-stack u-stack--lg">
+        <header class="u-stack u-stack--sm">
+          <p class="c-eyebrow">Account</p>
+          <h2 class="c-section-title">Identity</h2>
+          <p class="c-help">These details are read-only and come from your authenticated sign-in account.</p>
+        </header>
 
-      <dl class="c-key-value-list">
-        <div>
-          <dt>Full name</dt>
-          <dd><%= full_name %></dd>
-        </div>
-        <div>
-          <dt>Email</dt>
-          <dd><%= email %></dd>
-        </div>
-        <div>
-          <dt>Role</dt>
-          <dd><%= role_label %></dd>
-        </div>
-        <div>
-          <dt>Member since</dt>
-          <dd><%= member_since %></dd>
-        </div>
-      </dl>
-    </aside>
+        <dl class="c-key-value-list">
+          <div>
+            <dt>Full name</dt>
+            <dd><%= full_name %></dd>
+          </div>
+          <div>
+            <dt>Email</dt>
+            <dd><%= email %></dd>
+          </div>
+          <div>
+            <dt>UIN</dt>
+            <dd><%= uin %></dd>
+          </div>
+        </dl>
+      </aside>
 
-    <section class="c-student-overview-main c-card c-card--tight u-stack u-stack--lg">
-      <header class="u-stack u-stack--sm">
-        <p class="c-eyebrow">Profile</p>
-        <h2 class="c-section-title">Account Information</h2>
-        <p class="c-help">Account information is read-only here and comes from your authenticated sign-in account.</p>
-      </header>
+      <section class="c-student-overview-main c-card c-card--tight u-stack u-stack--lg">
+        <header class="u-stack u-stack--sm">
+          <p class="c-eyebrow">Student profile</p>
+          <h2 class="c-section-title">Program Details</h2>
+          <p class="c-help">Change these fields when your program, advisor, or cohort information needs correction.</p>
+        </header>
 
-      <dl class="c-key-value-list">
-        <div>
-          <dt>Display name</dt>
-          <dd><%= full_name %></dd>
-        </div>
-        <div>
-          <dt>Email</dt>
-          <dd><%= email %></dd>
-        </div>
-        <div>
-          <dt>Role</dt>
-          <dd><%= role_label %></dd>
-        </div>
-        <div>
-          <dt>Last updated</dt>
-          <dd><%= updated_text %></dd>
-        </div>
-      </dl>
-
-      <div class="u-actions u-actions--start u-section-divider">
-        <%= link_to dashboard_path, class: button_classes(:secondary) do %>
-          Back to dashboard
+        <% if @student.errors.any? %>
+          <div class="c-card c-card--tight c-card--danger u-shadow-none">
+            <h3 class="c-h3">
+              <%= pluralize(@student.errors.count, "error") %> need your attention before saving
+            </h3>
+            <ul class="c-rich-text">
+              <% @student.errors.full_messages.each do |message| %>
+                <li><%= message %></li>
+              <% end %>
+            </ul>
+          </div>
         <% end %>
-      </div>
+
+        <div class="u-grid u-grid--form">
+          <div class="c-kv c-kv--compact">
+            <div class="c-field">
+              <%= form.label :uin, "UIN", class: "c-label" %>
+              <%= form.text_field :uin,
+                                  placeholder: "Enter your 9-digit UIN",
+                                  required: true,
+                                  inputmode: "numeric",
+                                  autocomplete: "off",
+                                  maxlength: 9,
+                                  pattern: "\\d{9}",
+                                  class: "c-input" %>
+              <small class="c-help">Your 9-digit University ID.</small>
+            </div>
+          </div>
+
+          <div class="c-kv c-kv--compact">
+            <div class="c-field">
+              <%= form.label :program_year, "Program year", class: "c-label" %>
+              <% program_year_options = ProgramYear.values.map { |year| [ year.to_s, year ] } %>
+              <%= form.select :program_year,
+                              options_for_select(program_year_options, @student.program_year.to_i.presence),
+                              { prompt: "Select your graduation year" },
+                              { required: true, class: "c-select u-w-full" } %>
+              <small class="c-help">Used for cohort assignment and reporting.</small>
+            </div>
+          </div>
+
+          <div class="c-kv c-kv--compact">
+            <div class="c-field">
+              <%= form.label :major, "Major / Program", class: "c-label" %>
+              <%= form.select :major,
+                              options_for_select(major_names, @student.major.to_s),
+                              { prompt: "Select your major" },
+                              { required: true, class: "c-select u-w-full" } %>
+            </div>
+          </div>
+
+          <div class="c-kv c-kv--compact">
+            <div class="c-field">
+              <%= form.label :track, "Program track", class: "c-label" %>
+              <% track_options = Student.tracks.map { |key, label| [ label, key ] } %>
+              <%= form.select :track,
+                              options_for_select(track_options, @student.track_key.to_s),
+                              { prompt: "Select your track" },
+                              { required: true, class: "c-select u-w-full" } %>
+            </div>
+          </div>
+
+          <div class="c-kv c-kv--compact u-col-span-all">
+            <div class="c-field">
+              <%= form.label :advisor_id, "Advisor", class: "c-label" %>
+              <%= form.select :advisor_id,
+                              options_from_collection_for_select(@advisors, :advisor_id, :display_name, @student.advisor_id),
+                              { prompt: "Select your advisor (optional)" },
+                              { class: "c-select u-w-full" } %>
+            </div>
+          </div>
+        </div>
+
+        <div class="u-actions u-actions--split u-section-divider">
+          <%= link_to account_path, class: button_classes(:secondary) do %>
+            Cancel
+          <% end %>
+
+          <%= form.submit "Save program details", class: button_classes(:primary) %>
+        </div>
+      </section>
     </section>
-  </section>
+  <% end %>
 </main>

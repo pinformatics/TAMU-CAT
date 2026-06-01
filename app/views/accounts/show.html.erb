@@ -1,0 +1,212 @@
+<% content_for :title, "Account Information" %>
+
+<% role_label = if @user.respond_to?(:role_admin?) && @user.role_admin?
+                  "Administrator"
+                elsif @user.respond_to?(:role_advisor?) && @user.role_advisor?
+                  "Advisor"
+                elsif @user.respond_to?(:role_student?) && @user.role_student?
+                  "Student"
+                else
+                  "User"
+                end %>
+
+<% student_account = @student.present? %>
+<% full_name = student_account ? (@student.full_name.presence || @student.user&.name || @user.name) : (@user.name.presence || @user.email || "User") %>
+<% email = @user.email.presence || "Not provided" %>
+<% member_since = @user.created_at ? @user.created_at.strftime("%b %-d, %Y") : "Recently" %>
+<% updated_source = student_account ? @student : @user %>
+<% updated_text = updated_source.updated_at ? "#{time_ago_in_words(updated_source.updated_at)} ago" : "Just now" %>
+<% initials = full_name.to_s.split.first(2).map { |part| part.first&.upcase }.join.presence || "U" %>
+<% avatar_url = @user.respond_to?(:avatar_url) ? @user.avatar_url.presence : nil %>
+
+<% if student_account %>
+  <% uin = @student.uin.presence || "Not provided" %>
+  <% track = @student.track.present? ? @student.track.to_s.titleize : "Not assigned" %>
+  <% program_year = @student.program_year.presence || "Not set" %>
+  <% major = @student.major.presence || "Program TBD" %>
+  <% advisor_name = @student.advisor&.display_name || @student.advisor&.name || "Advisor pending" %>
+  <% profile_complete = @student.profile_complete? %>
+<% end %>
+
+<main class="c-main c-page">
+  <section class="c-card c-card--brand c-card--spacious u-stack u-stack--lg">
+    <header class="c-page-header">
+      <div class="u-stack u-stack--md">
+        <div>
+          <p class="c-eyebrow">Account information</p>
+          <h1 class="c-page-title c-page-title--brand"><%= full_name %></h1>
+          <p class="c-page-subtitle">
+            <% if student_account %>
+              Review your sign-in identity and student program details.
+            <% else %>
+              Review the identity details connected to your sign-in account.
+            <% end %>
+          </p>
+        </div>
+
+        <div class="u-actions u-actions--start u-gap-xs">
+          <% if student_account %>
+            <span class="c-status-pill <%= profile_complete ? 'c-status-pill--success' : 'c-status-pill--warning' %>">
+              <%= profile_complete ? "Profile complete" : "Profile needs updates" %>
+            </span>
+            <span class="c-pill c-pill--muted"><%= track %></span>
+            <span class="c-pill c-pill--muted"><%= program_year %></span>
+          <% else %>
+            <span class="c-status-pill c-status-pill--success">Account active</span>
+            <span class="c-pill c-pill--muted"><%= role_label %></span>
+          <% end %>
+          <span class="c-pill c-pill--muted">Updated <%= updated_text %></span>
+        </div>
+      </div>
+
+      <div class="u-responsive-row u-items-center">
+        <div class="c-avatar-tile u-size-2xl text-xl" <%= "role=\"img\" aria-label=\"#{avatar_aria_label(@user)}\"" unless avatar_url %>>
+          <% if avatar_url %>
+            <img src="<%= avatar_url %>" alt="<%= avatar_aria_label(@user) %>" loading="lazy">
+          <% else %>
+            <span aria-hidden="true"><%= initials %></span>
+            <span class="sr-only"><%= avatar_aria_label(@user) %></span>
+          <% end %>
+        </div>
+      </div>
+    </header>
+
+    <div class="u-grid u-grid--stats">
+      <% if student_account %>
+        <article class="c-kv c-kv--compact">
+          <p class="c-eyebrow">Major / Program</p>
+          <p class="c-value c-value--lg"><%= major %></p>
+        </article>
+        <article class="c-kv c-kv--compact">
+          <p class="c-eyebrow">Program year</p>
+          <p class="c-value c-value--lg"><%= program_year %></p>
+        </article>
+        <article class="c-kv c-kv--compact">
+          <p class="c-eyebrow">Advisor</p>
+          <p class="c-value c-value--lg"><%= advisor_name %></p>
+        </article>
+        <article class="c-kv c-kv--compact">
+          <p class="c-eyebrow">UIN</p>
+          <p class="c-value c-value--lg"><%= uin %></p>
+        </article>
+      <% else %>
+        <article class="c-kv c-kv--compact">
+          <p class="c-eyebrow">Primary email</p>
+          <p class="c-value c-value--lg"><%= email %></p>
+        </article>
+        <article class="c-kv c-kv--compact">
+          <p class="c-eyebrow">Role</p>
+          <p class="c-value c-value--lg"><%= role_label %></p>
+        </article>
+        <article class="c-kv c-kv--compact">
+          <p class="c-eyebrow">Member since</p>
+          <p class="c-value c-value--lg"><%= member_since %></p>
+        </article>
+        <article class="c-kv c-kv--compact">
+          <p class="c-eyebrow">Last updated</p>
+          <p class="c-value c-value--lg"><%= updated_text %></p>
+        </article>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="c-student-overview-layout">
+    <aside class="c-student-overview-sidebar c-card c-card--tight u-stack u-stack--lg">
+      <header class="u-stack u-stack--sm">
+        <p class="c-eyebrow">Account</p>
+        <h2 class="c-section-title">Identity</h2>
+        <p class="c-help">These details come from your authenticated sign-in account.</p>
+      </header>
+
+      <dl class="c-key-value-list">
+        <div>
+          <dt>Full name</dt>
+          <dd><%= full_name %></dd>
+        </div>
+        <div>
+          <dt>Email</dt>
+          <dd><%= email %></dd>
+        </div>
+        <div>
+          <dt>Role</dt>
+          <dd><%= role_label %></dd>
+        </div>
+        <% if student_account %>
+          <div>
+            <dt>UIN</dt>
+            <dd><%= uin %></dd>
+          </div>
+        <% else %>
+          <div>
+            <dt>Member since</dt>
+            <dd><%= member_since %></dd>
+          </div>
+        <% end %>
+      </dl>
+    </aside>
+
+    <section class="c-student-overview-main c-card c-card--tight u-stack u-stack--lg">
+      <header class="u-stack u-stack--sm">
+        <p class="c-eyebrow"><%= student_account ? "Student profile" : "Profile" %></p>
+        <h2 class="c-section-title"><%= student_account ? "Program Details" : "Account Information" %></h2>
+        <p class="c-help">
+          <% if student_account %>
+            Program details are used for survey assignment, advising, and reporting.
+          <% else %>
+            Account identity details are read-only here and come from your authenticated sign-in account.
+          <% end %>
+        </p>
+      </header>
+
+      <dl class="c-key-value-list">
+        <% if student_account %>
+          <div>
+            <dt>Major / Program</dt>
+            <dd><%= major %></dd>
+          </div>
+          <div>
+            <dt>Program year</dt>
+            <dd><%= program_year %></dd>
+          </div>
+          <div>
+            <dt>Program track</dt>
+            <dd><%= track %></dd>
+          </div>
+          <div>
+            <dt>Advisor</dt>
+            <dd><%= advisor_name %></dd>
+          </div>
+        <% else %>
+          <div>
+            <dt>Display name</dt>
+            <dd><%= full_name %></dd>
+          </div>
+          <div>
+            <dt>Email</dt>
+            <dd><%= email %></dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd><%= role_label %></dd>
+          </div>
+          <div>
+            <dt>Last updated</dt>
+            <dd><%= updated_text %></dd>
+          </div>
+        <% end %>
+      </dl>
+
+      <div class="u-actions u-actions--split u-section-divider">
+        <%= link_to dashboard_path, class: button_classes(:secondary) do %>
+          Back to dashboard
+        <% end %>
+
+        <% if student_account %>
+          <%= link_to edit_account_path, class: button_classes(:primary) do %>
+            Edit
+          <% end %>
+        <% end %>
+      </div>
+    </section>
+  </section>
+</main>

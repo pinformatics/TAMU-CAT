@@ -17,7 +17,7 @@ class ProfileCompletionGuardTest < ActionDispatch::IntegrationTest
       sign_in student_user
       get surveys_path
 
-      assert_redirected_to edit_student_profile_path
+      assert_redirected_to edit_account_path
       assert_match "Please complete your profile", flash[:alert]
     ensure
       env.define_singleton_method(:test?, &original_method)

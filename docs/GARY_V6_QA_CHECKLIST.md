@@ -112,18 +112,15 @@ Notification message examples to verify:
 
 Pages:
 
-- `/student_profile`
-- `/student_profile/edit`
 - `/settings`
 - `/account`
 - `/account/edit`
 
 Check that:
 
-- [ ] Student Profile looks polished and consistent with the rest of the app.
-- [ ] Student Profile has only one edit button.
-- [ ] The top duplicate edit button is removed.
-- [ ] Student Profile Edit uses the same visual layout style as Student Profile.
+- [ ] Account shows student profile information for student users.
+- [ ] Account is read-only until the student clicks Edit.
+- [ ] Account Edit uses the same visual layout style as Account.
 - [ ] Settings uses the Student Profile layout style.
 - [ ] Settings does not show the old account identity block.
 - [ ] Settings includes notification settings.

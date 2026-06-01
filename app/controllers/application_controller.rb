@@ -77,10 +77,10 @@ class ApplicationController < ActionController::Base
     return unless current_user.role_student?
     return if current_student.nil?
     return if current_student.profile_complete?
-    return if controller_name == "student_profiles" # Allow access to profile pages
+    return if controller_name == "accounts" # Account includes student profile fields
     return if controller_name == "sessions" # Allow logout
 
-    redirect_to edit_student_profile_path, alert: "Please complete your profile to continue."
+    redirect_to edit_account_path, alert: "Please complete your profile to continue."
   end
 
   # Preloads the notification count and recent records for the header dropdown.

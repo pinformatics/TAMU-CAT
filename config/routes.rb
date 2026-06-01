@@ -138,12 +138,8 @@ Rails.application.routes.draw do
   resources :students, only: %i[index update]
   patch "students/:id/update_advisor", to: "dashboards#update_student_advisor", as: :update_student_advisor
 
-  # Student profile management
-  resource :student_profile, only: %i[show edit update]
-
   # Account settings (all roles share this page)
-  resource :account, only: %i[show update]
-  get "account/edit", to: redirect("/account"), as: :edit_account
+  resource :account, only: %i[show edit update]
 
   resources :surveys do
     post :submit, on: :member

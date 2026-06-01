@@ -33,7 +33,7 @@ class ImpersonationTest < ActionDispatch::IntegrationTest
     assert_redirected_to student_dashboard_path
 
     # Attempt a write that would normally be allowed for a student.
-    patch student_profile_path, params: {
+    patch account_path, params: {
       student: {
         uin: "123456789",
         major: "Test Major",
