@@ -74,7 +74,8 @@ class SurveyResponseMethodsTest < ActiveSupport::TestCase
     parent_question = category.questions.create!(
       question_text: "Parent question",
       question_order: 100,
-      question_type: "short_answer",
+      question_type: "multiple_choice",
+      answer_options: %w[Yes No].to_json,
       is_required: true
     )
     sub_question = category.questions.create!(
