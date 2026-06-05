@@ -153,12 +153,6 @@
                   Click a year tag to change.
                 </div>
               </th>
-              <th class="table-header-track" style="min-width: 14rem;">
-                Assignment Group
-                <div class="c-table__meta">
-                  Click a group tag to change.
-                </div>
-              </th>
               <th class="table-header-current-role" style="min-width: 16rem;">
                 Advisor
                 <div class="c-table__meta">
@@ -180,10 +174,6 @@
               <% program_year_label = program_year_value.presence || "Unassigned" %>
               <% status_key = student.status.to_s.presence || "active" %>
               <% status_label = student.lifecycle_label %>
-              <% assignment_group_value = student.respond_to?(:assignment_group) ? student.assignment_group.to_s.strip : "" %>
-              <% assignment_group_value = assignment_group_value.presence || "" %>
-              <% assignment_group_label = assignment_group_value.present? ? assignment_group_value : "Unassigned" %>
-
               <tr class="c-table-row" data-student-row="<%= student.student_id %>">
                 <td>
                   <label class="u-inline-flex u-items-center u-gap-xs">
@@ -261,22 +251,6 @@
                               student_name: user&.name || "Student ##{student.student_id}"
                             },
                             id: "program_year_select_#{student.student_id}" %>
-                  </div>
-                </td>
-
-                <td class="user-track-cell" style="min-width: 14rem;">
-                  <div class="c-role-badge c-role-badge--track u-inline-flex js-assignment-group-badge" id="assignment_group_badge_<%= student.student_id %>" tabindex="0" style="cursor:pointer;"><%= assignment_group_label %></div>
-                  <div class="u-mt-sm c-select-wrapper" id="assignment_group_select_wrapper_<%= student.student_id %>" style="display:none;">
-                    <%= select_tag "assignment_group_updates[#{student.student_id}]",
-                            options_for_select(@assignment_group_select_options, assignment_group_value),
-                            class: "c-select u-w-full assignment-group-select",
-                            data: {
-                              student_id: student.student_id,
-                              original_assignment_group: assignment_group_value,
-                              original_assignment_group_name: assignment_group_label,
-                              student_name: user&.name || "Student ##{student.student_id}"
-                            },
-                            id: "assignment_group_select_#{student.student_id}" %>
                   </div>
                 </td>
 
@@ -573,21 +547,6 @@
         });
       });
 
-      form.querySelectorAll('.assignment-group-select').forEach(select => {
-        select.addEventListener('change', () => {
-          const studentId = select.dataset.studentId;
-          const fromLabel = normalizeLabel(select.dataset.originalAssignmentGroupName, 'Unassigned');
-          const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Unassigned');
-          const badge = document.getElementById(`assignment_group_badge_${studentId}`);
-
-          if (badge) {
-            badge.textContent = toLabel;
-          }
-
-          updateRegistry(studentId, 'assignmentGroup', fromLabel, toLabel);
-        });
-      });
-
       form.querySelectorAll('.status-select').forEach(select => {
         select.addEventListener('change', () => {
           const studentId = select.dataset.studentId;
@@ -623,7 +582,6 @@
       attachToggleHandlers('.js-advisor-badge', 'advisor_select_wrapper_');
       attachToggleHandlers('.js-track-badge', 'track_select_wrapper_');
       attachToggleHandlers('.js-program-year-badge', 'program_year_select_wrapper_');
-      attachToggleHandlers('.js-assignment-group-badge', 'assignment_group_select_wrapper_');
       attachToggleHandlers('.js-status-badge', 'status_select_wrapper_');
 
       updateUI();
