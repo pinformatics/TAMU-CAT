@@ -182,6 +182,10 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     get survey_path(@survey)
 
     assert_response :success
+    assert_select "form[data-survey-student-form='true'][data-survey-autosave-enabled='false'][data-survey-editing-submitted-response='true']"
+    assert_select "button[data-survey-save-stay]", false
+    assert_includes response.body, "Ready to update this submission?"
+    assert_includes response.body, "Update submission"
   end
 
   test "show allows revisions when closing time is not set" do
@@ -566,13 +570,14 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     get survey_path(@survey)
 
     assert_response :success
-    assert_select "form[data-survey-student-form='true'][data-survey-shared-submit='true'][data-survey-autosave-url='#{save_progress_survey_path(@survey)}'][data-survey-autosave-enabled='true']"
-    assert_select "[data-survey-save-exit]", text: "Save Progress"
+    assert_select "form[data-survey-student-form='true'][data-survey-shared-submit='true'][data-survey-autosave-url='#{save_progress_survey_path(@survey)}'][data-survey-autosave-enabled='true'][data-survey-editing-submitted-response='false']"
+    assert_select "button[data-survey-save-exit][formaction='#{save_progress_survey_path(@survey)}']", text: "Cancel"
+    assert_select "button[data-survey-save-stay][type='button']", text: "Save Progress"
+    assert_select "button[data-survey-save-stay][formaction]", false
     assert_select "[data-survey-autosave-status]", text: /Autosave/
-    assert_select "[data-survey-autosave-prompt][data-autosave-state='ready']"
-    assert_select "[data-survey-autosave-prompt-title]", text: "Autosave ready"
-    assert_select "[data-survey-autosave-prompt-message]", text: "Your answers will auto-save while you work."
+    assert_select "[data-survey-autosave-prompt]", false
     assert_includes response.body, "installSurveySubmissionForms"
+    assert_includes response.body, "installStudentSurveyAutosave"
     assert_includes response.body, "Survey needs attention"
   end
 
@@ -931,6 +936,51 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_match /\d+\/\d+ questions answered/i, flash[:notice]
   end
 
+  test "save_progress does not create response versions" do
+    sign_in @student_user
+    question = @survey.questions.first
+    version_count = -> { SurveyResponseVersion.for_pair(student_id: @student.student_id, survey_id: @survey.id).count }
+
+    assert_no_difference version_count do
+      post save_progress_survey_path(@survey), params: {
+        answers: { question.id.to_s => "Draft only" }
+      }
+    end
+
+    assert_redirected_to student_dashboard_path
+    student_question = StudentQuestion.find_by(student_id: @student.student_id, question_id: question.id)
+    assert_equal "Draft only", student_question.answer
+  end
+
+  test "save_progress can save and stay on the survey" do
+    sign_in @student_user
+    question = @survey.questions.first
+
+    post save_progress_survey_path(@survey), params: {
+      stay: "1",
+      answers: { question.id.to_s => "Stay on page draft" }
+    }
+
+    assert_redirected_to survey_path(@survey)
+    assert_match /Progress saved! You can continue later\./, flash[:notice]
+    student_question = StudentQuestion.find_by(student_id: @student.student_id, question_id: question.id)
+    assert_equal "Stay on page draft", student_question.answer
+  end
+
+  test "save_progress can save and exit to a safe internal path" do
+    sign_in @student_user
+    question = @survey.questions.first
+
+    post save_progress_survey_path(@survey), params: {
+      exit_to: surveys_path,
+      answers: { question.id.to_s => "Exit draft" }
+    }
+
+    assert_redirected_to surveys_path
+    student_question = StudentQuestion.find_by(student_id: @student.student_id, question_id: question.id)
+    assert_equal "Exit draft", student_question.answer
+  end
+
   test "save_progress autosave returns json without redirecting" do
     sign_in @student_user
     question = @survey.questions.first
@@ -947,6 +997,22 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
     student_question = StudentQuestion.find_by(student_id: @student.student_id, question_id: question.id)
     assert_equal "Autosaved draft", student_question.answer
+  end
+
+  test "save_progress autosave does not create response versions" do
+    sign_in @student_user
+    question = @survey.questions.first
+    version_count = -> { SurveyResponseVersion.for_pair(student_id: @student.student_id, survey_id: @survey.id).count }
+
+    assert_no_difference version_count do
+      post save_progress_survey_path(@survey),
+           params: { autosave: "1", answers: { question.id.to_s => "Autosaved draft only" } },
+           headers: { "X-Requested-With" => "XMLHttpRequest", "Accept" => "application/json" }
+    end
+
+    assert_response :success
+    student_question = StudentQuestion.find_by(student_id: @student.student_id, question_id: question.id)
+    assert_equal "Autosaved draft only", student_question.answer
   end
 
   test "save_progress allows blank required fields" do

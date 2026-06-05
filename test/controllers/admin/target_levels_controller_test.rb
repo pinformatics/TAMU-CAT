@@ -176,6 +176,39 @@ class Admin::TargetLevelsControllerTest < ActionDispatch::IntegrationTest
     assert_no_match(/Target levels changed/i, response.body)
   end
 
+  test "update ignores malformed and blank target rows without changing saved targets" do
+    sign_in @admin
+
+    CompetencyTargetLevel.create!(
+      program_semester: @semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title,
+      target_level: 3
+    )
+
+    assert_no_difference "CompetencyTargetLevel.count" do
+      patch admin_target_levels_path, params: {
+        program_semester_id: @semester.id,
+        track: @track_value,
+        class_of: "2026",
+        targets: {
+          "0" => "not a target row",
+          "1" => { competency_title: "", target_level: "4" },
+          "2" => { competency_title: @competency_title, target_level: "3" }
+        }
+      }
+    end
+
+    assert_redirected_to admin_program_setup_path(tab: "targets", program_semester_id: @semester.id, track: @track_value, class_of: 2026)
+    assert_equal 3, CompetencyTargetLevel.find_by!(
+      program_semester: @semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title
+    ).target_level
+  end
+
   test "admin can fill missing target levels from defaults" do
     sign_in @admin
 
@@ -267,6 +300,114 @@ class Admin::TargetLevelsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal 5, current_record.reload.target_level
     assert_match(/Copied 1 target level/, flash[:notice].to_s)
+  end
+
+  test "copy to current requires selected source context" do
+    sign_in @admin
+
+    post admin_copy_target_levels_to_current_path, params: {
+      program_semester_id: @semester.id,
+      track: "",
+      class_of: "2026"
+    }
+
+    assert_redirected_to admin_program_setup_path(tab: "targets")
+    assert_match(/select a source semester, track, and cohort/i, flash[:alert].to_s)
+  end
+
+  test "copy to current requires a configured current semester" do
+    sign_in @admin
+    source_semester = program_semesters(:spring_2026)
+
+    CompetencyTargetLevel.create!(
+      program_semester: source_semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title,
+      target_level: 4
+    )
+
+    ProgramSemester.stub(:current, nil) do
+      post admin_copy_target_levels_to_current_path, params: {
+        program_semester_id: source_semester.id,
+        track: @track_value,
+        class_of: "2026"
+      }
+    end
+
+    assert_redirected_to admin_program_setup_path(tab: "targets", program_semester_id: source_semester.id, track: @track_value, class_of: 2026)
+    assert_match(/set a current semester/i, flash[:alert].to_s)
+  end
+
+  test "copy to current rejects the current semester as source" do
+    sign_in @admin
+    current_semester = ProgramSemester.current
+
+    post admin_copy_target_levels_to_current_path, params: {
+      program_semester_id: current_semester.id,
+      track: @track_value,
+      class_of: "2026"
+    }
+
+    assert_redirected_to admin_program_setup_path(tab: "targets", program_semester_id: current_semester.id, track: @track_value, class_of: 2026)
+    assert_match(/already the current semester/i, flash[:alert].to_s)
+  end
+
+  test "copy to current alerts when source has no configured target levels" do
+    sign_in @admin
+    source_semester = program_semesters(:spring_2026)
+
+    CompetencyTargetLevel.where(program_semester: source_semester, track: @track_value, class_of: 2026).delete_all
+
+    post admin_copy_target_levels_to_current_path, params: {
+      program_semester_id: source_semester.id,
+      track: @track_value,
+      class_of: "2026"
+    }
+
+    assert_redirected_to admin_program_setup_path(tab: "targets", program_semester_id: source_semester.id, track: @track_value, class_of: 2026)
+    assert_match(/no configured target levels/i, flash[:alert].to_s)
+  end
+
+  test "copy to current reports unchanged target levels without warning" do
+    sign_in @admin
+    source_semester = program_semesters(:spring_2026)
+    current_semester = ProgramSemester.current
+
+    CompetencyTargetLevel.where(
+      program_semester: [ source_semester, current_semester ],
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title
+    ).delete_all
+
+    CompetencyTargetLevel.create!(
+      program_semester: source_semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title,
+      target_level: 4
+    )
+    CompetencyTargetLevel.create!(
+      program_semester: current_semester,
+      track: @track_value,
+      class_of: 2026,
+      competency_title: @competency_title,
+      target_level: 4
+    )
+
+    assert_no_difference "CompetencyTargetLevel.count" do
+      post admin_copy_target_levels_to_current_path, params: {
+        program_semester_id: source_semester.id,
+        track: @track_value,
+        class_of: "2026"
+      }
+    end
+
+    assert_redirected_to admin_program_setup_path(tab: "targets", program_semester_id: current_semester.id, track: @track_value, class_of: 2026)
+    assert_match(/Copied 0 target levels/i, flash[:notice].to_s)
+    assert_match(/1 already matched/i, flash[:notice].to_s)
+    assert_nil session[:target_levels_post_save_warning]
   end
 
   test "copy to current button appears for non-current target context" do

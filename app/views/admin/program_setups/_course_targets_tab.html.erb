@@ -1,0 +1,191 @@
+<section class="c-card c-card--spacious u-stack u-stack--md">
+  <header class="c-toolbar__row c-toolbar__row--airy u-justify-between">
+    <div>
+      <h2 class="c-panel-title">Course Targets</h2>
+      <p class="c-panel-subtitle">Set course-level competency targets by semester and course. These are separate from end-of-program competency targets.</p>
+    </div>
+  </header>
+
+  <%= form_with url: admin_program_setup_path, method: :get, local: true, data: { turbo: false } do %>
+    <%= hidden_field_tag :tab, "course_targets" %>
+    <div class="c-card c-card--tight u-stack u-stack--md">
+      <div class="u-actions u-actions--split">
+        <div>
+          <p class="c-eyebrow">Target context</p>
+          <h3 class="c-h3 c-heading-inline">Choose a semester</h3>
+          <p class="c-panel-subtitle">Course targets are saved for the selected semester and course offering.</p>
+        </div>
+        <% if @course_target_coverage.present? %>
+          <div class="u-actions u-actions--start u-gap-xs">
+            <span class="c-pill c-pill--muted"><%= pluralize(@course_target_coverage[:target_count], "target") %></span>
+            <span class="c-pill c-pill--muted"><%= pluralize(@course_target_coverage[:course_count], "course") %></span>
+            <span class="c-pill c-pill--muted"><%= pluralize(@course_target_coverage[:competency_count], "competency") %></span>
+          </div>
+        <% end %>
+      </div>
+
+      <div class="c-filter-grid">
+        <div class="c-field">
+          <label class="c-label">Semester</label>
+          <div class="c-select-wrapper">
+            <%= select_tag :course_target_program_semester_id,
+              options_for_select(@course_target_semesters.map { |semester| [semester.name, semester.id] }, @selected_course_target_semester_id),
+              class: "c-select u-w-full" %>
+          </div>
+        </div>
+        <div>
+          <%= button_tag "Load Course Targets", type: "submit", name: nil, class: button_classes(:secondary) %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="c-management-layout">
+    <div class="u-stack u-stack--md">
+      <% if @course_competency_targets.blank? %>
+        <div class="c-empty-state c-empty-state--compact">
+          <p class="c-empty-state__body">No course targets are configured for this semester yet.</p>
+        </div>
+      <% else %>
+        <div class="c-card c-card--flush c-table-wrapper">
+          <table class="c-table">
+            <thead>
+              <tr>
+                <th>Course Name</th>
+                <th>Course Code</th>
+                <th>Course Title</th>
+                <th>Competency</th>
+                <th>Course Target</th>
+                <th class="u-text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% @course_competency_targets.each do |target| %>
+                <% modal_id = "course-target-edit-#{target.id}" %>
+                <tr>
+                  <td><span class="c-table__title"><%= target.course_name.presence || target.course_code %></span></td>
+                  <td><%= target.course_code %></td>
+                  <td><%= target.course_title.presence || "—" %></td>
+                  <td><%= target.competency_title %></td>
+                  <td><span class="c-score-pill c-score-pill--program">Target <%= target.target_level %>/5</span></td>
+                  <td class="u-text-right">
+                    <button type="button" class="<%= button_classes(:secondary, extra_classes: 'btn-sm') %>" data-open-modal="<%= modal_id %>">Edit</button>
+                    <div id="<%= modal_id %>" class="c-modal-backdrop hidden" data-inline-modal tabindex="-1">
+                      <section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="<%= modal_id %>-title">
+                        <header class="c-modal__header">
+                          <div>
+                            <p class="c-eyebrow">Course target</p>
+                            <h3 id="<%= modal_id %>-title" class="c-modal__title">Edit <%= target.course_code %></h3>
+                          </div>
+                          <button type="button" class="c-icon-button c-modal__close" data-close-modal aria-label="Close">&times;</button>
+                        </header>
+                        <div class="c-modal__body u-stack u-stack--md">
+                          <%= form_with url: admin_course_competency_target_path(target),
+                                        method: :patch,
+                                        local: true,
+                                        class: "u-stack u-stack--md" do %>
+                            <%= hidden_field_tag "course_competency_target[program_semester_id]", target.course_offering.program_semester_id %>
+                            <div class="u-grid u-grid--2">
+                              <div class="c-field">
+                                <%= label_tag "course_competency_target_#{target.id}_course_code", "Course code", class: "c-label" %>
+                                <%= text_field_tag "course_competency_target[course_code]", target.course_code, id: "course_competency_target_#{target.id}_course_code", required: true, class: "c-input" %>
+                              </div>
+                              <div class="c-field">
+                                <%= label_tag "course_competency_target_#{target.id}_course_title", "Course title", class: "c-label" %>
+                                <%= text_field_tag "course_competency_target[course_title]", target.course_title, id: "course_competency_target_#{target.id}_course_title", class: "c-input" %>
+                              </div>
+                              <div class="c-field">
+                                <%= label_tag "course_competency_target_#{target.id}_competency_id", "Competency", class: "c-label" %>
+                                <div class="c-select-wrapper">
+                                  <%= select_tag "course_competency_target[competency_id]",
+                                                 options_from_collection_for_select(@course_target_competencies, :id, :title, target.competency_id),
+                                                 id: "course_competency_target_#{target.id}_competency_id",
+                                                 required: true,
+                                                 class: "c-select u-w-full" %>
+                                </div>
+                              </div>
+                              <div class="c-field">
+                                <%= label_tag "course_competency_target_#{target.id}_target_level", "Course target level", class: "c-label" %>
+                                <div class="c-select-wrapper">
+                                  <%= render "shared/proficiency_select",
+                                             name: "course_competency_target[target_level]",
+                                             selected: target.target_level,
+                                             id: "course_competency_target_#{target.id}_target_level",
+                                             class_name: "c-select u-w-full" %>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="u-actions u-actions--start">
+                              <%= button_tag "Save changes", type: "submit", class: button_classes(:primary, extra_classes: "btn-sm") %>
+                            </div>
+                          <% end %>
+
+                          <div class="u-section-divider u-pt-sm">
+                            <%= button_to "Delete",
+                                          admin_course_competency_target_path(target),
+                                          method: :delete,
+                                          data: { turbo_confirm: "Delete the course target for #{target.course_code} and #{target.competency_title}?" },
+                                          class: button_classes(:danger, extra_classes: "btn-sm") %>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% end %>
+    </div>
+
+    <aside class="c-card c-card--compact c-card--muted u-stack u-stack--md">
+      <h3 class="c-panel-title">Add Course Target</h3>
+      <p class="c-panel-subtitle">Use a course code like PHPM-633 or PHPM-633-700. The title will be saved to the course catalog.</p>
+
+      <% if @course_target_competencies.blank? %>
+        <div class="c-callout c-callout--warning">
+          Add competencies before configuring course targets.
+        </div>
+      <% else %>
+        <%= form_with url: admin_course_competency_targets_path, local: true, class: "u-stack u-stack--md" do %>
+          <%= hidden_field_tag "course_competency_target[program_semester_id]", @selected_course_target_semester_id %>
+
+          <div class="c-field">
+            <%= label_tag "new_course_competency_target_course_code", "Course code", class: "c-label" %>
+            <%= text_field_tag "course_competency_target[course_code]", nil, id: "new_course_competency_target_course_code", required: true, class: "c-input", placeholder: "PHPM-633-700" %>
+          </div>
+
+          <div class="c-field">
+            <%= label_tag "new_course_competency_target_course_title", "Course title", class: "c-label" %>
+            <%= text_field_tag "course_competency_target[course_title]", nil, id: "new_course_competency_target_course_title", class: "c-input", placeholder: "Health Law and Ethics" %>
+          </div>
+
+          <div class="c-field">
+            <%= label_tag "new_course_competency_target_competency_id", "Competency", class: "c-label" %>
+            <div class="c-select-wrapper">
+              <%= select_tag "course_competency_target[competency_id]",
+                             options_from_collection_for_select(@course_target_competencies, :id, :title),
+                             id: "new_course_competency_target_competency_id",
+                             required: true,
+                             class: "c-select u-w-full" %>
+            </div>
+          </div>
+
+          <div class="c-field">
+            <%= label_tag "new_course_competency_target_target_level", "Course target level", class: "c-label" %>
+            <div class="c-select-wrapper">
+              <%= render "shared/proficiency_select",
+                         name: "course_competency_target[target_level]",
+                         selected: nil,
+                         id: "new_course_competency_target_target_level",
+                         class_name: "c-select u-w-full" %>
+            </div>
+          </div>
+
+          <%= button_tag "Save course target", type: "submit", class: button_classes(:primary) %>
+        <% end %>
+      <% end %>
+    </aside>
+  </div>
+</section>

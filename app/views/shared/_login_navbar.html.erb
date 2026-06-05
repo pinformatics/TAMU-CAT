@@ -1,11 +1,29 @@
 <!-- Login Navigation Header -->
 <header class="c-app-header" role="banner">
   <div class="c-app-header__content">
-    <div class="c-app-header__left">
+    <div class="c-app-header__left c-app-header__left--brand-only">
       <%= link_to root_path, class: "c-brand-link", aria: { label: "Texas A&M University home" } do %>
         <div class="c-brand-logo" aria-hidden="true"></div>
         <span class="sr-only">Texas A&amp;M University</span>
       <% end %>
+
+      <button type="button"
+              class="c-mobile-menu-button"
+              data-mobile-nav-toggle
+              aria-label="Open navigation menu"
+              aria-controls="public-mobile-nav"
+              aria-expanded="false">
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <div id="public-mobile-nav" class="c-nav-drawer" data-mobile-nav-drawer aria-label="Site navigation">
+      <div class="c-nav-drawer__header">
+        <span class="c-nav-drawer__title">Menu</span>
+        <button type="button" class="c-nav-drawer__close" data-mobile-nav-close aria-label="Close navigation menu">&times;</button>
+      </div>
 
       <nav class="c-nav-links" aria-label="Primary">
         <%= link_to "Home", root_path, class: "c-nav-link" %>
@@ -16,9 +34,8 @@
         <!-- FAQ page -->
         <%= link_to "FAQ", faq_path, class: "c-nav-link" %>
       </nav>
-    </div>
 
-    <div class="c-user-section">
+      <div class="c-user-section">
       <%= render ToggleSwitchComponent.new(
         id: "high-contrast-toggle",
         checked: false,
@@ -78,6 +95,9 @@
         </div>
       </div>
     </div>
+    </div>
+
+    <div class="c-nav-drawer-backdrop" data-mobile-nav-backdrop hidden></div>
   </div>
 </header>
 

@@ -9,14 +9,14 @@
                       save_popup: (@saved_popup ? "1" : "0")
                     },
                     class: "space-y-8 survey-form" do |f| %>
-        <% back_path = @return_to.presence || student_records_path %>
+        <% back_path = @return_to.presence || survey_records_path %>
         <% cancel_path = begin
           uri = URI.parse(back_path)
           query = Rack::Utils.parse_nested_query(uri.query).merge("cancelled_feedback" => "1")
           uri.query = query.to_query
           uri.to_s
         rescue StandardError
-          student_records_path(cancelled_feedback: "1")
+          survey_records_path(cancelled_feedback: "1")
         end %>
         <%= hidden_field_tag :return_to, back_path %>
         <%= hidden_field_tag :submission_intent, "save", data: { feedback_intent_input: true } %>
@@ -27,6 +27,10 @@
                      existing_feedbacks_by_question: @existing_feedbacks_by_question,
                      missing_feedback_question_ids: @missing_rating_question_ids
                    } %>
+
+        <% if defined?(@self_target_summary) && @self_target_summary.present? %>
+          <%= render "survey_responses/self_target_summary", summary: @self_target_summary %>
+        <% end %>
 
         <% if @survey.advisor_numeric_feedback_enabled? %>
           <section class="c-card c-card--advisor u-stack u-stack--lg" data-advisor-feedback-summary>

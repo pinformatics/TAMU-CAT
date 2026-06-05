@@ -26,7 +26,7 @@ class ReportsController < ApplicationController
     record_export_audit!(
       export_type: "reports_pdf",
       description: "Exported program reports PDF.",
-      metadata: { section: section.presence || "dashboard", y_axis: y_axis_mode }
+      metadata: reports_filter_params.to_h.merge(section: section.presence || "dashboard", y_axis: y_axis_mode)
     )
 
     html = render_to_string(
@@ -49,7 +49,8 @@ class ReportsController < ApplicationController
 
     record_export_audit!(
       export_type: "reports_excel",
-      description: "Exported program reports Excel workbook."
+      description: "Exported program reports Excel workbook.",
+      metadata: reports_filter_params.to_h
     )
 
     send_data package.to_stream.read,
@@ -110,7 +111,7 @@ class ReportsController < ApplicationController
   def ensure_reports_access!
     return if current_user.role_admin? || current_user.role_advisor?
 
-    redirect_to dashboard_path, alert: "Reports are available only to administrators and advisors."
+    redirect_to dashboard_path, alert: STAFF_ONLY_MESSAGE
   end
 
   def aggregator
@@ -126,18 +127,21 @@ class ReportsController < ApplicationController
       :student_id,
       :advisor_id,
       :competency,
+      :domain,
       :section,
       :y_axis,
       :report_tab,
       :q,
       :program_year,
+      :student_status,
       :program_semester_id,
       :course_program_semester_id,
       :course_code,
       :course_track,
       :course_class_of,
       :class_of,
-      :release_status
+      :release_status,
+      competencies: []
     )
   end
 
@@ -192,9 +196,10 @@ class ReportsController < ApplicationController
     insights = Reports::CompetencyInsights.new(user: current_user, params: reports_filter_params).call
 
     CSV.generate(headers: true) do |csv|
-      csv << [ "Cohort", "Students", "Self Avg", "Advisor Avg", "Course Avg", "Below Target" ]
+      csv << [ "Semester", "Cohort", "Students", "Self Avg", "Advisor Avg", "Course Avg", "Below Target" ]
       Array(insights[:cohort_comparison]).each do |row|
         csv << [
+          row[:semester],
           row[:program_year],
           row[:student_count],
           row[:self_average],
@@ -211,12 +216,13 @@ class ReportsController < ApplicationController
     course_report = Reports::CourseCompetencyReport.new(user: current_user, params: reports_filter_params).call
 
     CSV.generate do |csv|
-      csv << [ "Student/Course Heatmap" ]
-      csv << [ "Student", "Course", "Track", "Class", "Average", "Rows", "Below Target", "No Target" ]
-      Array(course_report[:student_course_heatmap]).each do |row|
+      csv << [ "Course Heatmap" ]
+      csv << [ "Course", "Student", "Semester", "Track", "Class", "Average", "Rows", "Below Target", "No Target" ]
+      Array(course_report[:student_course_heatmap]).sort_by { |row| [ row[:course_code].to_s, row[:student_name].to_s.downcase, row[:semester_names].to_s ] }.each do |row|
         csv << [
-          row[:student_name],
           row[:course_code],
+          row[:student_name],
+          row[:semester_names],
           row[:track],
           row[:class_of],
           row[:average],

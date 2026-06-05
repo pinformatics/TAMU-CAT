@@ -101,6 +101,17 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_20_160000) do
     t.index ["survey_id"], name: "index_confidential_advisor_notes_on_survey_id"
   end
 
+  create_table "course_competency_targets", force: :cascade do |t|
+    t.bigint "course_offering_id", null: false
+    t.bigint "competency_id", null: false
+    t.integer "target_level", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["competency_id"], name: "index_course_competency_targets_on_competency_id"
+    t.index ["course_offering_id", "competency_id"], name: "index_course_competency_targets_unique_offering_competency", unique: true
+    t.index ["course_offering_id"], name: "index_course_competency_targets_on_course_offering_id"
+  end
+
   create_table "course_grade_release_dates", force: :cascade do |t|
     t.bigint "program_semester_id", null: false
     t.datetime "release_date"
@@ -570,6 +581,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_20_160000) do
     t.string "language"
     t.boolean "notifications_enabled", default: true, null: false
     t.integer "text_scale_percent", default: 100, null: false
+    t.boolean "in_app_notifications_enabled", default: true, null: false
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["role"], name: "index_users_on_role"
     t.index ["uid"], name: "index_users_on_uid", unique: true
@@ -589,6 +601,8 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_20_160000) do
   add_foreign_key "confidential_advisor_notes", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "confidential_advisor_notes", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "confidential_advisor_notes", "surveys", on_delete: :cascade
+  add_foreign_key "course_competency_targets", "competencies"
+  add_foreign_key "course_competency_targets", "course_offerings"
   add_foreign_key "course_grade_release_dates", "program_semesters"
   add_foreign_key "course_offerings", "courses", on_delete: :cascade
   add_foreign_key "course_offerings", "program_semesters"

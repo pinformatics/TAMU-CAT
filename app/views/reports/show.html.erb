@@ -22,7 +22,7 @@
       ["Program Dashboard", "dashboard", "Analytics dashboard", "Open interactive charts, filters, and report exports."],
       ["Course Target Attainment", "course_target", "Course competency analytics", "Review course evidence against uploaded course targets."],
       ["Cohort Comparison", "cohort_comparison", "Program review", "Compare self, advisor, and course averages by cohort."],
-      ["Heatmaps", "domain_heatmap", "Competency heatmaps", "Scan student/course and student/domain patterns together."],
+      ["Heatmaps", "domain_heatmap", "Competency heatmaps", "Scan course and student/domain patterns together."],
       ["Student Profile", "portfolio_export", "Student profile", "Export student roster, Google Sites links, and course target outcomes."]
     ] %>
     <% active_report_tab = @report_tab.presence || "dashboard" %>
@@ -61,6 +61,24 @@
           confirm: ferpa_export_confirmation("student-level records")
         }
       end %>
+    <% dashboard_downloads = [
+      {
+        label: "Download PDF",
+        path: export_reports_pdf_path(report_download_params.merge(section: "dashboard", y_axis: "percent")),
+        confirm: ferpa_export_confirmation("student-level dashboard charts")
+      },
+      active_download
+    ] %>
+    <% dashboard_initial_filters = report_download_params.stringify_keys.slice(
+      "track",
+      "program_year",
+      "semester",
+      "survey_id",
+      "category_id",
+      "student_id",
+      "advisor_id",
+      "competency"
+    ) %>
 
     <section class="c-card c-card--compact u-stack u-stack--md">
       <div class="c-callout c-callout--warning c-callout--compact">
@@ -75,10 +93,22 @@
           <h2 class="c-section-title c-heading-inline"><%= active_report_config[0] %></h2>
           <p class="c-help"><%= active_report_config[3] %></p>
         </div>
-        <%= link_to active_download[:label],
-              active_download[:path],
-              class: button_classes(:secondary),
-              data: { turbo: false, turbo_confirm: active_download[:confirm] } %>
+        <div class="u-actions u-actions--start">
+          <% (active_report_tab == "dashboard" ? dashboard_downloads : [active_download]).each do |download| %>
+            <% dashboard_pdf = active_report_tab == "dashboard" && download[:label] == "Download PDF" %>
+            <%= link_to download[:label],
+                  download[:path],
+                  class: button_classes(:secondary),
+                  data: {
+                    turbo: false,
+                    turbo_confirm: download[:confirm],
+                    report_primary_download: active_report_tab == "dashboard",
+                    report_download_base_url: if active_report_tab == "dashboard"
+                      dashboard_pdf ? export_reports_pdf_path(section: "dashboard", y_axis: "percent") : export_reports_excel_path(section: "dashboard")
+                    end
+                  }.compact %>
+          <% end %>
+        </div>
       </header>
 
       <nav class="c-tab-list" aria-label="Report modules">
@@ -98,6 +128,7 @@
           data-controller="reports"
           data-reports-pdf-url-value="<%= export_reports_pdf_path("dashboard") %>"
           data-reports-excel-url-value="<%= export_reports_excel_path %>"
+          data-reports-initial-filters-value="<%= dashboard_initial_filters.to_json %>"
         ></div>
 
         <noscript>
@@ -195,7 +226,7 @@
                   </span>
                 </summary>
                 <div class="c-table-wrapper">
-                  <table class="c-table c-table--sm">
+                  <table class="c-table c-table--sm c-table--sticky-header">
                     <thead>
                       <tr>
                         <th>Competency</th>
@@ -241,11 +272,38 @@
         </section>
 
       <% elsif active_report_tab == "cohort_comparison" %>
+        <% insight_filter_options = @report_insights[:filter_options] || {} %>
+        <%= form_with url: reports_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
+          <%= hidden_field_tag :report_tab, "cohort_comparison" %>
+          <div class="c-filter-bar__field">
+            <%= label_tag :semester, "Semester", class: "c-label" %>
+            <%= select_tag :semester,
+                  options_for_select([["All semesters", ""]] + Array(insight_filter_options[:semesters]).map { |semester| [semester, semester] }, params[:semester]),
+                  class: "c-select u-w-full" %>
+          </div>
+          <div class="c-filter-bar__field">
+            <%= label_tag :track, "Track", class: "c-label" %>
+            <%= select_tag :track,
+                  options_for_select([["All tracks", ""]] + ProgramTrack.names.map { |track| [track, track] }, params[:track]),
+                  class: "c-select u-w-full" %>
+          </div>
+          <div class="c-filter-bar__field">
+            <%= label_tag :program_year, "Year", class: "c-label" %>
+            <%= select_tag :program_year,
+                  options_for_select([["All years", ""]] + Array(insight_filter_options[:program_years]).map { |year| [year, year] }, params[:program_year]),
+                  class: "c-select u-w-full" %>
+          </div>
+          <div class="u-actions u-actions--start">
+            <%= submit_tag "Apply", class: button_classes(:secondary) %>
+            <%= link_to "Clear", reports_path(report_tab: "cohort_comparison"), class: button_classes(:subtle), data: { turbo: false } %>
+          </div>
+        <% end %>
         <% if @report_insights[:cohort_comparison].present? %>
         <div class="c-table-wrapper">
           <table class="c-table">
             <thead>
               <tr>
+                <th>Semester</th>
                 <th>Cohort</th>
                 <th>Students</th>
                 <th>Self Avg</th>
@@ -257,6 +315,7 @@
             <tbody>
               <% @report_insights[:cohort_comparison].each do |row| %>
                 <tr>
+                  <td><%= row[:semester].presence || "All semesters" %></td>
                   <td class="c-table__title"><%= row[:program_year] == "Unassigned" ? "Unassigned" : row[:program_year] %></td>
                   <td><%= row[:student_count] %></td>
                   <td><%= row[:self_average].presence || "—" %></td>
@@ -327,7 +386,7 @@
           </header>
           <% if portfolio_rows.present? %>
             <div class="c-table-wrapper">
-              <table class="c-table c-table--sm">
+              <table class="c-table c-table--sm c-table--sticky-header">
                 <thead>
                   <tr>
                     <th>UIN</th>
@@ -368,22 +427,88 @@
           <% end %>
         </section>
       <% elsif active_report_tab == "domain_heatmap" %>
+        <% insight_filter_options = @report_insights[:filter_options] || {} %>
+        <% course_filter_options = @course_competency_report[:filter_options] || {} %>
+        <%= form_with url: reports_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
+          <%= hidden_field_tag :report_tab, "domain_heatmap" %>
+          <div class="c-filter-bar__field">
+            <%= label_tag :semester, "Semester", class: "c-label" %>
+            <%= select_tag :semester,
+                  options_for_select([["All semesters", ""]] + Array(insight_filter_options[:semesters]).map { |semester| [semester, semester] }, params[:semester]),
+                  class: "c-select u-w-full" %>
+          </div>
+          <div class="c-filter-bar__field">
+            <%= label_tag :course_code, "Course", class: "c-label" %>
+            <%= select_tag :course_code,
+                  options_for_select([["All courses", ""]] + Array(course_filter_options[:courses]).map { |course| [course, course] }, params[:course_code]),
+                  class: "c-select u-w-full" %>
+          </div>
+          <div class="c-filter-bar__field">
+            <%= label_tag :track, "Track", class: "c-label" %>
+            <%= select_tag :track,
+                  options_for_select([["All tracks", ""]] + ProgramTrack.names.map { |track| [track, track] }, params[:track]),
+                  class: "c-select u-w-full" %>
+          </div>
+          <div class="c-filter-bar__field">
+            <%= label_tag :program_year, "Year", class: "c-label" %>
+            <%= select_tag :program_year,
+                  options_for_select([["All years", ""]] + Array(insight_filter_options[:program_years]).map { |year| [year, year] }, params[:program_year]),
+                  class: "c-select u-w-full" %>
+          </div>
+          <div class="c-filter-bar__field c-filter-bar__field--wide">
+            <%= label_tag :student_id, "Student", class: "c-label" %>
+            <%= select_tag :student_id,
+                  options_for_select([["All students", ""]] + Array(insight_filter_options[:students]).map { |student| [student[:name], student[:id]] }, params[:student_id]),
+                  class: "c-select u-w-full" %>
+          </div>
+          <div class="u-actions u-actions--start">
+            <%= submit_tag "Apply", class: button_classes(:secondary) %>
+            <%= link_to "Clear", reports_path(report_tab: "domain_heatmap"), class: button_classes(:subtle), data: { turbo: false } %>
+          </div>
+        <% end %>
+
         <section class="u-stack u-stack--sm">
+          <% course_heatmap_rows = @course_competency_report[:student_course_heatmap].to_a %>
+          <% course_heatmap_groups = course_heatmap_rows.group_by { |row| row[:course_code].presence || "No course code" }.sort_by { |course_code, _rows| course_code.to_s } %>
           <header class="c-toolbar__row u-justify-between">
-            <h3 class="c-h3 c-heading-inline">Student/Course Heatmap</h3>
-            <span class="c-muted-meta"><%= @course_competency_report[:student_course_heatmap].to_a.size %> rows</span>
+            <h3 class="c-h3 c-heading-inline">Course Heatmap</h3>
+            <span class="c-muted-meta"><%= pluralize(course_heatmap_groups.size, "course") %></span>
           </header>
-          <% if @course_competency_report[:student_course_heatmap].present? %>
-            <% @course_competency_report[:student_course_heatmap].group_by { |row| [row[:student_id], row[:student_name]] }.each do |(_student_id, student_name), student_rows| %>
-              <% track_labels = student_rows.filter_map { |row| row[:track].presence }.uniq.join(", ") %>
-              <% class_labels = student_rows.filter_map { |row| row[:class_of].presence }.uniq.join(", ") %>
-              <% below_count = student_rows.sum { |row| row[:below_count].to_i } %>
-              <% no_target_count = student_rows.sum { |row| row[:no_target_count].to_i } %>
+          <% if course_heatmap_groups.present? %>
+            <% course_heatmap_groups.each do |course_code, course_rows| %>
+              <% semester_labels = course_rows.filter_map { |row| row[:semester_names].presence }.uniq.join(", ") %>
+              <% track_labels = course_rows.filter_map { |row| row[:track].presence }.uniq.join(", ") %>
+              <% class_labels = course_rows.filter_map { |row| row[:class_of].presence }.uniq.join(", ") %>
+              <% student_count = course_rows.map { |row| row[:student_id] }.compact.uniq.size %>
+              <% evidence_count = course_rows.sum { |row| row[:evidence_count].to_i } %>
+              <% below_count = course_rows.sum { |row| row[:below_count].to_i } %>
+              <% no_target_count = course_rows.sum { |row| row[:no_target_count].to_i } %>
+              <% weighted_rows = course_rows.select { |row| row[:average].present? && row[:evidence_count].to_i.positive? } %>
+              <% weighted_count = weighted_rows.sum { |row| row[:evidence_count].to_i } %>
+              <% course_average = weighted_count.positive? ? (weighted_rows.sum { |row| row[:average].to_f * row[:evidence_count].to_i } / weighted_count).round(2) : nil %>
+              <% course_status = if below_count.positive?
+                   "attention"
+                 elsif course_average.blank?
+                   "missing"
+                 elsif course_average.to_f >= 4.0
+                   "strong"
+                 elsif course_average.to_f >= 3.0
+                   "watch"
+                 else
+                   "attention"
+                 end %>
               <details class="c-accordion">
                 <summary class="c-accordion__summary c-accordion__summary--wrap">
-                  <span class="c-accordion__title"><%= student_name %></span>
+                  <span class="u-flex u-flex-wrap u-items-center u-gap-sm">
+                    <span class="c-accordion__title"><%= course_code %></span>
+                    <span class="c-heatmap-cell c-heatmap-cell--<%= course_status %>">
+                      <%= course_average ? number_with_precision(course_average, precision: 2, strip_insignificant_zeros: true) : "—" %>
+                    </span>
+                  </span>
                   <span class="c-accordion__meta c-accordion__meta--wrap">
-                    <span><%= pluralize(student_rows.size, "course") %></span>
+                    <span><%= pluralize(student_count, "student") %></span>
+                    <span><%= pluralize(evidence_count, "row") %></span>
+                    <span><%= semester_labels.presence || "All semesters" %></span>
                     <span><%= track_labels.presence || "No track" %></span>
                     <span><%= class_labels.presence || "No class" %></span>
                     <% if below_count.positive? %>
@@ -399,10 +524,11 @@
                   </span>
                 </summary>
                 <div class="c-table-wrapper">
-                  <table class="c-table c-table--sm">
+                  <table class="c-table c-table--sm c-table--sticky-header">
                     <thead>
                       <tr>
-                        <th>Course</th>
+                        <th>Student</th>
+                        <th>Semester</th>
                         <th>Average</th>
                         <th>Rows</th>
                         <th>Below Target</th>
@@ -410,9 +536,10 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <% student_rows.each do |row| %>
+                      <% course_rows.sort_by { |row| [row[:student_name].to_s.downcase, row[:semester_names].to_s] }.each do |row| %>
                         <tr>
-                          <td class="c-table__title"><%= row[:course_code] %></td>
+                          <td class="c-table__title"><%= row[:student_name] %></td>
+                          <td><%= row[:semester_names].presence || "—" %></td>
                           <td>
                             <span class="c-heatmap-cell c-heatmap-cell--<%= row[:status] %>">
                               <%= row[:average] ? number_with_precision(row[:average], precision: 2, strip_insignificant_zeros: true) : "—" %>
@@ -430,7 +557,7 @@
             <% end %>
           <% else %>
             <div class="c-empty-state">
-              <p class="c-empty-state__body">No student/course heatmap rows match the selected filters.</p>
+              <p class="c-empty-state__body">No course heatmap rows match the selected filters.</p>
             </div>
           <% end %>
         </section>
@@ -442,7 +569,7 @@
           </header>
           <% if @report_insights[:heatmap].present? %>
             <div class="c-table-wrapper">
-              <table class="c-table c-table--sm">
+              <table class="c-table c-table--sm c-table--sticky-header">
                 <thead>
                   <tr>
                     <th>Student</th>

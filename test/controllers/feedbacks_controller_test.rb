@@ -158,12 +158,45 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name='ratings[#{second_question.id}][average_score]'] option[selected='selected'][value='2']", text: /2/
   end
 
+  test "new with submitted response shows self target summary" do
+    section = SurveySection.find_or_create_by!(survey: @survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = @survey.categories.create!(name: "Feedback Self Target Summary", section: section)
+    question = category.questions.create!(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 10_010,
+      question_type: "dropdown",
+      answer_options: [
+        [ "Beginner (1)", "1" ],
+        [ "Emerging (2)", "2" ],
+        [ "Capable (3)", "3" ],
+        [ "Experienced (4)", "4" ],
+        [ "Mastery (5)", "5" ]
+      ].to_json,
+      has_feedback: true,
+      program_target_level: 4
+    )
+
+    SurveyResponseVersion.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      event: "submitted",
+      answers: { question.id.to_s => "5" }
+    )
+
+    get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id, prefill: true }
+
+    assert_response :success
+    assert_includes response.body, "Self-assessment target summary"
+    assert_includes response.body, "1 of 1"
+    assert_includes response.body, "Met 1"
+  end
+
   test "new redirects when survey is archived" do
     @survey.update!(is_active: false)
 
     get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_match "survey is archived", flash[:alert].to_s.downcase
   end
 
@@ -194,7 +227,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     post feedbacks_path, params: params
 
     assert_response :redirect
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     after_count = Feedback.where(student_id: @student.student_id, survey_id: @survey.id).count
     assert_equal before_count + 2, after_count
   end
@@ -215,7 +248,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       post feedbacks_path, params: params
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_match "survey is archived", flash[:alert].to_s.downcase
   end
 
@@ -234,7 +267,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       post feedbacks_path, params: params
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     feedback = Feedback.order(:created_at).last
     assert_equal 5.0, feedback.average_score
     assert_nil feedback.comments
@@ -255,7 +288,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       post feedbacks_path, params: params
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     feedback = Feedback.order(:created_at).last
     assert_nil feedback.average_score
     assert_equal "Great work!", feedback.comments
@@ -278,7 +311,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       post feedbacks_path, params: params
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
   end
 
   test "batch create updates existing feedback" do
@@ -413,7 +446,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
 
     note = ConfidentialAdvisorNote.find_by(
       student_id: @student.student_id,
@@ -430,7 +463,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     params = {
       survey_id: @survey.id,
       student_id: @student.student_id,
-      return_to: "/student_records",
+      return_to: "/survey_records",
       ratings: {
         q1.id.to_s => { average_score: "4", comments: "Good" }
       }
@@ -438,7 +471,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
 
     post feedbacks_path, params: params
     assert_response :redirect
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
   end
 
   test "batch create with validation errors rolls back transaction" do
@@ -617,7 +650,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
   end
 
   test "create with feedback question_id saves per-question feedback" do
@@ -637,7 +670,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       post feedbacks_path, params: params
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     feedback = Feedback.order(:created_at).last
     assert_equal q1.id, feedback.question_id
     assert_equal q1.category_id, feedback.category_id
@@ -807,7 +840,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_match "feedback is read-only", flash[:alert].to_s.downcase
     feedback.reload
     assert_equal "Original", feedback.comments
@@ -864,7 +897,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
       delete feedback_path(feedback)
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_match "feedback is read-only", flash[:alert].to_s.downcase
   end
 
@@ -940,7 +973,7 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
   end
 
   test "create rejects non-local return_to to prevent open redirect" do
@@ -958,6 +991,6 @@ class FeedbacksControllerTest < ActionDispatch::IntegrationTest
     post feedbacks_path, params: params
 
     assert_response :redirect
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
   end
 end

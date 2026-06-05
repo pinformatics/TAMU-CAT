@@ -83,7 +83,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_nil flash[:alert]
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "manage_members shows an alert for advisors" do
@@ -95,7 +95,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/admin access is required/i, flash[:alert].to_s)
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "people_management requires admin for students" do
@@ -105,7 +105,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_nil flash[:alert]
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "people_management requires admin for advisors" do
@@ -115,7 +115,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/admin access is required/i, flash[:alert].to_s)
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "people_management loads members tab for admin" do
@@ -128,6 +128,19 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Member Management"
   end
 
+  test "people management warns and confirms admin role changes" do
+    sign_in @admin
+
+    get people_management_path, params: { tab: "members" }
+
+    assert_response :success
+    assert_includes response.body, "Admin role changes require confirmation"
+    assert_includes response.body, "Granting admin access allows a member to manage users"
+    assert_includes response.body, "Confirm admin role change"
+    assert_includes response.body, "Save role changes"
+    assert_select "select[data-user-label][data-original-role]"
+  end
+
   test "people_management loads students tab for admin" do
     sign_in @admin
 
@@ -137,6 +150,38 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "People Management"
     assert_includes response.body, "Student Advisor Management"
     assert_includes response.body, "Bulk lifecycle update"
+    assert_includes response.body, "Class Year"
+    assert_includes response.body, "program_year_updates"
+  end
+
+  test "people management warns about current students missing profile assignment fields" do
+    sign_in @admin
+    student = students(:student)
+    student.update!(advisor: nil, track: nil, program_year: nil, uin: nil)
+
+    get people_management_path, params: { tab: "students" }
+
+    assert_response :success
+    assert_includes response.body, "Student profile data needs attention"
+    assert_includes response.body, "Missing track"
+    assert_includes response.body, "Missing class year"
+    assert_includes response.body, "Unassigned advisor"
+    assert_includes response.body, "Missing UIN"
+    assert_includes response.body, student.user.name
+  end
+
+  test "people management profile warnings ignore graduated students in current view" do
+    sign_in @admin
+    student = students(:student)
+    student.update!(advisor: nil, track: nil, program_year: nil, uin: nil)
+    student.graduate!
+
+    get people_management_path, params: { tab: "students" }
+
+    assert_response :success
+    refute_includes response.body, "Student profile data needs attention"
+    refute_includes response.body, "Unassigned advisor"
+    refute_includes response.body, "Missing UIN"
   end
 
   test "people_management students tab filters lifecycle status" do
@@ -314,7 +359,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_nil flash[:alert] # Students get silent redirect
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "destroy_member requires admin (blocks advisors)" do
@@ -326,7 +371,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/admin access is required/i, flash[:alert].to_s)
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "destroy_members requires admin (blocks students)" do
@@ -338,7 +383,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_nil flash[:alert] # Students get silent redirect
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "destroy_members requires admin (blocks advisors)" do
@@ -350,7 +395,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/admin access is required/i, flash[:alert].to_s)
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "debug_users returns expected json" do
@@ -372,7 +417,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     follow_redirect!
     assert_redirected_to dashboard_path
     follow_redirect!
-    assert_match(/admin access is required/i, flash[:alert].to_s)
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "manage_students for admin shows assignment controls" do
@@ -420,7 +465,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Competencies"
-    assert_includes response.body, admin_competencies_path
+    assert_includes response.body, competencies_path
   end
 
   test "advisor dashboard does not show students needing attention on main dashboard" do
@@ -516,6 +561,25 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     student.update!(track: original_track)
   end
 
+  test "update_student_advisors changes class year and logs activity" do
+    sign_in @admin
+
+    student = students(:student)
+    original_program_year = student.program_year
+    new_program_year = (ProgramYear.values.map(&:to_i) - [ original_program_year.to_i ]).first || 2027
+
+    assert_difference -> { AdminActivityLog.where(action: "program_year_update").count }, 1 do
+      patch update_student_advisors_path, params: { program_year_updates: { student.student_id => new_program_year.to_s } }
+    end
+
+    assert_redirected_to people_management_path(tab: "students")
+    follow_redirect!
+    assert_match "Updated 1 class year", flash[:notice]
+    assert_equal new_program_year, student.reload.program_year
+  ensure
+    student.update!(program_year: original_program_year)
+  end
+
   test "update_student_advisors updates lifecycle status and logs activity" do
     sign_in @admin
 
@@ -602,6 +666,19 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/track selection is required/i, flash[:alert].to_s)
   end
 
+  test "update_student_advisors rejects invalid class year selection" do
+    sign_in @admin
+
+    student = students(:student)
+
+    patch update_student_advisors_path, params: { program_year_updates: { student.student_id => "1900" } }
+
+    assert_redirected_to people_management_path(tab: "students")
+    follow_redirect!
+    assert_match(/class year update errors/i, flash[:alert].to_s)
+    assert_match(/invalid class year selection/i, flash[:alert].to_s)
+  end
+
   test "update_student_advisors returns alert when no changes submitted" do
     sign_in @admin
 
@@ -670,6 +747,32 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "nav.c-nav-links a.c-nav-link", text: "FAQ"
+  end
+
+  test "admin navbar includes FAQ" do
+    sign_in users(:admin)
+
+    get admin_dashboard_path
+
+    assert_response :success
+    assert_select "nav.c-nav-links a.c-nav-link", text: "FAQ"
+  end
+
+  test "role navbars expose mobile drawer controls" do
+    [
+      [ users(:student), student_dashboard_path, "student-mobile-nav" ],
+      [ users(:advisor), advisor_dashboard_path, "advisor-mobile-nav" ],
+      [ users(:admin), admin_dashboard_path, "admin-mobile-nav" ]
+    ].each do |user, path, drawer_id|
+      sign_in user
+
+      get path
+
+      assert_response :success
+      assert_select "button.c-mobile-menu-button[aria-controls='#{drawer_id}'][aria-expanded='false']"
+      assert_select "##{drawer_id}.c-nav-drawer[data-mobile-nav-drawer]"
+      assert_select ".c-nav-drawer-backdrop[data-mobile-nav-backdrop][hidden]"
+    end
   end
 
   test "student dashboard lists recent notifications" do

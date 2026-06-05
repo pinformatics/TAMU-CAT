@@ -107,6 +107,7 @@
                             class: 'c-select u-w-full',
                             data: {
                               user_id: user.id,
+                              user_label: user.full_name.presence || user.email,
                               current_role: user.role || 'student',
                               original_role: user.role || 'student'
                             },
@@ -129,6 +130,14 @@
           <% end %>
         </tbody>
       </table>
+    </div>
+
+    <div class="c-callout c-callout--warning u-stack u-stack--sm u-mt-lg" id="admin-role-warning" role="alert" style="display: none;">
+      <div>
+        <div class="c-callout__title">Admin role changes require confirmation</div>
+        <p class="c-help">Granting admin access allows a member to manage users, surveys, imports, exports, program settings, and sensitive student records. Removing admin access immediately takes those permissions away.</p>
+      </div>
+      <p class="c-help" id="admin-role-warning-list"></p>
     </div>
 
     <div class="c-toolbar u-mt-lg">
@@ -174,6 +183,8 @@
       const saveButton = document.getElementById('save-changes-btn');
       const changesSummary = document.getElementById('changes-summary');
       const changesCount = document.getElementById('role-changes-count');
+      const adminRoleWarning = document.getElementById('admin-role-warning');
+      const adminRoleWarningList = document.getElementById('admin-role-warning-list');
       const batchRemoveForm = document.getElementById('batch-remove-form');
       const batchRemoveInput = document.getElementById('batch-remove-user-ids');
       const batchRemoveButton = document.getElementById('delete-selected-btn');
@@ -184,6 +195,37 @@
       }
 
       const pendingChanges = {};
+
+      function titleizeRole(role) {
+        if (!role) return 'Student';
+        return role.charAt(0).toUpperCase() + role.slice(1);
+      }
+
+      function adminRoleChanges() {
+        return Object.values(pendingChanges).filter(change => change.from === 'admin' || change.to === 'admin');
+      }
+
+      function adminRoleChangeSummary(change) {
+        if (change.to === 'admin') {
+          return `Grant admin access to ${change.name}`;
+        }
+        if (change.from === 'admin') {
+          return `Remove admin access from ${change.name}`;
+        }
+
+        return `${change.name}: ${titleizeRole(change.from)} to ${titleizeRole(change.to)}`;
+      }
+
+      function adminRoleConfirmationMessage(changes) {
+        const lines = changes.map(adminRoleChangeSummary).join('\n');
+        return [
+          'Review this sensitive permission change before saving.',
+          '',
+          lines,
+          '',
+          'Admins can manage users, surveys, imports, exports, program configuration, and student-level records.'
+        ].join('\n');
+      }
 
       function findIndicator(userId) {
         return form.querySelector(`.c-change-indicator[data-user-id="${userId}"]`);
@@ -205,6 +247,17 @@
           saveButton.style.cursor = 'not-allowed';
           changesSummary.style.display = 'none';
           saveButton.removeAttribute('data-has-changes');
+        }
+
+        const sensitiveChanges = adminRoleChanges();
+        if (adminRoleWarning && adminRoleWarningList) {
+          if (sensitiveChanges.length > 0) {
+            adminRoleWarning.style.display = 'block';
+            adminRoleWarningList.textContent = sensitiveChanges.map(adminRoleChangeSummary).join(' | ');
+          } else {
+            adminRoleWarning.style.display = 'none';
+            adminRoleWarningList.textContent = '';
+          }
         }
       }
 
@@ -262,7 +315,11 @@
               indicator.className = 'c-change-indicator';
             }
           } else {
-            pendingChanges[userId] = selectedRole;
+            pendingChanges[userId] = {
+              from: originalRole,
+              to: selectedRole,
+              name: select.dataset.userLabel || `User #${userId}`
+            };
             badge.textContent = selectedRole.toUpperCase();
             badge.className = `c-role-badge c-role-badge--${selectedRole || 'student'} inline-flex js-role-badge`;
             if (indicator) {
@@ -284,6 +341,37 @@
             wrapper.style.display = wrapper.style.display === 'none' ? 'block' : 'none';
           }
         });
+      });
+
+      form.addEventListener('submit', async event => {
+        if (form.dataset.adminRoleConfirmed === 'true') {
+          form.dataset.adminRoleConfirmed = 'false';
+          return;
+        }
+
+        const sensitiveChanges = adminRoleChanges();
+        if (sensitiveChanges.length === 0) {
+          return;
+        }
+
+        event.preventDefault();
+
+        const message = adminRoleConfirmationMessage(sensitiveChanges);
+        const confirmed = window.AppModal && typeof window.AppModal.confirm === 'function'
+          ? await window.AppModal.confirm({
+              title: 'Confirm admin role change',
+              message,
+              confirmLabel: 'Save role changes',
+              cancelLabel: 'Keep reviewing'
+            })
+          : window.confirm(message);
+
+        if (!confirmed) {
+          return;
+        }
+
+        form.dataset.adminRoleConfirmed = 'true';
+        form.requestSubmit(saveButton);
       });
 
       memberCheckboxes.forEach(checkbox => {

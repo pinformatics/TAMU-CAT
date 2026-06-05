@@ -1,7 +1,7 @@
 module Advisors
   class StudentsController < BaseController
     def index
-      redirect_to student_records_path
+      redirect_to survey_records_path
     end
 
     def show
@@ -15,7 +15,7 @@ module Advisors
       valid_keys = Student.tracks.keys # => ["residential", "executive"]
 
       unless incoming && valid_keys.include?(incoming)
-        redirect_back fallback_location: student_records_path,
+        redirect_back fallback_location: survey_records_path,
                       alert: "We could not change the track because the student's current track is missing or cannot be determined."
         return
       end
@@ -33,7 +33,7 @@ module Advisors
                       alert: @student.errors.full_messages.to_sentence
       end
     rescue ActiveRecord::RecordNotFound
-      redirect_back fallback_location: student_records_path,
+      redirect_back fallback_location: survey_records_path,
                     alert: "Student not found."
     end
 

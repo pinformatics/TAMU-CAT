@@ -15,7 +15,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     @temp_paths.each { |path| FileUtils.rm_f(path) }
   end
 
-  test "direct competency xlsx uses mastery points as competency level and result as course target" do
+  test "direct competency xlsx uses result as competency level and mastery points as course target" do
     path = build_direct_competency_workbook(
       sheet_name: "PHPM_790_001",
       rows: [
@@ -46,13 +46,13 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "PHPM-790-001", evidence.course_code
     assert_equal "", evidence.assignment_name
     assert_equal "Legal & Ethical Bases for Health Services and Health Systems", evidence.competency_title
-    assert_equal 3, evidence.mapped_level
-    assert_equal 5, evidence.course_target_level
-    assert_in_delta 3.0, evidence.raw_grade.to_f, 0.001
-    assert_equal 3, rating.aggregated_level
+    assert_equal 5, evidence.mapped_level
+    assert_equal 3, evidence.course_target_level
+    assert_in_delta 5.0, evidence.raw_grade.to_f, 0.001
+    assert_equal 5, rating.aggregated_level
   end
 
-  test "direct competency result targets never replace mastery-derived competency ratings" do
+  test "direct competency mastery targets never replace result-derived competency ratings" do
     path = build_direct_competency_workbook(
       sheet_name: "PHPM_790_001",
       rows: [
@@ -78,9 +78,9 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     rating = batch.grade_competency_ratings.first
 
     assert_equal "completed", batch.status
-    assert_equal 5, evidence.mapped_level
-    assert_equal 2, evidence.course_target_level
-    assert_equal 5, rating.aggregated_level
+    assert_equal 2, evidence.mapped_level
+    assert_equal 5, evidence.course_target_level
+    assert_equal 2, rating.aggregated_level
   end
 
   test "canvas direct competency workbook imports primary format and ignores hpmc columns" do
@@ -161,10 +161,10 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "completed", batch.status
     assert_equal [ "PHPM-633-700" ], evidences.map(&:course_code).uniq
     assert_equal [ "Legal & Ethical Bases for Health Services and Health Systems", "Policy Analysis" ], evidences.map(&:competency_title)
-    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.mapped_level
-    assert_equal 5, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.course_target_level
-    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.mapped_level
-    assert_equal 4, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.course_target_level
+    assert_equal 5, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.mapped_level
+    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Legal & Ethical Bases for Health Services and Health Systems" }.course_target_level
+    assert_equal 4, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.mapped_level
+    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.course_target_level
     assert_equal 0, evidences.count { |evidence| evidence.competency_title.include?("HPMC") }
   end
 
@@ -335,7 +335,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_includes issue["message"], "Student UIN must be exactly 9 digits"
   end
 
-  test "direct competency csv flags invalid mastery values as typed review issues" do
+  test "direct competency csv flags invalid mastery target values as typed review issues" do
     path = build_direct_competency_csv(
       headers: [
         "Student name",
@@ -359,13 +359,13 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     ).call
 
     file = batch.reload.grade_import_files.first
-    invalid_issue = file.parse_errors.find { |error| error["message"].include?("assessed level") }
+    invalid_issue = file.parse_errors.find { |error| error["message"].include?("course target") }
 
     assert_equal "completed_with_errors", batch.status
     assert_equal 1, file.imported_rows
     assert_equal 1, file.error_rows
     assert_equal "invalid_value", invalid_issue["type"]
-    assert_includes invalid_issue["message"], "Policy Analysis assessed level"
+    assert_includes invalid_issue["message"], "Policy Analysis course target"
     assert_equal "five", invalid_issue["value"]
     assert_equal "whole number 1-5", invalid_issue["expected"]
     assert_equal "five", invalid_issue["received"]
@@ -412,12 +412,12 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert batch.needs_admin_approval?
   end
 
-  test "direct competency rows without numeric identifiers are staged for name-based reconciliation" do
+  test "direct competency rows without numeric identifiers match unique student names" do
     path = build_direct_competency_workbook(
       sheet_name: "PHPM_790_001",
       rows: [
         [
-          @student.user.name,
+          "User, Student M.",
           nil,
           nil,
           4,
@@ -428,7 +428,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
 
     batch = create_batch
 
-    assert_difference -> { GradeImportPendingRow.pending_student_match.count }, 1 do
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
       GradeImports::BatchProcessor.new(
         batch: batch,
         files: [ uploaded_excel_file(path, "direct_competency_missing_ids.xlsx") ],
@@ -436,18 +436,11 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
       ).call
     end
 
-    pending = batch.reload.grade_import_pending_rows.first
-    assert_equal "student_name", pending.student_identifier_type
-    assert_equal @student.user.name, pending.student_name
-    assert_equal 3, pending.mapped_level
-    assert_equal 4, pending.course_target_level
-
-    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
-      assert_equal 1, GradeImports::PendingRowReconciler.call(student: @student)
-    end
-
-    assert_equal "reconciled", pending.reload.status
-    assert_equal @student.student_id, pending.matched_student_id
+    evidence = batch.reload.grade_competency_evidences.first
+    assert_equal @student.student_id, evidence.student_id
+    assert_equal "User, Student M.", evidence.metadata["student_name"]
+    assert_equal 4, evidence.mapped_level
+    assert_equal 3, evidence.course_target_level
   end
 
   test "canvas workbook with mapping sheet creates evidence and ratings" do
@@ -476,6 +469,35 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "Policy Analysis", evidence.competency_title
     assert_equal 5, evidence.mapped_level
     assert_equal 1, batch.grade_competency_ratings.count
+  end
+
+  test "canvas workbook falls back to unique student name when ids are blank" do
+    path = build_canvas_workbook(
+      grade_sheet_name: "PHPM_791_002",
+      course_code: "PHPM-791-002",
+      rows: [
+        [ "User, Student M.", nil, nil, nil, "PHPM-791-002", 94 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      assert_no_difference -> { GradeImportPendingRow.pending_student_match.count } do
+        GradeImports::BatchProcessor.new(
+          batch: batch,
+          files: [ uploaded_excel_file(path, "canvas_mapping_name_fallback.xlsx") ],
+          dry_run: true
+        ).call
+      end
+    end
+
+    evidence = batch.reload.grade_competency_evidences.first
+
+    assert_equal "completed", batch.status
+    assert_equal @student.student_id, evidence.student_id
+    assert_equal "User, Student M.", evidence.metadata["student_name"]
+    assert_equal "PHPM-791-002", evidence.course_code
   end
 
   test "canvas import normalizes inconsistent course codes before matching and storing evidence" do
@@ -692,7 +714,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 1, file.imported_rows
     assert_equal 1, file.error_rows
     assert_equal 1, batch.grade_competency_evidences.count
-    assert_includes file.parse_errors.first["message"], "course target must be an integer between 1 and 5"
+    assert_includes file.parse_errors.first["message"], "assessed level must be an integer between 1 and 5"
   end
 
   test "replace existing files reprocesses corrected upload without duplicating evidence" do
@@ -762,6 +784,869 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 2, file.imported_rows
   end
 
+  test "narrow grade workbook partially imports valid rows and reports row level issues" do
+    path = build_narrow_grade_workbook(
+      course_code: "PHPM-633-700",
+      rows: [
+        [ nil, nil, nil, nil, nil ],
+        [ @student.uin, @student.user.email, nil, 95, "PHPM-633-700" ],
+        [ @student.uin, @student.user.email, "Case Brief", "not a score", "PHPM-633-700" ],
+        [ @student.uin, @student.user.email, "Unmapped Assignment", 95, "PHPM-633-700" ],
+        [ "12345", "invalid-uin@example.edu", "Case Brief", 95, "PHPM-633-700" ],
+        [ "999888777", "pending@example.edu", "Case Brief", 95, "PHPM-633-700" ],
+        [ @student.uin, @student.user.email, "Case Brief", 95, "PHPM-633-700" ],
+        [ @student.uin, @student.user.email, "Case Brief", 94, "PHPM-633-700" ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "narrow_grade_import.xlsx") ],
+      dry_run: true
+    ).call
+
+    file = batch.reload.grade_import_files.first
+    debug = file.parsed_content.fetch("grade_sheet_debug")
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal "narrow", file.parsed_content["mode"]
+    assert_equal 2, file.imported_rows
+    assert_equal 1, file.pending_rows
+    assert_equal 4, file.error_rows
+    assert_equal 2, batch.grade_competency_evidences.count
+    assert_equal 1, batch.grade_import_pending_rows.pending_student_match.count
+    assert_equal 8, debug["rows_scanned"]
+    assert_equal 1, debug["rows_skipped_blank"]
+    assert_equal 1, debug["matched_student_count"]
+    assert_equal 1, debug["pending_student_count"]
+    assert_equal 1, debug["duplicate_warning_count"]
+    assert_includes file.parse_errors.map { |error| error["message"] }, "assignment_name is required"
+    assert_includes file.parse_errors.map { |error| error["message"] }, "grade is not numeric"
+    assert file.parse_errors.any? { |error| error["type"] == "invalid_uin" }
+  end
+
+  test "batch processor helper branches normalize headers course codes and mapping decisions" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    direct_headers = [
+      "Student SIS ID",
+      "Public and Population Health Assessment ASSESSED LEVEL",
+      "Public and Population Health Assessment COURSE TARGET",
+      "HPMC competencies > Should Not Import result"
+    ]
+
+    mapping = processor.send(:direct_competency_column_mapping, direct_headers)
+
+    assert_equal 1, mapping[:columns].size
+    assert_empty mapping[:errors]
+    assert_equal "Public and Population Health Assessment", mapping[:columns].first[:competency_title]
+    assert_equal "Public and Population Health Assessment COURSE TARGET", mapping[:columns].first[:target_header]
+    assert_equal "Public and Population Health Assessment", processor.send(:extract_direct_competency_title, "EMHA Competencies > Public and Population Health Assessment result")
+    assert_equal "", processor.send(:extract_direct_competency_title, "Plain Header")
+    assert_equal "PHPM-633-700", processor.send(:normalize_course_code, "Outcomes-26_SPRING_PHPM_633_700__HEALTH_LAW__ETHICS.csv")
+    refute processor.send(:direct_competency_header?, "hpmc_competencies_ignore_me_result")
+    assert processor.send(:direct_competency_header?, "public_and_population_health_assessment_assessed_level")
+  end
+
+  test "canvas identifier fallbacks handle shifted headers and student name only rows" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    shifted_headers = [ "Student", "Canvas Key", "Mystery", "Ignored", "Section" ]
+    shifted_normalized = shifted_headers.map { |header| processor.send(:normalize_key, header) }
+    explicit_headers = [ "Student", "ID", "SIS User ID", "SIS Login ID", "Section" ]
+    explicit_normalized = explicit_headers.map { |header| processor.send(:normalize_key, header) }
+
+    assert_equal 1, processor.send(:fallback_student_identifier_index, [ "student", "id" ])
+    assert_equal 2, processor.send(:guess_canvas_identifier_position, shifted_headers, shifted_normalized)
+    assert_equal 2, processor.send(:guess_canvas_identifier_position, explicit_headers, explicit_normalized)
+    assert processor.send(:canvas_non_data_row?, [ "Manual Posting", nil, nil ], id_index: { student_identifier: 1, student_name: 0 })
+    assert processor.send(:canvas_non_data_row?, [ "", "", "" ], id_index: { student_identifier: 1, student_name: 0 })
+    refute processor.send(:canvas_non_data_row?, [ "User, Student M.", "", @student.uin ], id_index: { student_identifier: 2, student_name: 0 })
+  end
+
+  test "mapping helpers cover regex failures percent bounds booleans and invalid ranges" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    regex_mapping = {
+      assignment_match_type: "regex",
+      assignment_match_value: "(",
+      competency_title: "Policy Analysis",
+      score_basis: "points",
+      min_grade: BigDecimal("0"),
+      max_grade: BigDecimal("100"),
+      competency_level: 3,
+      course_code: "PHPM-633"
+    }
+    percent_mapping = regex_mapping.merge(
+      assignment_match_type: "exact",
+      assignment_match_value: "Case Brief",
+      score_basis: "percent",
+      min_grade: BigDecimal("80"),
+      max_grade: BigDecimal("100")
+    )
+
+    refute processor.send(:assignment_matches?, mapping: regex_mapping, assignment_name: "Case Brief")
+    assert_empty processor.send(:applied_mappings, assignment_name: "Case Brief", course_code: "PHPM-633", raw_points: BigDecimal("4"), points_possible: nil, mapping_rows: [ percent_mapping ])
+    assert_equal 100, processor.send(:percent_score, raw_points: BigDecimal("120"), points_possible: BigDecimal("100")).to_i
+    assert_nil processor.send(:percent_score, raw_points: BigDecimal("10"), points_possible: BigDecimal("0"))
+    assert_equal false, processor.send(:parse_boolean, "no")
+    assert_nil processor.send(:parse_boolean, "maybe")
+
+    warnings = processor.send(:validate_mapping_ranges, [
+      percent_mapping.merge(source_row_number: 2, min_grade: BigDecimal("0"), max_grade: BigDecimal("49.99"), competency_level: 1),
+      percent_mapping.merge(source_row_number: 3, min_grade: BigDecimal("60"), max_grade: BigDecimal("100"), competency_level: 2)
+    ])
+
+    assert warnings.any? { |warning| warning[:message].include?("gap") }
+  end
+
+  test "unsupported upload records failed file and failed batch summary" do
+    path = Tempfile.new([ "unsupported_import", ".txt" ]).tap do |file|
+      file.write("not a spreadsheet")
+      file.close
+      @temp_paths << file.path
+    end.path
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_text_file(path, "unsupported.txt") ],
+      dry_run: true
+    ).call
+
+    file = batch.reload.grade_import_files.first
+
+    assert_equal "failed", batch.status
+    assert_equal 1, batch.failed_files
+    assert_equal "failed", file.status
+    assert_equal "file", file.parse_errors.first["type"]
+    assert_includes file.parse_errors.first["message"], "Unsupported file type"
+    assert_equal false, batch.summary.dig("preview_validation", "commit_ready")
+  end
+
+  test "batch status is completed with errors when one file succeeds and one file fails" do
+    valid_path = build_direct_competency_workbook(
+      sheet_name: "PHPM_790_001",
+      rows: [ [ @student.user.name, @student.student_id, @student.uin, 5, 3 ] ]
+    )
+    invalid_path = Tempfile.new([ "bad_import", ".txt" ]).tap do |file|
+      file.write("bad")
+      file.close
+      @temp_paths << file.path
+    end.path
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [
+        uploaded_excel_file(valid_path, "valid_direct.xlsx"),
+        uploaded_text_file(invalid_path, "bad.txt")
+      ],
+      dry_run: true
+    ).call
+
+    assert_equal "completed_with_errors", batch.reload.status
+    assert_equal 1, batch.processed_files
+    assert_equal 1, batch.failed_files
+    assert_equal 1, batch.grade_competency_evidences.count
+  end
+
+  test "header and student lookup helpers cover blank cache and failure paths" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    aliases = { name: %w[name full_name], score: %w[score] }
+    blank_sheet = fake_sheet([ [] ])
+    missing_sheet = fake_sheet([ [ "name" ] ])
+    header_sheet = fake_sheet([ [ "ignored" ], [ "Full Name", "Score" ], [ "Student", "5" ] ])
+
+    assert_raises(RuntimeError) { processor.send(:extract_header_index!, blank_sheet, aliases, required: %i[name]) }
+    assert_raises(RuntimeError) { processor.send(:extract_header_index!, missing_sheet, aliases, required: %i[name score]) }
+    assert_equal({ name: 0 }, processor.send(:extract_header_index!, missing_sheet, aliases, required: %i[name]))
+
+    index, row_number = processor.send(:extract_header_index_from_rows!, header_sheet, aliases, required: %i[name score], max_probe: 3)
+    assert_equal 2, row_number
+    assert_equal({ name: 0, score: 1 }, index)
+    assert_equal [ { name: 0 }, 1 ], processor.send(:resolve_header_index_and_row, nil, { name: 0 }, aliases: aliases, required: %i[name])
+    assert_raises(RuntimeError) { processor.send(:extract_header_index_from_rows!, fake_sheet([ [ "nothing" ] ]), aliases, required: %i[name], max_probe: 1) }
+
+    assert_nil processor.send(:find_student, { student_uin: nil, student_email: nil })
+    assert_equal @student, processor.send(:find_student, { student_uin: nil, student_email: @student.user.email.upcase })
+    assert_equal @student, processor.send(:find_student, { student_uin: nil, student_email: @student.user.email.upcase })
+  end
+
+  test "sheet detection helpers return false or diagnostics for malformed sheets" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    bad_sheet = fake_sheet([ [ nil, nil ], [ nil, nil ] ])
+    raising_sheet = Object.new
+    def raising_sheet.last_row = raise "broken"
+
+    assert_equal [ 1, [] ], processor.send(:detect_any_header_row, bad_sheet)
+    refute processor.send(:mapping_sheet_token_match?, raising_sheet)
+    refute processor.send(:grade_sheet_token_match?, raising_sheet)
+    refute processor.send(:grade_sheet?, bad_sheet)
+    refute processor.send(:canvas_grade_sheet?, bad_sheet)
+    refute processor.send(:canvas_identifier_present?, bad_sheet)
+    assert_raises(RuntimeError) { processor.send(:detect_canvas_header_row, bad_sheet) }
+    assert_nil processor.send(:detect_points_possible_row, fake_sheet([ [ "Student" ], [ "No totals" ] ]), start_row: 2)
+  end
+
+  test "canvas and identifier helpers cover nil fallback and numeric student id paths" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+
+    assert_nil processor.send(:fallback_student_identifier_index, [])
+    assert_equal 1, processor.send(:fallback_student_identifier_index, [ "course", "id" ])
+    assert_nil processor.send(:guess_canvas_identifier_position, [ "Name", "Score" ], [ "name", "score" ])
+    assert_nil processor.send(:find_student_by_canvas_identifier, "not numeric")
+    assert_equal @student, processor.send(:find_student_by_canvas_identifier, @student.student_id.to_s)
+    assert_equal "abc.1", processor.send(:normalize_numeric_identifier, "abc.1")
+    assert_equal "42", processor.send(:normalize_numeric_identifier, "42.0")
+    assert_nil processor.send(:parse_integer, Object.new)
+    assert_nil processor.send(:parse_level_value, "3.5")
+  end
+
+  test "processor helper fallbacks cover blank headers names course offerings and identifiers" do
+    batch = create_batch
+    processor = GradeImports::BatchProcessor.new(batch: batch, files: [], dry_run: true)
+    aliases = { name: %w[name], score: %w[score] }
+    sheet = fake_sheet([ [ "ignored" ], [ "Name", "Score" ], [ "Student", "5" ] ])
+
+    assert_equal [ { name: 0, score: 1 }, 2 ], processor.send(:resolve_header_index_and_row, sheet, { index: { name: 0, score: 1 }, row: "2" }, aliases: aliases, required: %i[name score])
+    assert_nil processor.send(:parse_decimal, "")
+    assert_nil processor.send(:parse_decimal, nil)
+    assert_nil processor.send(:parse_integer, "")
+    assert_nil processor.send(:parse_level_value, "")
+
+    mappings = [
+      { course_code: "PHPM-601", assignment_match_value: "A" },
+      { course_code: "PHPM-633", assignment_match_value: "B" }
+    ]
+    assert_equal mappings, processor.send(:filter_by_course_code, mappings, "")
+    assert_equal [ mappings.first ], processor.send(:filter_by_course_code, mappings, "PHPM 601")
+    assert_equal mappings, processor.send(:filter_by_course_code, mappings, "PHPM 999")
+
+    grade_file = batch.grade_import_files.create!(file_name: "blank-course.csv", file_checksum: "blank-course-#{SecureRandom.hex(4)}", status: "pending")
+    assert_nil processor.send(:course_offering_for, course_code: "", grade_file: grade_file)
+    CourseOffering.stub(:table_exists?, false) do
+      assert_nil processor.send(:course_offering_for, course_code: "PHPM-601", grade_file: grade_file)
+    end
+
+    assert_nil processor.send(:find_student_by_uin, "")
+    assert_nil processor.send(:find_student_by_canvas_identifier, "")
+    assert_nil processor.send(:find_student_by_canvas_identifier, "not numeric")
+    assert_equal @student, processor.send(:find_student_by_canvas_identifier, @student.uin)
+    assert_equal @student, processor.send(:find_student_by_name, @student.user.name)
+    assert_equal @student, processor.send(:find_student_by_name, @student.user.name)
+    assert_nil processor.send(:find_student_by_name, "")
+    assert_equal "onename:onename", processor.send(:person_name_signature, "OneName")
+    assert_equal "student:user", processor.send(:person_name_signature, "User, Student M.")
+    assert_equal [ "student", "user" ], processor.send(:normalized_name_words, "Student-User").first(2)
+    assert processor.send(:invalid_uin?, "123")
+    refute processor.send(:invalid_uin?, @student.uin)
+    refute processor.send(:canvas_identifier_requires_uin?, [ "sis_user_id" ], nil)
+    assert processor.send(:canvas_identifier_requires_uin?, [ "sis_user_id" ], 0)
+  end
+
+  test "mapping range validation reports overlaps and clean contiguous ranges" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    base = {
+      assignment_match_type: "exact",
+      assignment_match_value: "Case Brief",
+      course_code: "PHPM-633",
+      competency_title: "Policy Analysis",
+      score_basis: "points"
+    }
+    overlap_rows = [
+      base.merge(source_row_number: 2, min_grade: BigDecimal("0"), max_grade: BigDecimal("75"), competency_level: 1),
+      base.merge(source_row_number: 3, min_grade: BigDecimal("70"), max_grade: BigDecimal("100"), competency_level: 2)
+    ]
+    clean_rows = [
+      base.merge(source_row_number: 2, min_grade: BigDecimal("0"), max_grade: BigDecimal("79.99"), competency_level: 1),
+      base.merge(source_row_number: 3, min_grade: BigDecimal("80"), max_grade: BigDecimal("100"), competency_level: 2)
+    ]
+
+    assert processor.send(:validate_mapping_ranges, overlap_rows).any? { |warning| warning[:message].include?("overlaps") }
+    assert_empty processor.send(:validate_mapping_ranges, clean_rows)
+  end
+
+  test "direct competency row processor handles blank identifier pending duplicate and missing value branches" do
+    batch = create_batch
+    grade_file = batch.grade_import_files.create!(
+      file_name: "direct-row-branches.csv",
+      file_checksum: "direct-row-branches-#{SecureRandom.hex(4)}",
+      status: "pending"
+    )
+    processor = GradeImports::BatchProcessor.new(batch: batch, files: [], dry_run: true)
+    headers = [
+      "Student name",
+      "Student ID",
+      "Student SIS ID",
+      "Policy Analysis COURSE TARGET",
+      "Policy Analysis ASSESSED LEVEL"
+    ]
+    blank_row = headers.index_with { nil }
+    rows = {
+      2 => blank_row,
+      3 => {
+        "Student name" => "",
+        "Student ID" => "",
+        "Student SIS ID" => "",
+        "Policy Analysis COURSE TARGET" => 4,
+        "Policy Analysis ASSESSED LEVEL" => 3
+      },
+      4 => {
+        "Student name" => @student.user.name,
+        "Student ID" => "",
+        "Student SIS ID" => "",
+        "Policy Analysis COURSE TARGET" => 4,
+        "Policy Analysis ASSESSED LEVEL" => 4
+      },
+      5 => {
+        "Student name" => @student.user.name,
+        "Student ID" => "",
+        "Student SIS ID" => "",
+        "Policy Analysis COURSE TARGET" => 4,
+        "Policy Analysis ASSESSED LEVEL" => 5
+      },
+      6 => {
+        "Student name" => @student.user.name,
+        "Student ID" => "",
+        "Student SIS ID" => "",
+        "Policy Analysis COURSE TARGET" => 4,
+        "Policy Analysis ASSESSED LEVEL" => ""
+      },
+      7 => {
+        "Student name" => @student.user.name,
+        "Student ID" => "",
+        "Student SIS ID" => @student.uin,
+        "Policy Analysis COURSE TARGET" => "",
+        "Policy Analysis ASSESSED LEVEL" => ""
+      },
+      8 => {
+        "Student name" => @student.user.name,
+        "Student ID" => "",
+        "Student SIS ID" => "12345",
+        "Policy Analysis COURSE TARGET" => 4,
+        "Policy Analysis ASSESSED LEVEL" => 3
+      },
+      9 => {
+        "Student name" => "Unmatched Import Student",
+        "Student ID" => "",
+        "Student SIS ID" => "",
+        "Policy Analysis COURSE TARGET" => 3,
+        "Policy Analysis ASSESSED LEVEL" => 2
+      }
+    }
+
+    result = processor.send(
+      :process_direct_competency_rows!,
+      grade_file: grade_file,
+      rows: rows,
+      headers: headers,
+      source_name: "PHPM_601",
+      fallback_source_name: "fallback.csv"
+    )
+    messages = result[:parse_errors].map { |error| error[:message] || error["message"] }
+
+    assert_equal "processed", result[:status]
+    assert_equal 2, result[:imported_rows]
+    assert_equal 1, result[:pending_rows]
+    assert_equal 4, result[:error_rows]
+    assert_equal 1, result.dig(:parsed_content, :grade_sheet_debug, :rows_skipped_blank)
+    assert_equal 1, result.dig(:parsed_content, :grade_sheet_debug, :pending_student_count)
+    assert_equal 1, result.dig(:parsed_content, :grade_sheet_debug, :duplicate_warning_count)
+    assert messages.any? { |message| message.include?("Student SIS ID, Student ID, or Student name is required") }
+    assert messages.any? { |message| message.include?("Student UIN must be exactly 9 digits") }
+    assert messages.any? { |message| message.include?("No direct competency result values") }
+    assert_equal "student_name", batch.grade_import_pending_rows.first.student_identifier_type
+  end
+
+  test "mapping parser reports malformed rows and keeps valid active mappings" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    sheet = fake_sheet([
+      [ "assignment_match_type", "assignment_match_value", "course_code", "competency_title", "score_basis", "min_grade", "max_grade", "competency_level", "active" ],
+      [ nil, nil, nil, nil, nil, nil, nil, nil, nil ],
+      [ "exact", "Case", "PHPM-601", "Not A Competency", "points", 0, 100, 3, true ],
+      [ "exact", "Case", "PHPM-601", "Policy Analysis", "points", "low", 100, 3, true ],
+      [ "exact", "Case", "PHPM-601", "Policy Analysis", "points", 0, 100, 9, true ],
+      [ "exact", "Case", "PHPM-601", "Policy Analysis", "points", 90, 80, 3, true ],
+      [ "exact", "", "PHPM-601", "Policy Analysis", "points", 0, 100, 3, true ],
+      [ "exact", "Inactive", "PHPM-601", "Policy Analysis", "points", 0, 100, 3, false ],
+      [ "exact", "Bad Basis", "PHPM-601", "Policy Analysis", "raw", 0, 100, 3, true ],
+      [ "wildcard", "Bad Match", "PHPM-601", "Policy Analysis", "points", 0, 100, 3, true ],
+      [ "", "Default Match", "PHPM-601", "Policy Analysis", "", 0, 100, 3, true ]
+    ])
+    header_index = {
+      index: {
+        assignment_match_type: 0,
+        assignment_match_value: 1,
+        course_code: 2,
+        competency_title: 3,
+        score_basis: 4,
+        min_grade: 5,
+        max_grade: 6,
+        competency_level: 7,
+        active: 8
+      },
+      row: 1
+    }
+
+    mappings, errors, warnings = processor.send(:parse_mapping_rows, sheet, header_index)
+    error_messages = errors.map { |error| error[:message] || error["message"] }
+    error_types = errors.map { |error| error[:type] || error["type"] }
+
+    assert_equal 1, mappings.size
+    assert_equal "exact", mappings.first[:assignment_match_type]
+    assert_equal "points", mappings.first[:score_basis]
+    assert_equal "PHPM-601", mappings.first[:course_code]
+    assert_empty warnings
+    assert error_messages.any? { |message| message.include?("min_grade and max_grade") }
+    assert error_messages.any? { |message| message.include?("competency_level") }
+    assert error_messages.any? { |message| message.include?("max_grade") }
+    assert error_messages.any? { |message| message.include?("assignment_match_value") }
+    assert error_messages.any? { |message| message.include?("score_basis") }
+    assert error_messages.any? { |message| message.include?("assignment_match_type") }
+
+    missing_sheet = fake_sheet([
+      [ "assignment_match_type", "assignment_match_value", "course_code", "competency_title", "score_basis", "min_grade", "max_grade", "competency_level", "active" ],
+      [ "exact", "Case", "PHPM-601", "Typo Competency", "points", 0, 100, 3, true ]
+    ])
+    processor.stub(:normalized_competency_title, "Bogus Competency") do
+      _missing_mappings, missing_errors, _missing_warnings = processor.send(:parse_mapping_rows, missing_sheet, header_index)
+      assert_includes missing_errors.map { |error| error[:type] || error["type"] }, "missing_competency_mapping"
+    end
+  end
+
+  test "sheet role resolver handles fallback and diagnostic branches" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    grade_sheet = fake_sheet([
+      [ "Student", "ID", "SIS User ID", "Section", "Final Project" ],
+      [ "Points Possible", nil, nil, nil, 100 ]
+    ])
+    mapping_sheet = fake_sheet([
+      [ "assignment_name", "competency_title", "min_grade", "max_grade", "competency_level" ]
+    ])
+    unknown_sheet = fake_sheet([
+      [ "Random", "Other" ],
+      [ "value", "value" ]
+    ])
+
+    workbook = fake_workbook("Grades" => grade_sheet, "Mapping" => mapping_sheet)
+    assert_equal [ "Grades", "Mapping" ], processor.send(:resolve_grade_and_mapping_sheets!, workbook)
+
+    workbook_with_missed_mapping = fake_workbook("Grades" => grade_sheet, "AlmostMapping" => unknown_sheet)
+    assert_equal [ "Grades", "AlmostMapping" ], processor.send(:resolve_grade_and_mapping_sheets!, workbook_with_missed_mapping)
+
+    swapped_grade, swapped_mapping = processor.send(:enforce_sheet_roles!, grade_sheet: mapping_sheet, mapping_sheet: grade_sheet)
+    assert_equal grade_sheet, swapped_grade
+    assert_equal mapping_sheet, swapped_mapping
+
+    bad_workbook = fake_workbook("Unknown" => unknown_sheet)
+    error = assert_raises(RuntimeError) { processor.send(:resolve_grade_and_mapping_sheets!, bad_workbook) }
+    assert_includes error.message, "Could not identify grade/mapping sheets"
+    assert_includes error.message, "Diagnostics"
+  end
+
+  test "canvas identifier fallback helpers cover inferred positions" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+
+    assert_nil processor.send(:fallback_student_identifier_index, [ "name", "email" ])
+    assert_equal 1, processor.send(:fallback_student_identifier_index, [ "student", "id" ])
+    assert_equal 2, processor.send(:guess_canvas_identifier_position, [ "Student", "ID", "SIS User ID" ], [ "student", "id", "sis_user_id" ])
+    assert_nil processor.send(:guess_canvas_identifier_position, [ "Name", "Email" ], [ "name", "email" ])
+  end
+
+  test "direct competency helpers report missing targets unknown titles and labels" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    headers = [
+      "Student name",
+      "Student UIN",
+      "Mystery Competency result",
+      "Communication result",
+      "Communication mastery points"
+    ]
+
+    mapping = processor.send(:direct_competency_column_mapping, headers)
+    messages = mapping[:errors].map { |error| error[:message] }
+
+    assert_equal [ "Communication" ], mapping[:columns].map { |column| column[:competency_title] }
+    assert messages.any? { |message| message.include?("Mystery Competency") }
+    assert_equal "Communication mastery points", processor.send(:direct_target_header_for, headers, "Communication result")
+    assert_nil processor.send(:direct_target_header_for, headers, "Plain Header")
+    assert_equal "Student name", processor.send(:direct_student_header_for, headers, :student_name)
+    assert_equal "Communication course target", processor.send(:direct_target_label, mapping[:columns].first)
+    assert_equal "Communication assessed level", processor.send(:direct_assessed_level_label, mapping[:columns].first)
+
+    missing_target = processor.send(:direct_competency_column_mapping, [ "Policy Analysis result" ])
+    assert missing_target[:errors].any? { |error| error[:message].include?("Missing mastery points") }
+  end
+
+  test "course code filtering and mapping helpers cover blank exact fallback and match types" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    base = {
+      assignment_match_value: "Case",
+      competency_title: "Policy Analysis",
+      score_basis: "points",
+      min_grade: BigDecimal("0"),
+      max_grade: BigDecimal("100"),
+      competency_level: 3
+    }
+    exact_mapping = base.merge(assignment_match_type: "exact", course_code: "PHPM-601")
+    other_mapping = base.merge(assignment_match_type: "contains", assignment_match_value: "Lab", course_code: "PHPM-602")
+    regex_mapping = base.merge(assignment_match_type: "regex", assignment_match_value: "Case\\s+\\d+", course_code: nil)
+
+    assert_equal [ exact_mapping, other_mapping ], processor.send(:filter_by_course_code, [ exact_mapping, other_mapping ], nil)
+    assert_equal [ exact_mapping ], processor.send(:filter_by_course_code, [ exact_mapping, other_mapping ], "PHPM 601")
+    assert_equal [ exact_mapping, other_mapping ], processor.send(:filter_by_course_code, [ exact_mapping, other_mapping ], "PHPM-999")
+
+    assert processor.send(:assignment_matches?, mapping: exact_mapping, assignment_name: "Case")
+    refute processor.send(:assignment_matches?, mapping: exact_mapping, assignment_name: "")
+    assert processor.send(:assignment_matches?, mapping: other_mapping, assignment_name: "Final Lab Report")
+    assert processor.send(:assignment_matches?, mapping: regex_mapping, assignment_name: "Case 12")
+  end
+
+  test "contains mapping groups handle empty inputs percent math and grouped labels" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    percent_rows = [
+      {
+        assignment_match_type: "contains",
+        assignment_match_value: "Lab",
+        competency_title: "Policy Analysis",
+        score_basis: "percent",
+        min_grade: BigDecimal("80"),
+        max_grade: BigDecimal("100"),
+        competency_level: 4,
+        course_code: "PHPM-601"
+      },
+      {
+        assignment_match_type: "contains",
+        assignment_match_value: "Lab",
+        competency_title: "Policy Analysis",
+        score_basis: "percent",
+        min_grade: BigDecimal("0"),
+        max_grade: BigDecimal("79.99"),
+        competency_level: 2,
+        course_code: "PHPM-601"
+      }
+    ]
+    assignments = [
+      { name: "Lab Part 1", raw_points: BigDecimal("8"), points_possible: BigDecimal("10") },
+      { name: "Lab Part 2", raw_points: BigDecimal("9"), points_possible: BigDecimal("10") },
+      { name: "Other", raw_points: BigDecimal("1"), points_possible: BigDecimal("10") }
+    ]
+
+    assert_equal [], processor.send(:applied_contains_mapping_groups, assignments: [], course_code: "PHPM-601", mapping_rows: percent_rows)
+    assert_equal [], processor.send(:applied_contains_mapping_groups, assignments: assignments, course_code: "PHPM-601", mapping_rows: [])
+
+    result = processor.send(:applied_contains_mapping_groups, assignments: assignments, course_code: "PHPM-601", mapping_rows: percent_rows)
+    assert_equal 1, result.size
+    assert_equal "Lab (2 assignments)", result.first[:assignment_name]
+    assert_equal 4, result.first[:mapping][:competency_level]
+    assert_equal [ "Lab Part 1", "Lab Part 2" ], result.first[:assignment_names]
+    assert_nil processor.send(:average_decimal, [])
+    assert_equal BigDecimal("2"), processor.send(:average_decimal, [ BigDecimal("1"), nil, BigDecimal("3") ])
+    assert_equal "Quiz (1 assignment)", processor.send(:grouped_assignment_name, "Quiz", 1)
+  end
+
+  test "identifier validation error payloads source keys and preview summaries cover optional fields" do
+    batch = create_batch
+    processor = GradeImports::BatchProcessor.new(batch: batch, files: [], dry_run: true)
+    grade_file = batch.grade_import_files.create!(
+      file_name: "summary.csv",
+      file_checksum: "summary-#{SecureRandom.hex(4)}",
+      status: "processed",
+      imported_rows: 2,
+      pending_rows: 1,
+      error_rows: 1,
+      parse_errors: [ { type: "mapping" }, { "type" => "invalid_uin" }, { message: "fallback" } ],
+      parsed_content: {
+        "duplicate_file_upload_count" => 2,
+        "grade_sheet_debug" => { "duplicate_warning_count" => 3 }
+      }
+    )
+
+    blank_level = processor.send(:invalid_direct_level_error, 7, label: "Policy target", column: "Policy target", value: "")
+    decimal_level = processor.send(:invalid_direct_level_error, 8, label: "Policy score", column: "Policy score", value: "6")
+    assert_equal "missing_value", blank_level[:type]
+    assert_equal "invalid_value", decimal_level[:type]
+    assert_includes decimal_level[:correction_hint], "proficiency scale"
+
+    assert_equal "blank", processor.send(:display_cell_value, nil)
+    assert_equal "abc", processor.send(:display_cell_value, " abc ")
+    assert_equal "abc:phpm_601:case:policy_analysis:9", processor.send(:build_source_key, identifier: "ABC", course_code: "PHPM 601", assignment_name: "Case", competency_title: "Policy Analysis", row_number: 9)
+    assert_equal "#{grade_file.file_checksum}:9:case:policy_analysis", processor.send(:build_import_fingerprint, grade_file: grade_file, row_number: 9, assignment_name: "Case", competency_title: "Policy Analysis")
+
+    summary = processor.send(:preview_validation_summary, batch.reload)
+    assert_equal true, summary[:commit_ready]
+    assert_equal 2, summary[:duplicate_file_uploads]
+    assert_equal 3, summary[:duplicate_rows]
+    assert_equal({ "mapping" => 1, "invalid_uin" => 1, "error" => 1 }, summary[:issue_type_counts])
+  end
+
+  test "canvas header and identifier helpers cover false true and scientific notation branches" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+
+    refute processor.send(:canvas_header_row?, [ "student", "section", "assignment" ], {})
+    refute processor.send(:canvas_header_row?, [ "student", "sis_user_id" ], { student_identifier: 1 })
+    assert processor.send(:canvas_header_row?, [ "student", "sis_user_id", "section", "assignment" ], { student_identifier: 1 })
+    assert_equal 2, processor.send(:preferred_student_identifier_index, [ "student", "id", "sis_user_id" ])
+    assert_equal 1, processor.send(:preferred_student_identifier_index, [ "student", "sis login id read only" ])
+    assert_nil processor.send(:preferred_student_identifier_index, [ "student", "email" ])
+    assert_equal "123456789", processor.send(:normalize_numeric_identifier, "1.23456789e8")
+    assert processor.send(:invalid_uin?, "123")
+    refute processor.send(:invalid_uin?, "123456789")
+    assert processor.send(:canvas_identifier_requires_uin?, [ "student", "sis_login_id" ], 1)
+    refute processor.send(:canvas_identifier_requires_uin?, [ "student", "id" ], 1)
+    refute processor.send(:canvas_identifier_requires_uin?, [ "student", "sis_login_id" ], nil)
+  end
+
+  test "canvas sheet processor covers skipped rows invalid identifiers pending matches and evidence creation" do
+    batch = create_batch
+    processor = GradeImports::BatchProcessor.new(batch: batch, files: [], dry_run: true)
+    grade_file = batch.grade_import_files.create!(
+      file_name: "PHPM-601 canvas.xlsx",
+      file_checksum: "canvas-#{SecureRandom.hex(4)}",
+      status: "pending"
+    )
+    sheet = named_fake_sheet(
+      "Canvas Grades",
+      [
+        [ "Student", "ID", "SIS User ID", "SIS Login ID", "Section", "Case Brief" ],
+        [ "Points Possible", nil, nil, nil, nil, 100 ],
+        [ nil, nil, nil, nil, nil, nil ],
+        [ "", "", "", "", "", 90 ],
+        [ "Manual Posting", nil, nil, nil, "manual_posting", 90 ],
+        [ @student.user.name, "100", "123", "123", "PHPM-601", 90 ],
+        [ "Missing, Student", nil, nil, nil, "PHPM-601", 90 ],
+        [ @student.user.name, "100", @student.uin, @student.uin, "PHPM-601", nil ],
+        [ @student.user.name, "100", @student.uin, @student.uin, "PHPM-601", 92 ]
+      ]
+    )
+    mapping_rows = [
+      {
+        assignment_match_type: "exact",
+        assignment_match_value: "Case Brief",
+        competency_title: "Policy Analysis",
+        score_basis: "points",
+        min_grade: BigDecimal("80"),
+        max_grade: BigDecimal("100"),
+        competency_level: 4,
+        course_code: "PHPM-601"
+      }
+    ]
+
+    imported_rows, pending_rows, error_rows, errors, debug = processor.send(
+      :process_canvas_grade_sheet!,
+      grade_file: grade_file,
+      grade_sheet: sheet,
+      mapping_rows: mapping_rows,
+      mapping_errors: [ { type: "mapping_warning_seed", message: "seed" } ],
+      mapping_warnings: [ { type: "range", message: "range warning" } ]
+    )
+
+    assert_equal 1, imported_rows
+    assert_equal 1, pending_rows
+    assert_equal 1, error_rows
+    assert_equal "canvas", debug[:mode]
+    assert_equal 6, debug[:rows_scanned]
+    assert_equal 2, debug[:rows_skipped_non_data]
+    assert_equal 1, debug[:unmatched_row_count]
+    assert_equal 1, debug[:pending_row_count]
+    assert_equal 1, debug[:matched_student_count]
+    assert errors.any? { |error| error[:type] == "invalid_uin" }
+    assert_equal @student.student_id, batch.grade_competency_evidences.first.student_id
+    assert_equal "Missing, Student", batch.grade_import_pending_rows.first.student_name
+  end
+
+  test "sheet role and row helper branches cover fallbacks and diagnostics" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    mapping_sheet = fake_sheet([
+      [ "assignment_name", "competency_title", "min_grade", "max_grade", "competency_level" ],
+      [ "Case", "Policy Analysis", 0, 100, 4 ]
+    ])
+    grade_sheet = fake_sheet([
+      [ "Student", "ID", "SIS User ID", "SIS Login ID", "Section", "Case" ],
+      [ @student.user.name, 1, @student.uin, @student.uin, "PHPM-601", 95 ]
+    ])
+    workbook = fake_workbook({ "Mapping" => mapping_sheet, "Grades" => grade_sheet })
+
+    assert_equal [ "Grades", "Mapping" ], processor.send(:resolve_grade_and_mapping_sheets!, workbook)
+    assert processor.send(:mapping_sheet_token_match?, mapping_sheet)
+    refute processor.send(:mapping_sheet_token_match?, fake_sheet([ [] ]))
+    assert processor.send(:grade_sheet_token_match?, grade_sheet)
+    refute processor.send(:grade_sheet_token_match?, fake_sheet([ [] ]))
+    assert processor.send(:canvas_identifier_present?, grade_sheet)
+    refute processor.send(:canvas_identifier_present?, fake_sheet([ [ "Name", "Email" ] ]))
+
+    assert_equal 2, processor.send(
+      :guess_canvas_identifier_position,
+      [ "Student", "ID", "SIS User ID", "SIS Login ID", "Section" ],
+      [ "student", "unexpected_id", "unknown", "unknown_login", "section" ]
+    )
+    assert_nil processor.send(:fallback_student_identifier_index, [])
+    assert_nil processor.send(:fallback_student_identifier_index, [ "name", "email" ])
+    assert_equal 1, processor.send(:fallback_student_identifier_index, [ "student", "id" ])
+
+    assert processor.send(:canvas_non_data_row?, [ "Points Possible", nil, nil ], id_index: { student_identifier: 1, student_name: 0 })
+    assert processor.send(:canvas_non_data_row?, [ "", nil, nil ], id_index: { student_identifier: 1, student_name: 0 })
+    assert processor.send(:canvas_non_data_row?, [ "Student", nil, "read_only" ], id_index: { student_identifier: 1, student_name: 0 })
+    refute processor.send(:canvas_non_data_row?, [ @student.user.name, @student.uin, "PHPM-601" ], id_index: { student_identifier: 1, student_name: 0 })
+  end
+
+  test "miscellaneous import helper branches cover replacement duplicates names and row details" do
+    batch = create_batch
+    existing_file = batch.grade_import_files.create!(
+      file_name: "replace.csv",
+      file_checksum: "replace-#{SecureRandom.hex(4)}",
+      status: "processed"
+    )
+    empty_processor = GradeImports::BatchProcessor.new(batch: batch, files: [], dry_run: true, replace_existing_files: true)
+    assert_no_difference "GradeImportFile.count" do
+      empty_processor.send(:replace_existing_batch_files!)
+    end
+
+    upload = Struct.new(:original_filename).new("replace.csv")
+    replacing_processor = GradeImports::BatchProcessor.new(batch: batch, files: [ upload ], dry_run: true, replace_existing_files: true)
+    assert_difference "GradeImportFile.count", -1 do
+      replacing_processor.send(:replace_existing_batch_files!)
+    end
+    assert_not GradeImportFile.exists?(existing_file.id)
+
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    assert_equal "", processor.send(:person_name_signature, "")
+    assert_equal "onlyfirst:onlyfirst", processor.send(:person_name_signature, "Onlyfirst")
+    assert_equal "student:user", processor.send(:person_name_signature, "User, Student M.")
+    assert_equal "student:user", processor.send(:person_name_signature, "Student User")
+    assert_equal "1.5", processor.send(:normalize_numeric_identifier, "1.5")
+    assert_equal "123", processor.send(:normalize_numeric_identifier, "1.23E2")
+    assert_nil processor.send(:parse_boolean, "")
+    assert_equal true, processor.send(:parse_boolean, "YES")
+    assert_equal false, processor.send(:parse_boolean, "0")
+    assert_nil processor.send(:parse_boolean, "maybe")
+
+    duplicate_batch = create_batch
+    duplicate_file = duplicate_batch.grade_import_files.create!(
+      file_name: "prior.csv",
+      file_checksum: "dupe-checksum",
+      status: "processed"
+    )
+    duplicate_rows = processor.send(:duplicate_uploads_for, "dupe-checksum")
+    assert_equal duplicate_file.id, duplicate_rows.first[:file_id]
+    assert_equal duplicate_batch.id, duplicate_rows.first[:batch_id]
+    assert duplicate_rows.first[:uploaded_at].present?
+    assert_equal duplicate_batch.status, duplicate_rows.first[:batch_status]
+
+    error = processor.send(
+      :row_error,
+      9,
+      "Detailed warning",
+      type: "mapping_range",
+      severity: "warning",
+      column: "Score",
+      value: "101",
+      correction_hint: "Check the score"
+    )
+    assert_equal "warning", error[:severity]
+    assert_equal "Score", error[:column]
+    assert_equal "101", error[:value]
+    assert_equal "Check the score", error[:correction_hint]
+  end
+
+  test "narrow grade sheet processor covers validation pending duplicate and suppression branches" do
+    batch = create_batch
+    processor = GradeImports::BatchProcessor.new(batch: batch, files: [], dry_run: true)
+    grade_file = batch.grade_import_files.create!(
+      file_name: "narrow.csv",
+      file_checksum: "narrow-#{SecureRandom.hex(4)}",
+      status: "pending"
+    )
+    mapping_rows = [
+      {
+        assignment_match_type: "exact",
+        assignment_match_value: "Case Brief",
+        competency_title: "Policy Analysis",
+        score_basis: "points",
+        min_grade: BigDecimal("80"),
+        max_grade: BigDecimal("100"),
+        competency_level: 4,
+        course_code: "PHPM-601"
+      }
+    ]
+    suppressed_fingerprint = processor.send(
+      :build_import_fingerprint,
+      grade_file: grade_file,
+      row_number: 10,
+      assignment_name: "Case Brief",
+      competency_title: "Policy Analysis"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: grade_file,
+      student: @student,
+      course_code: "PHPM-601",
+      assignment_name: "Case Brief",
+      competency_title: "Policy Analysis",
+      raw_grade: 90,
+      mapped_level: 4,
+      row_number: 99,
+      source_key: "preexisting-narrow-source",
+      import_fingerprint: suppressed_fingerprint
+    )
+    sheet = fake_sheet([
+      [ "student_uin", "student_email", "assignment_name", "grade", "course_code" ],
+      [ nil, nil, nil, nil, nil ],
+      [ @student.uin, @student.user.email, "", 90, "PHPM-601" ],
+      [ @student.uin, @student.user.email, "Case Brief", "abc", "PHPM-601" ],
+      [ @student.uin, @student.user.email, "No Map", 90, "PHPM-601" ],
+      [ "123", nil, "Case Brief", 90, "PHPM-601" ],
+      [ nil, "missing@example.edu", "Case Brief", 90, "PHPM-601" ],
+      [ @student.uin, @student.user.email, "Case Brief", 90, "PHPM-601" ],
+      [ @student.uin, @student.user.email, "Case Brief", 95, "PHPM-601" ],
+      [ @student.uin, @student.user.email, "Case Brief", 88, "PHPM-601" ]
+    ])
+
+    imported_rows, pending_rows, error_rows, errors, debug = processor.send(
+      :process_narrow_grade_sheet!,
+      grade_file: grade_file,
+      grade_sheet: sheet,
+      mapping_rows: mapping_rows,
+      mapping_errors: [],
+      mapping_warnings: [ { type: "range" } ]
+    )
+
+    assert_equal 2, imported_rows
+    assert_equal 1, pending_rows
+    assert_equal 4, error_rows
+    assert_equal 9, debug[:rows_scanned]
+    assert_equal 1, debug[:rows_skipped_blank]
+    assert_equal 1, debug[:pending_student_count]
+    assert_equal 2, debug[:duplicate_warning_count]
+    assert errors.any? { |error| error[:message].include?("assignment_name is required") }
+    assert errors.any? { |error| error[:message].include?("grade is not numeric") }
+    assert errors.any? { |error| error[:message].include?("No mapping match") }
+    assert errors.any? { |error| error[:type] == "invalid_uin" }
+    pending = batch.grade_import_pending_rows.find_by!(student_email: "missing@example.edu")
+    assert_equal "email", pending.student_identifier_type
+    assert_equal 2, batch.grade_competency_evidences.where.not(import_fingerprint: suppressed_fingerprint).count
+  end
+
+  test "direct competency header helpers cover shorthand prefixes and blank extraction" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    headers = [
+      nil,
+      "",
+      "HPMC Competencies > Ignore result",
+      "Policy Analysis level",
+      "Policy Analysis course target",
+      "EMHA Competencies > Leadership Skills > Communication result"
+    ]
+
+    result_headers = processor.send(:direct_competency_result_headers, headers)
+
+    assert_equal [ "Policy Analysis level", "EMHA Competencies > Leadership Skills > Communication result" ], result_headers
+    assert_equal "Policy Analysis", processor.send(:extract_direct_competency_title, "Policy Analysis level")
+    assert_equal "Communication", processor.send(:extract_direct_competency_title, "EMHA Competencies > Leadership Skills > Communication result")
+    assert_equal "", processor.send(:extract_direct_competency_title, "Plain Header")
+    assert_nil processor.send(:direct_competency_header_prefix, "Plain Header", [ "result" ])
+    assert_equal "policy_analysis", processor.send(:direct_competency_header_prefix, "Policy Analysis result", [ "result" ])
+  end
+
   private
 
   def create_batch
@@ -784,6 +1669,36 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
       true,
       original_filename: filename
     )
+  end
+
+  def uploaded_text_file(path, filename)
+    Rack::Test::UploadedFile.new(
+      path,
+      "text/plain",
+      true,
+      original_filename: filename
+    )
+  end
+
+  def fake_sheet(rows)
+    Struct.new(:rows) do
+      def last_row = rows.size
+      def row(number) = rows[number.to_i - 1] || []
+    end.new(rows)
+  end
+
+  def named_fake_sheet(name, rows)
+    Struct.new(:name, :rows) do
+      def last_row = rows.size
+      def row(number) = rows[number.to_i - 1] || []
+    end.new(name, rows)
+  end
+
+  def fake_workbook(sheets_by_name)
+    Struct.new(:sheets_by_name) do
+      def sheets = sheets_by_name.keys
+      def sheet(name) = sheets_by_name.fetch(name)
+    end.new(sheets_by_name)
   end
 
   def build_direct_competency_csv(headers:, rows:)
@@ -949,6 +1864,27 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
       sheet.add_row [ "contains", "Interoperability", course_code, "Performance Improvement", "percent", 90, 100, 3, true ]
       sheet.add_row [ "contains", "Interoperability", course_code, "Performance Improvement", "percent", 80, 89.99, 2, true ]
       sheet.add_row [ "contains", "Interoperability", course_code, "Performance Improvement", "percent", 0, 79.99, 1, true ]
+    end
+
+    package.serialize(path)
+    path
+  end
+
+  def build_narrow_grade_workbook(course_code:, rows:)
+    path = temp_xlsx_path("narrow_grade_import")
+    package = Axlsx::Package.new
+    package.workbook.add_worksheet(name: "Grades") do |sheet|
+      sheet.add_row [ "student_uin", "student_email", "assignment_name", "grade", "course_code" ]
+      rows.each { |row| sheet.add_row row }
+    end
+
+    package.workbook.add_worksheet(name: "Mapping") do |sheet|
+      sheet.add_row [ "assignment_name", "competency_title", "score_basis", "min_grade", "max_grade", "competency_level", "course_code" ]
+      sheet.add_row [ "Case Brief", "Policy Analysis", "points", 90, 100, 5, course_code ]
+      sheet.add_row [ "Case Brief", "Policy Analysis", "points", 80, 89.99, 4, course_code ]
+      sheet.add_row [ "Case Brief", "Policy Analysis", "points", 70, 79.99, 3, course_code ]
+      sheet.add_row [ "Case Brief", "Policy Analysis", "points", 60, 69.99, 2, course_code ]
+      sheet.add_row [ "Case Brief", "Policy Analysis", "points", 0, 59.99, 1, course_code ]
     end
 
     package.serialize(path)

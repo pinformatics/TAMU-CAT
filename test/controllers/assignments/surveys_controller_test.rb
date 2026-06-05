@@ -12,6 +12,15 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, @survey.title
   end
 
+  test "admin assignment index redirects to survey builder" do
+    sign_in users(:admin)
+
+    get assignments_surveys_path
+
+    assert_redirected_to admin_surveys_path(anchor: "active-surveys")
+    assert_match "Survey assignments are now managed", flash[:notice]
+  end
+
   test "index orders surveys newest first" do
     older = surveys(:fall_2025)
     newer = surveys(:spring_2025)
@@ -61,6 +70,18 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
 
     assert_includes response.body, users(:other_student).name
     refute_includes response.body, users(:student).name
+  end
+
+  test "show infers residential track from title when explicit track is blank" do
+    sign_in users(:admin)
+
+    @survey.update!(track: nil, title: "Residential Midpoint Survey")
+
+    get assignments_survey_path(@survey)
+
+    assert_response :success
+    assert_includes response.body, users(:student).name
+    refute_includes response.body, users(:other_student).name
   end
 
   test "show leaves bulk due date blank by default" do
@@ -156,6 +177,21 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
     patch availability_assignments_survey_path(@survey), params: {
       survey: {
         available_until: "2035-03-01T17:45"
+      }
+    }
+
+    assert_redirected_to assignments_survey_path(@survey)
+    assert_equal previous_deadline.to_i, @survey.reload.available_until.to_i
+  end
+
+  test "availability action stops when submitted date is invalid" do
+    sign_in users(:admin)
+    previous_deadline = Time.zone.local(2035, 4, 1, 17, 0)
+    @survey.update!(available_until: previous_deadline)
+
+    patch availability_assignments_survey_path(@survey), params: {
+      survey: {
+        available_until: "2026-99-99 99:99"
       }
     }
 

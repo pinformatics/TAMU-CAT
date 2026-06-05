@@ -4,12 +4,13 @@ module Reports
   class CompetencyInsights
     def initialize(user:, params: {})
       @user = user
-      @params = params
+      @params = normalize_params(params)
     end
 
     def call
       {
         filters: matrix_payload[:filters],
+        filter_options: filter_options,
         cohort_comparison: cohort_comparison,
         heatmap: heatmap_rows,
         target_attainment: target_attainment_rows
@@ -19,6 +20,45 @@ module Reports
     private
 
     attr_reader :user, :params
+
+    def normalize_params(raw_params)
+      normalized = raw_params.to_h.with_indifferent_access
+
+      if normalized[:domain].blank? && normalized[:category_id].present?
+        domain = domain_name_for_filter(normalized[:category_id])
+        normalized[:domain] = domain if domain.present?
+      end
+
+      if normalized[:competencies].blank? && normalized[:competency].present?
+        competency = competency_title_for_filter(normalized[:competency])
+        normalized[:competencies] = [ competency ] if competency.present?
+      end
+
+      normalized
+    end
+
+    def domain_name_for_filter(value)
+      text = value.to_s.strip
+      return nil if text.blank?
+
+      if text.match?(/\A\d+\z/)
+        category_name = Category.find_by(id: text)&.name
+        return category_name if Reports::DataAggregator::REPORT_DOMAINS.include?(category_name)
+      end
+
+      Reports::DataAggregator::REPORT_DOMAINS.find do |name|
+        name == text || name.parameterize(separator: "_") == text
+      end
+    end
+
+    def competency_title_for_filter(value)
+      text = value.to_s.strip
+      return nil if text.blank?
+
+      Reports::DataAggregator::COMPETENCY_TITLES.find do |title|
+        title == text || title.parameterize(separator: "_") == text
+      end
+    end
 
     def matrix_payload
       @matrix_payload ||= Admin::CompetencyMatrix.new(params: params, actor_user: user).call
@@ -32,9 +72,32 @@ module Reports
       matrix_payload[:domains]
     end
 
-    def cohort_comparison
-      students.group_by { |student| student[:program_year].presence || "Unassigned" }.map do |program_year, cohort_students|
+    def filter_options
+      (matrix_payload[:filter_options] || {}).merge(students: student_options)
+    end
+
+    def student_options
+      students.map do |student|
         {
+          id: student[:id],
+          name: student[:name],
+          track: student[:track],
+          program_year: student[:program_year]
+        }
+      end
+    end
+
+    def cohort_comparison
+      selected_semester_names.flat_map do |semester_name|
+        payload = matrix_payload_for_semester(semester_name)
+        cohort_comparison_for(payload[:students], semester_name)
+      end
+    end
+
+    def cohort_comparison_for(source_students, semester_name)
+      Array(source_students).group_by { |student| student[:program_year].presence || "Unassigned" }.map do |program_year, cohort_students|
+        {
+          semester: semester_name,
           program_year: program_year,
           student_count: cohort_students.size,
           self_average: average_for(cohort_students, :self_rating),
@@ -42,7 +105,22 @@ module Reports
           course_average: average_for(cohort_students, :course_rating),
           below_target_count: below_target_count_for(cohort_students)
         }
-      end.sort_by { |row| row[:program_year].to_s }
+      end.sort_by { |row| [ row[:semester].to_s, row[:program_year].to_s ] }
+    end
+
+    def selected_semester_names
+      selected = params[:semester].to_s.strip
+      return [ selected ] if selected.present? && !selected.casecmp?("all")
+
+      names = ProgramSemester.ordered.pluck(:name).compact_blank.uniq
+      names.presence || [ "All semesters" ]
+    end
+
+    def matrix_payload_for_semester(semester_name)
+      return matrix_payload if params[:semester].to_s == semester_name.to_s
+      return matrix_payload if semester_name == "All semesters"
+
+      Admin::CompetencyMatrix.new(params: params.merge(semester: semester_name), actor_user: user).call
     end
 
     def heatmap_rows

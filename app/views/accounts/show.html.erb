@@ -112,73 +112,26 @@
 
   <section class="c-student-overview-layout">
     <aside class="c-student-overview-sidebar c-card c-card--tight u-stack u-stack--lg">
-      <header class="u-stack u-stack--sm">
-        <p class="c-eyebrow">Account</p>
-        <h2 class="c-section-title">Identity</h2>
-        <p class="c-help">These details come from your authenticated sign-in account.</p>
-      </header>
-
-      <dl class="c-key-value-list">
-        <div>
-          <dt>Full name</dt>
-          <dd><%= full_name %></dd>
-        </div>
-        <div>
-          <dt>Email</dt>
-          <dd><%= email %></dd>
-        </div>
-        <div>
-          <dt>Role</dt>
-          <dd><%= role_label %></dd>
-        </div>
-        <% if student_account %>
-          <div>
-            <dt>UIN</dt>
-            <dd><%= uin %></dd>
-          </div>
-        <% else %>
-          <div>
-            <dt>Member since</dt>
-            <dd><%= member_since %></dd>
-          </div>
-        <% end %>
-      </dl>
+      <%= render "shared/account_settings_tabs", active: :account %>
     </aside>
 
-    <section class="c-student-overview-main c-card c-card--tight u-stack u-stack--lg">
-      <header class="u-stack u-stack--sm">
-        <p class="c-eyebrow"><%= student_account ? "Student profile" : "Profile" %></p>
-        <h2 class="c-section-title"><%= student_account ? "Program Details" : "Account Information" %></h2>
-        <p class="c-help">
-          <% if student_account %>
-            Program details are used for survey assignment, advising, and reporting.
-          <% else %>
-            Account identity details are read-only here and come from your authenticated sign-in account.
-          <% end %>
-        </p>
-      </header>
+    <div class="c-student-overview-main u-stack u-stack--lg">
+      <section class="c-card c-card--tight u-stack u-stack--lg">
+        <header class="u-stack u-stack--sm">
+          <p class="c-eyebrow">Account</p>
+          <h2 class="c-section-title">Identity</h2>
+          <p class="c-help">
+            <% if student_account %>
+              These details come from your authenticated sign-in account.
+            <% else %>
+              Account identity details are read-only here and come from your authenticated sign-in account.
+            <% end %>
+          </p>
+        </header>
 
-      <dl class="c-key-value-list">
-        <% if student_account %>
+        <dl class="c-key-value-list">
           <div>
-            <dt>Major / Program</dt>
-            <dd><%= major %></dd>
-          </div>
-          <div>
-            <dt>Program year</dt>
-            <dd><%= program_year %></dd>
-          </div>
-          <div>
-            <dt>Program track</dt>
-            <dd><%= track %></dd>
-          </div>
-          <div>
-            <dt>Advisor</dt>
-            <dd><%= advisor_name %></dd>
-          </div>
-        <% else %>
-          <div>
-            <dt>Display name</dt>
+            <dt>Full name</dt>
             <dd><%= full_name %></dd>
           </div>
           <div>
@@ -189,24 +142,64 @@
             <dt>Role</dt>
             <dd><%= role_label %></dd>
           </div>
-          <div>
-            <dt>Last updated</dt>
-            <dd><%= updated_text %></dd>
-          </div>
-        <% end %>
-      </dl>
-
-      <div class="u-actions u-actions--split u-section-divider">
-        <%= link_to dashboard_path, class: button_classes(:secondary) do %>
-          Back to dashboard
-        <% end %>
-
-        <% if student_account %>
-          <%= link_to edit_account_path, class: button_classes(:primary) do %>
-            Edit
+          <% if student_account %>
+            <div>
+              <dt>UIN</dt>
+              <dd><%= uin %></dd>
+            </div>
+          <% else %>
+            <div>
+              <dt>Member since</dt>
+              <dd><%= member_since %></dd>
+            </div>
           <% end %>
-        <% end %>
-      </div>
-    </section>
+        </dl>
+      </section>
+
+      <% if student_account %>
+        <section class="c-card c-card--tight u-stack u-stack--lg">
+          <header class="u-stack u-stack--sm">
+            <p class="c-eyebrow">Student profile</p>
+            <h2 class="c-section-title">Program Details</h2>
+            <p class="c-help">
+              Program details are used for survey assignment, advising, and reporting.
+            </p>
+          </header>
+
+          <dl class="c-key-value-list">
+            <div>
+              <dt>Major / Program</dt>
+              <dd><%= major %></dd>
+            </div>
+            <div>
+              <dt>Program year</dt>
+              <dd><%= program_year %></dd>
+            </div>
+            <div>
+              <dt>Program track</dt>
+              <dd><%= track %></dd>
+            </div>
+            <div>
+              <dt>Advisor</dt>
+              <dd><%= advisor_name %></dd>
+            </div>
+          </dl>
+        </section>
+      <% end %>
+
+      <section class="c-card c-card--tight">
+        <div class="u-actions u-actions--split">
+          <%= link_to dashboard_path, class: button_classes(:secondary) do %>
+            Back to dashboard
+          <% end %>
+
+          <% if student_account %>
+            <%= link_to edit_account_path, class: button_classes(:primary) do %>
+              Edit
+            <% end %>
+          <% end %>
+        </div>
+      </section>
+    </div>
   </section>
 </main>

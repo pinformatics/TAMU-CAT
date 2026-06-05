@@ -28,7 +28,7 @@ class FeedbacksControllerUnitTest < ActionController::TestCase
     }
 
     assert_response :success
-    assert_equal student_records_path, assigns(:return_to)
+    assert_equal survey_records_path, assigns(:return_to)
   end
 
   test "new groups existing feedback by category and question using latest updated" do

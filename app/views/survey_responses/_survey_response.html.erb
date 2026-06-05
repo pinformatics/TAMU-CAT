@@ -159,6 +159,7 @@
                 <article id="question-block-<%= question.id %>"
                          class="c-question-card <%= question.sub_question? ? 'c-question-card--nested' : '' %> <%= hide_question_card ? 'hidden' : '' %>"
                          data-question-id="<%= question.id %>"
+                         data-question-type="<%= question.question_type %>"
                          data-survey-required="<%= required ? "true" : "false" %>"
                          data-preview-required="<%= required ? "true" : "false" %>"
                          <% if conditional_branch_child || conditional_reflection_child %>

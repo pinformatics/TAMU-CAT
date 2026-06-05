@@ -83,6 +83,10 @@ module ApplicationHelper
     "FERPA reminder: This download may include #{record_description}. Download only when you have a legitimate educational interest, and store or share the file securely. Continue?"
   end
 
+  def ferpa_export_notice(record_description = "student-level education records")
+    "FERPA reminder: #{record_description} may include identifiable education records. Export only for legitimate educational or program review use, then store and share it securely."
+  end
+
   # Renders question text in plain or rich format based on question config.
   # Rich prompts are sanitized to a strict set of inline tags.
   #

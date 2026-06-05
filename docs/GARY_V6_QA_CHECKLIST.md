@@ -394,7 +394,7 @@ General:
 - [ ] Reports page uses tabs so the page is not too long.
 - [ ] Course Target Attainment, Cohort Comparison, and Student by Domain Heatmap are organized together.
 - [ ] Heatmaps are readable and can show details.
-- [ ] Student/Course Heatmap supports show-details behavior.
+- [ ] Course Heatmap supports show-details behavior.
 - [ ] Course Contribution Report collapses by course.
 - [ ] Each report tab has a download option.
 - [ ] Each download opens successfully.
@@ -435,7 +435,7 @@ Specific reports:
 
 Pages:
 
-- `/survey_responses`
+- `/survey_records`
 - role-specific survey record pages
 
 - [ ] Export Excel works.
@@ -474,7 +474,7 @@ Page: `/people_management`
 - [ ] Track and class-year controls still work.
 - [ ] Warnings or confirmations are clear for sensitive changes.
 
-## Student Records And Portfolio
+## Survey Records And Portfolio
 
 - [ ] Student records include competency snapshot where expected.
 - [ ] Portfolio export includes competency summary.

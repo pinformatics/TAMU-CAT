@@ -1,0 +1,27 @@
+<% active_tab = local_assigns.fetch(:active, :account).to_sym %>
+
+<nav class="u-stack u-stack--sm" aria-label="Account and settings navigation">
+  <p class="c-eyebrow">Workspace</p>
+  <div class="c-tabs c-tabs--vertical u-w-full" role="tablist" aria-label="Account workspace">
+    <%= link_to account_path,
+                class: "c-tab #{'is-active' if active_tab == :account}",
+                role: "tab",
+                aria: { selected: active_tab == :account } do %>
+      Account
+    <% end %>
+    <%= link_to settings_path,
+                class: "c-tab #{'is-active' if active_tab == :settings}",
+                role: "tab",
+                aria: { selected: active_tab == :settings } do %>
+      Settings
+    <% end %>
+  </div>
+
+  <div class="c-side-nav-actions">
+    <%= link_to destroy_user_session_path,
+                method: :delete,
+                class: "c-tab c-tab--danger u-w-full" do %>
+      Sign out
+    <% end %>
+  </div>
+</nav>

@@ -1,6 +1,7 @@
 class Course < ApplicationRecord
   belongs_to :department
   has_many :course_offerings, dependent: :restrict_with_error
+  has_many :course_competency_targets, through: :course_offerings
 
   before_validation :normalize_number
 

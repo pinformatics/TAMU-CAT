@@ -337,7 +337,23 @@ class FeedbacksController < ApplicationController
 
     apply_feedback_prefill! if params[:prefill].to_s == "true"
 
+    load_self_target_summary!(version)
     load_confidential_note_context
+  end
+
+  def load_self_target_summary!(version = nil)
+    @self_target_summary = nil
+    return unless self_target_summary_visible?(version)
+
+    @self_target_summary = SurveyResponses::SelfTargetSummary.build(survey_response: @survey_response)
+  end
+
+  def self_target_summary_visible?(version = nil)
+    return true if SurveyResponses::SelfTargetSummary.completed_version_event?(version&.event)
+    return true if SurveyAssignment.find_by(student_id: @student.student_id, survey_id: @survey.id)&.completed_at.present?
+    return true if @survey_response&.status == :submitted
+
+    false
   end
 
   def load_confidential_note_context
@@ -403,7 +419,7 @@ class FeedbacksController < ApplicationController
     survey = @survey || @feedback&.survey
     return if survey&.is_active?
 
-    redirect_to student_records_path, alert: "This survey is archived and feedback is read-only."
+    redirect_to survey_records_path, alert: "This survey is archived and feedback is read-only."
   end
 
   def save_confidential_advisor_note_from_params!
@@ -628,10 +644,10 @@ class FeedbacksController < ApplicationController
 
   def safe_return_to_param
     return_to = params[:return_to].to_s
-    return student_records_path if return_to.blank?
+    return survey_records_path if return_to.blank?
 
     # Only allow local (relative) paths to avoid open redirects.
-    return_to.start_with?("/") && !return_to.start_with?("//") ? return_to : student_records_path
+    return_to.start_with?("/") && !return_to.start_with?("//") ? return_to : survey_records_path
   end
 
   def enqueue_feedback_received_notification!(feedback)

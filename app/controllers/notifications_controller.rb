@@ -1,5 +1,6 @@
 # Lists and manages in-app notifications for the signed-in user.
 class NotificationsController < ApplicationController
+  before_action :ensure_in_app_notifications_enabled!, except: :index
   before_action :set_notification, only: %i[show update]
 
   PER_PAGE = 20
@@ -13,6 +14,14 @@ class NotificationsController < ApplicationController
 
     @page = params.fetch(:page, 1).to_i
     @page = 1 if @page < 1
+
+    unless in_app_notifications_enabled_for?(current_user)
+      @notifications_disabled = true
+      @notifications = Notification.none
+      @total_notifications = 0
+      @total_pages = 0
+      return
+    end
 
     notifications_scope = current_user.notifications.recent
     @notifications = notifications_scope.offset((@page - 1) * PER_PAGE).limit(PER_PAGE)
@@ -58,6 +67,12 @@ class NotificationsController < ApplicationController
   end
 
   private
+
+  def ensure_in_app_notifications_enabled!
+    return if in_app_notifications_enabled_for?(current_user)
+
+    redirect_to settings_path, alert: "In-app notifications are turned off. Use Settings to turn them back on."
+  end
 
   # @return [void]
   def set_notification

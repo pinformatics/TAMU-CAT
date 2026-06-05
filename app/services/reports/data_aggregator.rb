@@ -89,6 +89,7 @@ module Reports
     def filter_options
       {
         tracks: available_tracks,
+        program_years: available_program_years,
         semesters: available_semesters,
         advisors: available_advisors,
         categories: available_categories,
@@ -132,7 +133,8 @@ module Reports
         competency_summary: competency_summary,
         competency_detail: competency_detail,
         track_summary: track_summary,
-        employment_summary: employment_summary
+        employment_summary: employment_summary,
+        raw_data: raw_data
       }
     end
 
@@ -142,7 +144,139 @@ module Reports
       @employment_summary ||= build_employment_summary
     end
 
+    # Raw row-level data used by Excel exports. These rows intentionally follow
+    # the same access scope and filters as the dashboard summaries.
+    def raw_data
+      @raw_data ||= {
+        survey_responses: raw_rating_rows(advisor_entry: false),
+        advisor_ratings: raw_rating_rows(advisor_entry: true),
+        course_evidence: raw_course_evidence_rows,
+        employment_responses: raw_employment_response_rows
+      }
+    end
+
     private
+
+    # ---------------------------------------------------------------------------
+    # Raw export helpers
+    # ---------------------------------------------------------------------------
+
+    def raw_rating_rows(advisor_entry:)
+      dataset_rows
+        .select { |row| row[:advisor_entry] == advisor_entry }
+        .sort_by { |row| [ row[:student_id].to_i, row[:survey_semester].to_s, row[:category_name].to_s, row[:question_text].to_s ] }
+        .map do |row|
+          student = student_export_lookup[row[:student_id]]
+          advisor_id = advisor_entry ? row[:rating_advisor_id] : row[:advisor_id]
+          advisor = advisor_export_lookup[advisor_id]
+
+          student_export_fields(student).merge(
+            advisor_id: advisor_id,
+            advisor: advisor&.display_name,
+            survey_id: row[:survey_id],
+            survey: row[:survey_title],
+            semester: row[:survey_semester],
+            domain: row[:category_name],
+            competency: normalized_competency_title(row[:question_text]),
+            score: row[:score],
+            program_target_level: row[:program_target_level],
+            updated_at: row[:updated_at]
+          )
+        end
+    end
+
+    def raw_course_evidence_rows
+      reportable_course_evidence_scope
+        .includes(:grade_import_file, grade_import_batch: :program_semester, student: [ :user, { advisor: :user } ])
+        .order(:student_id, :course_code, :competency_title, :assignment_name)
+        .map do |evidence|
+          student_export_fields(evidence.student).merge(
+            semester: evidence.grade_import_batch&.program_semester&.name,
+            course: evidence.course_code,
+            competency: evidence.competency_title,
+            assignment: evidence.assignment_name,
+            raw_grade: evidence.raw_grade,
+            assessed_level: evidence.mapped_level,
+            course_target_level: evidence.course_target_level,
+            target_status: GradeImports::TargetAttainmentReport.ui_label(evidence.mapped_level, evidence.course_target_level),
+            source_file: evidence.grade_import_file&.file_name,
+            imported_at: evidence.created_at,
+            updated_at: evidence.updated_at
+          )
+        end
+    end
+
+    def raw_employment_response_rows
+      employment_response_scope
+        .includes(student: [ :user, { advisor: :user } ], question: { category: { survey: :program_semester } })
+        .order(:student_id, :question_id)
+        .map do |record|
+          survey = record.question&.category&.survey
+
+          student_export_fields(record.student).merge(
+            survey_id: survey&.id,
+            survey: survey&.title,
+            semester: survey&.program_semester&.name,
+            question: record.question&.question_text,
+            parsed_answer: parse_employment_value(record),
+            raw_response: record.response_value,
+            updated_at: record.updated_at
+          )
+        end
+    end
+
+    def reportable_course_evidence_scope
+      @reportable_course_evidence_scope ||= begin
+        scope = GradeCompetencyEvidence
+          .joins(:grade_import_batch, :student)
+          .merge(GradeImportBatch.reportable)
+          .where(student_id: accessible_student_relation.select(:student_id))
+
+        scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+        scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
+        scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
+        scope = scope.where(student_id: filters[:student_id]) if filters[:student_id]
+
+        if filters[:semester]
+          semester = ProgramSemester.find_by_name_case_insensitive(filters[:semester])
+          scope = semester ? scope.where(grade_import_batches: { program_semester_id: semester.id }) : scope.none
+        end
+
+        if filters[:competency]
+          competency_name = competency_lookup[filters[:competency]]&.dig(:name)
+          scope = scope.where(competency_title: competency_name) if competency_name.present?
+        elsif filters[:category_id]
+          scope = scope.where(competency_title: competency_titles_for_domain_filter)
+        end
+
+        scope
+      end
+    end
+
+    def student_export_lookup
+      @student_export_lookup ||= accessible_student_relation
+        .includes(:user, advisor: :user)
+        .index_by(&:student_id)
+    end
+
+    def advisor_export_lookup
+      @advisor_export_lookup ||= begin
+        advisor_ids = (accessible_advisor_ids + dataset_rows.filter_map { |row| row[:rating_advisor_id] }).compact.uniq
+        Advisor.where(advisor_id: advisor_ids).includes(:user).index_by(&:advisor_id)
+      end
+    end
+
+    def student_export_fields(student)
+      {
+        student_id: student&.student_id,
+        student_name: student&.user&.display_name || student&.full_name,
+        email: student&.email,
+        uin: student&.uin,
+        track: student&.track,
+        year: student&.program_year,
+        assigned_advisor: student&.advisor&.display_name
+      }
+    end
 
     # ---------------------------------------------------------------------------
     # Employment summary helpers
@@ -244,6 +378,7 @@ module Reports
         .where("LOWER(categories.name) LIKE ?", "%employment%")
 
       scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+      scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
       if filters[:semester]
         scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
       end
@@ -301,6 +436,12 @@ module Reports
 
       sanitized = {}
       assign_filter(sanitized, :track) { |val| val unless val.casecmp?("all") }
+      assign_filter(sanitized, :program_year) do |val|
+        next if val.casecmp?("all")
+
+        year = val.to_i
+        year if year.positive?
+      end
       assign_filter(sanitized, :semester) { |val| val unless val.casecmp?("all") }
       assign_filter(sanitized, :survey_id) do |val|
         id = val.to_i
@@ -348,6 +489,7 @@ module Reports
 
       relation = accessible_student_relation
       relation = relation.where(track: filters[:track]) if filters[:track]
+      relation = relation.where(program_year: filters[:program_year]) if filters[:program_year]
       relation = relation.where(advisor_id: filters[:advisor_id]) if filters[:advisor_id]
       relation = relation.where(student_id: filters[:student_id]) if filters[:student_id]
 
@@ -385,6 +527,9 @@ module Reports
       if filters[:track]
         scope = scope.where(students: { track: filters[:track] })
       end
+      if filters[:program_year]
+        scope = scope.where(students: { program_year: filters[:program_year] })
+      end
       if filters[:semester]
         scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
       end
@@ -421,6 +566,9 @@ module Reports
       scope = feedback_scope
       if filters[:track]
         scope = scope.where(students: { track: filters[:track] })
+      end
+      if filters[:program_year]
+        scope = scope.where(students: { program_year: filters[:program_year] })
       end
       if filters[:semester]
         scope = scope.where("LOWER(program_semesters.name) = ?", filters[:semester].downcase)
@@ -1165,6 +1313,10 @@ module Reports
       program_track_names
     end
 
+    def available_program_years
+      accessible_student_relation.where.not(program_year: nil).distinct.order(:program_year).pluck(:program_year)
+    end
+
     def program_track_names
       return @program_track_names if defined?(@program_track_names)
 
@@ -1183,7 +1335,7 @@ module Reports
     end
 
     def available_semesters
-      base_scope.distinct.pluck("program_semesters.name").compact.sort
+      ProgramSemester.ordered.pluck(:name).compact.uniq
     end
 
     def available_categories
@@ -1310,13 +1462,14 @@ module Reports
 
     def reportable_course_rating_scope
       @reportable_course_rating_scope ||= begin
-        scope = GradeCompetencyRating
-          .joins(:grade_import_batch, student: :user)
-          .merge(GradeImportBatch.reportable)
-          .where(student_id: accessible_student_relation.select(:student_id))
+      scope = GradeCompetencyRating
+        .joins(:grade_import_batch, student: :user)
+        .merge(GradeImportBatch.reportable)
+        .where(student_id: accessible_student_relation.select(:student_id))
 
-        scope = scope.where(students: { track: filters[:track] }) if filters[:track]
-        scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
+      scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+      scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
+      scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
         scope = scope.where(student_id: filters[:student_id]) if filters[:student_id]
         if filters[:semester]
           semester = ProgramSemester.find_by_name_case_insensitive(filters[:semester])
@@ -1458,6 +1611,7 @@ module Reports
 
       {
         track: filters[:track] || "All tracks",
+        year: filters[:program_year] || "All years",
         semester: filters[:semester] || "All semesters",
         advisor: filters[:advisor_id] ? advisor_map[filters[:advisor_id]]&.dig(:name) : "All advisors",
         domain: filters[:category_id] ? category_map[filters[:category_id]]&.dig(:name) : "All domains",
@@ -1550,7 +1704,8 @@ module Reports
         survey_semester: record.survey_semester,
         track: record.student_track,
         student_id: record.student_primary_id,
-        advisor_id: record.owning_advisor_id || record.advisor_id
+        advisor_id: record.owning_advisor_id || record.advisor_id,
+        rating_advisor_id: is_advisor_entry ? record.advisor_id : nil
       }
     end
 

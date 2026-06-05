@@ -1,28 +1,5 @@
 <%
   rating_sources = { self: "Self", advisor: "Advisor", course: "Course" }
-  active_filters = []
-  active_filters << "Search: #{@filters[:q]}" if @filters[:q].present?
-  active_filters << "Track: #{@filters[:track]}" if @filters[:track].present?
-  active_filters << "Class: #{@filters[:program_year]}" if @filters[:program_year].present?
-  active_filters << "Advisor: #{@filter_options[:advisors].find { |advisor| advisor[:id].to_s == @filters[:advisor_id].to_s }&.dig(:name) }" if @filters[:advisor_id].present?
-  active_filters << "Domain: #{@filters[:domain]}" if @filters[:domain].present?
-  active_filters << "Semester: #{@filters[:semester]}" if @filters[:semester].present?
-  active_filters << "Status: #{Array(@filter_options[:student_statuses]).find { |label, value| value.to_s == @filters[:student_status].to_s }&.first}" if @filters[:student_status].present?
-  active_filters << pluralize(@filters[:competencies].size, "selected competency") if @filters[:competencies].present?
-
-  rating_totals = { self: 0, advisor: 0, course: 0, below_target: 0 }
-  @students.each do |student|
-    student[:ratings].values.each do |ratings|
-      target = ratings[:program_target]
-      rating_sources.keys.each do |source|
-        value = ratings[:"#{source}_rating"]
-        next if value.nil?
-
-        rating_totals[source] += 1
-        rating_totals[:below_target] += 1 if target.present? && value.to_f < target.to_f
-      end
-    end
-  end
 %>
 
 <main class="c-main c-main--dashboard">
@@ -35,9 +12,9 @@
           <p class="c-page-subtitle">Compare self, advisor, and course-derived ratings across all reportable competencies.</p>
         </div>
         <div class="u-actions">
-          <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+          <%= link_to "Back", staff_competencies_back_path, class: button_classes(:secondary), data: { turbo: false } %>
           <%= link_to "Export CSV",
-                export_admin_competencies_path(request.query_parameters),
+                staff_competencies_export_path_for(@competency_filter_query),
                 class: button_classes(:secondary),
                 data: {
                   turbo: false,
@@ -45,28 +22,9 @@
                 } %>
         </div>
       </header>
-    </section>
 
-    <section class="c-stats-grid c-stats-grid--compact" aria-label="Competency matrix summary">
-      <div class="c-stat c-stat--muted">
-        <div class="c-stat__label">Students</div>
-        <strong class="c-value c-value--xl"><%= @students.size %></strong>
-        <div class="c-stat__subtext">Shown in matrix</div>
-      </div>
-      <div class="c-stat c-stat--muted">
-        <div class="c-stat__label">Competencies</div>
-        <strong class="c-value c-value--xl"><%= @visible_competency_count %></strong>
-        <div class="c-stat__subtext"><%= pluralize(@domains.size, "domain") %></div>
-      </div>
-      <div class="c-stat c-stat--success">
-        <div class="c-stat__label">Course ratings</div>
-        <strong class="c-value c-value--xl"><%= rating_totals[:course] %></strong>
-        <div class="c-stat__subtext"><%= @active_course_competency_rule_label %> rule</div>
-      </div>
-      <div class="c-stat <%= rating_totals[:below_target].positive? ? 'c-stat--warning' : 'c-stat--muted' %>">
-        <div class="c-stat__label">Below target</div>
-        <strong class="c-value c-value--xl"><%= rating_totals[:below_target] %></strong>
-        <div class="c-stat__subtext">Across visible scores</div>
+      <div class="c-callout c-callout--warning c-ferpa-export-notice">
+        <p><%= ferpa_export_notice("Student-level competency matrix exports") %></p>
       </div>
     </section>
 
@@ -101,7 +59,7 @@
         </div>
       <% end %>
 
-      <%= form_with url: admin_competencies_path, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
+      <%= form_with url: staff_competencies_path_for, method: :get, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
         <div class="c-filter-bar__field c-filter-bar__field--wide">
           <label class="c-label">Student</label>
           <%= text_field_tag :q, @filters[:q], placeholder: "Name, email, UIN, or student ID", class: "c-input c-search-input u-w-full" %>
@@ -199,40 +157,9 @@
 
         <div class="u-actions u-actions--start">
           <%= submit_tag "Apply", class: button_classes(:secondary) %>
-          <%= link_to "Clear", admin_competencies_path, class: button_classes(:ghost), data: { turbo: false } %>
+          <%= link_to "Clear", staff_competencies_path_for(clear_filters: 1), class: button_classes(:ghost), data: { turbo: false } %>
         </div>
       <% end %>
-
-      <div class="c-card c-card--tight c-card--muted u-stack u-stack--sm">
-        <div class="u-actions u-actions--split">
-          <div>
-            <p class="c-help">
-              Showing <span class="c-strong"><%= pluralize(@students.size, "student") %></span>
-              across <span class="c-strong"><%= pluralize(@visible_competency_count, "competency") %></span>.
-            </p>
-            <p class="c-help">
-              <% if @filters[:semester].present? %>
-                Self, advisor, and course ratings are filtered to <%= @filters[:semester] %>.
-              <% else %>
-                Ratings use the latest self/advisor entry and all reportable course imports.
-              <% end %>
-            </p>
-          </div>
-          <div class="u-actions u-actions--start">
-            <span class="c-score-pill c-score-pill--self">Self</span>
-            <span class="c-score-pill c-score-pill--advisor">Advisor</span>
-            <span class="c-score-pill c-score-pill--course">Course</span>
-          </div>
-        </div>
-
-        <% if active_filters.any? %>
-          <div class="u-actions u-actions--start u-gap-xs">
-            <% active_filters.each do |filter_label| %>
-              <span class="c-pill c-pill--muted"><%= filter_label %></span>
-            <% end %>
-          </div>
-        <% end %>
-      </div>
     </section>
 
     <section class="c-card c-card--compact u-stack u-stack--md">
@@ -298,14 +225,14 @@
                     <span class="c-status-pill c-status-pill--warning"><%= student_below_target_count %> below target</span>
                   <% end %>
                   <%= link_to "Details",
-                              admin_competency_path(student[:id], semester: @filters[:semester].presence),
+                              staff_competency_path_for(student[:id], semester: @filters[:semester].presence),
                               class: button_classes(:secondary, extra_classes: "btn-sm"),
                               data: { turbo: false } %>
                 </span>
               </summary>
 
               <div class="c-table-wrapper">
-                <table class="c-table c-table--sm c-table--matrix">
+                <table class="c-table c-table--sm c-table--sticky-header c-table--matrix">
                   <thead>
                     <tr>
                       <th class="c-table__sticky-cell c-table__sticky-cell--header c-table__source-cell" rowspan="2">Source</th>

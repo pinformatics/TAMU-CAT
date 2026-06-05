@@ -1,5 +1,7 @@
 # Stores immutable snapshots of a student's survey answers at a point in time.
 class SurveyResponseVersion < ApplicationRecord
+  DRAFT_EVENTS = %w[edited].freeze
+
   belongs_to :student, foreign_key: :student_id, primary_key: :student_id
   belongs_to :survey
   belongs_to :survey_assignment, optional: true
@@ -49,7 +51,7 @@ class SurveyResponseVersion < ApplicationRecord
           student_id: student.student_id,
           survey_id: survey.id,
           survey_assignment_id: assignment&.id
-        ).order(created_at: :desc, id: :desc).first
+        ).where.not(event: DRAFT_EVENTS).order(created_at: :desc, id: :desc).first
 
         return previous if previous&.answers == answers
       end

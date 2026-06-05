@@ -1,6 +1,7 @@
 require "test_helper"
 require "roo"
 require "tempfile"
+require "uri"
 
 class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
   setup do
@@ -18,7 +19,7 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Student Overview"
-    assert_includes response.body, "Student Records and Stats"
+    assert_includes response.body, "Survey Records and Stats"
     assert_includes response.body, "Current Students"
     assert_includes response.body, "student-overview-students-tab"
     assert_includes response.body, "student-overview-stats-tab"
@@ -58,6 +59,27 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
       assert_equal "Student", heatmap_sheet.cell(4, 1)
       assert_includes heatmap_sheet.row(4), Reports::DataAggregator::REPORT_DOMAINS.first
     end
+  end
+
+  test "student overview export button preserves current filters" do
+    sign_in @admin
+
+    get student_overviews_path(
+      q: @student.user.email,
+      track: "Residential",
+      program_year: "2026",
+      student_status: "all"
+    )
+
+    assert_response :success
+    assert_link_path_and_query(
+      "Download Excel",
+      export_excel_student_overviews_path,
+      "q" => @student.user.email,
+      "track" => "Residential",
+      "program_year" => "2026",
+      "student_status" => "all"
+    )
   end
 
   test "advisor only sees assigned advisees" do
@@ -117,6 +139,8 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Competency History"
     assert_includes response.body, "Competency Review Notes"
     assert_includes response.body, competency_history_student_overview_path(@student)
+    assert_select ".c-ferpa-export-notice", text: /Student-level competency history exports/
+    assert_select "a[data-turbo='false'][data-turbo-confirm*='FERPA reminder']", text: "Export history CSV"
     assert_includes response.body, "Competency Comparison"
     assert_includes response.body, "<th>Self</th>"
     assert_includes response.body, "<th>Advisor</th>"
@@ -127,12 +151,30 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, admin_competency_path(@student)
   end
 
+  test "student detail renders confidential advisor note bodies" do
+    ConfidentialAdvisorNote.create!(
+      student: @student,
+      survey: surveys(:fall_2025),
+      advisor: advisors(:advisor),
+      body: "Confidential overview note that should render."
+    )
+    sign_in @admin
+
+    get student_overview_path(@student)
+
+    assert_response :success
+    assert_includes response.body, "Confidential overview note that should render."
+    assert_includes response.body, "Advisor notes"
+    assert_includes response.body, "Competency Review Notes"
+  end
+
   test "advisor cannot open another advisor student detail" do
     sign_in @advisor
 
     get student_overview_path(@other_student)
 
-    assert_response :not_found
+    assert_redirected_to student_overviews_path
+    assert_equal "That student overview is not available from your account.", flash[:alert]
   end
 
   test "staff can export one student competency history" do
@@ -154,7 +196,8 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
 
     get competency_history_student_overview_path(@other_student)
 
-    assert_response :not_found
+    assert_redirected_to student_overviews_path
+    assert_equal "That student competency history is not available from your account.", flash[:alert]
   end
 
   test "students cannot access staff student overviews" do
@@ -163,7 +206,7 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     get student_overviews_path
 
     assert_redirected_to dashboard_path
-    assert_match "Advisor or admin access is required", flash[:alert]
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   private
@@ -231,6 +274,19 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
       file.write(response.body)
       file.flush
       yield Roo::Excelx.new(file.path)
+    end
+  end
+
+  def assert_link_path_and_query(label, expected_path, expected_query)
+    link = css_select("a").find { |anchor| anchor.text.squish == label }
+    assert link, "Expected to find #{label.inspect} link"
+
+    uri = URI.parse(link["href"])
+    assert_equal expected_path, uri.path
+
+    query = Rack::Utils.parse_nested_query(uri.query)
+    expected_query.each do |key, value|
+      assert_equal value, query[key], "Expected #{label} query #{key}=#{value.inspect}; found #{query.inspect}"
     end
   end
 end

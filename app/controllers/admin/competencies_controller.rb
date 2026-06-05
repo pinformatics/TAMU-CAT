@@ -3,7 +3,16 @@
 require "csv"
 
 class Admin::CompetenciesController < ApplicationController
+  FILTER_SESSION_KEY = :admin_competency_matrix_filters
+  FILTER_PARAM_KEYS = %w[q track program_year advisor_id semester domain student_status competencies].freeze
+
+  helper_method :staff_competencies_path_for,
+                :staff_competency_path_for,
+                :staff_competencies_export_path_for,
+                :staff_competencies_back_path
+
   before_action :require_competency_access!
+  before_action :redirect_advisor_admin_competency_path!, only: %i[index show export]
   before_action :require_admin_for_course_rule!, only: :course_rule
 
   def index
@@ -16,17 +25,23 @@ class Admin::CompetenciesController < ApplicationController
     @active_course_competency_rule = payload[:course_competency_rule]
     @active_course_competency_rule_label = payload[:course_competency_rule_label]
     @course_competency_rule_options = payload[:course_competency_rule_options]
+    @competency_filter_query = competency_filter_query(@filters)
   end
 
   def show
-    @student = accessible_student_scope.includes(:user, advisor: :user).find(params[:id])
+    @student = accessible_student_scope.includes(:user, advisor: :user).find_by(student_id: params[:id])
+    unless @student
+      redirect_to staff_competencies_path_for, alert: "That student competency record is not available from your account."
+      return
+    end
+
     @payload = StudentCompetencyDashboard.new(student: @student, params: student_competency_params).call
     @competency_page_title = "#{@student.user&.display_name || @student.full_name} Competencies"
     @competency_page_subtitle = "Student-facing competency modules for advising review: source guide, changes, summary, graphs, and target comparison."
-    @competency_back_path = admin_competencies_path
-    @competency_form_path = admin_competency_path(@student)
-    @competency_export_path = admin_competency_path(@student, format: :csv, semester: export_semester_param, sources: @payload.dig(:filters, :sources))
-    @competency_pdf_path = admin_competency_path(@student, format: :pdf, semester: export_semester_param, sources: @payload.dig(:filters, :sources))
+    @competency_back_path = staff_competencies_path_for
+    @competency_form_path = staff_competency_path_for(@student)
+    @competency_export_path = staff_competency_path_for(@student, format: :csv, semester: export_semester_param, sources: @payload.dig(:filters, :sources))
+    @competency_pdf_path = staff_competency_path_for(@student, format: :pdf, semester: export_semester_param, sources: @payload.dig(:filters, :sources))
 
     respond_to do |format|
       format.html { render "student_competencies/show" }
@@ -71,14 +86,89 @@ class Admin::CompetenciesController < ApplicationController
 
   def course_rule
     rule = SiteSetting.set_course_competency_rule!(params[:course_competency_rule])
-    redirect_to admin_competencies_path,
+    redirect_to staff_competencies_path_for,
                 notice: "Course competency rule updated to #{CourseCompetencyRule.label_for(rule)}."
   end
 
   private
 
+  def redirect_advisor_admin_competency_path!
+    return unless current_user&.role_advisor?
+    return unless request.get? || request.head?
+    return unless request.path.start_with?("/admin/competencies")
+
+    redirect_to advisor_competency_redirect_target, status: :see_other
+  end
+
+  def advisor_competency_redirect_target
+    query = request.query_parameters.symbolize_keys
+
+    case action_name
+    when "show"
+      competency_path(params[:id], query.merge(format: params[:format].presence).compact)
+    when "export"
+      export_competencies_path(query.merge(format: params[:format].presence).compact)
+    else
+      competencies_path(query)
+    end
+  end
+
+  def staff_competencies_path_for(options = {})
+    current_user&.role_advisor? ? competencies_path(options) : admin_competencies_path(options)
+  end
+
+  def staff_competency_path_for(student, options = {})
+    current_user&.role_advisor? ? competency_path(student, options) : admin_competency_path(student, options)
+  end
+
+  def staff_competencies_export_path_for(options = {})
+    current_user&.role_advisor? ? export_competencies_path(options) : export_admin_competencies_path(options)
+  end
+
+  def staff_competencies_back_path
+    current_user&.role_advisor? ? advisor_dashboard_path : admin_dashboard_path
+  end
+
   def competency_payload
-    Admin::CompetencyMatrix.new(params: competency_filter_params, actor_user: current_user).call
+    Admin::CompetencyMatrix.new(params: remembered_competency_filter_params, actor_user: current_user).call
+  end
+
+  def remembered_competency_filter_params
+    @remembered_competency_filter_params ||= begin
+      if params[:clear_filters].present?
+        session.delete(FILTER_SESSION_KEY)
+        {}
+      elsif competency_filter_request?
+        filters = normalized_filter_storage(competency_filter_params)
+        session[FILTER_SESSION_KEY] = filters
+        filters
+      else
+        session[FILTER_SESSION_KEY].presence || {}
+      end
+    end
+  end
+
+  def competency_filter_request?
+    FILTER_PARAM_KEYS.any? { |key| params.key?(key) }
+  end
+
+  def normalized_filter_storage(permitted_params)
+    filters = permitted_params.to_h
+    filters["competencies"] = Array(filters["competencies"]).map { |value| value.to_s.strip }.reject(&:blank?)
+    filters.slice(*FILTER_PARAM_KEYS)
+  end
+
+  def competency_filter_query(filters)
+    {
+      "q" => filters[:q].presence,
+      "track" => filters[:track].presence,
+      "program_year" => filters[:program_year].presence,
+      "advisor_id" => filters[:advisor_id].presence,
+      "semester" => filters[:semester].presence,
+      "domain" => filters[:domain].presence,
+      "student_status" => filters[:student_status].presence,
+      "competencies" => Array(filters[:competencies]).presence
+    }.compact
   end
 
   def accessible_student_scope
@@ -93,11 +183,7 @@ class Admin::CompetenciesController < ApplicationController
   def require_competency_access!
     return if current_user&.role_admin? || current_user&.role_advisor?
 
-    if current_user&.role_student?
-      redirect_to dashboard_path
-    else
-      redirect_to dashboard_path, alert: "Admin or advisor access is required to open this page."
-    end
+    redirect_to dashboard_path, alert: STAFF_ONLY_MESSAGE
   end
 
   def competency_filter_params
@@ -196,6 +282,6 @@ class Admin::CompetenciesController < ApplicationController
   def require_admin_for_course_rule!
     return if current_user&.role_admin?
 
-    redirect_to dashboard_path, alert: "Admin access is required to open this page."
+    redirect_to dashboard_path, alert: ADMIN_ONLY_MESSAGE
   end
 end

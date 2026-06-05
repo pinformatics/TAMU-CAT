@@ -11,6 +11,10 @@ module Reports
       add_competency_sheet
       add_track_sheet
       add_employment_sheet
+      add_raw_survey_sheet
+      add_raw_advisor_sheet
+      add_raw_course_sheet
+      add_raw_employment_sheet
     ].freeze
 
     def initialize(payload, section: nil)
@@ -246,6 +250,139 @@ module Reports
         Array(flexibility[:labels]).zip(Array(flexibility[:data])).each do |label, count|
           sheet.add_row [ label, count ]
         end
+      end
+    end
+
+    def add_raw_survey_sheet(workbook)
+      add_raw_sheet(
+        workbook,
+        "Raw Survey",
+        [
+          [ "Student ID", :student_id ],
+          [ "Student Name", :student_name ],
+          [ "Email", :email ],
+          [ "UIN", :uin ],
+          [ "Track", :track ],
+          [ "Year", :year ],
+          [ "Assigned Advisor", :assigned_advisor ],
+          [ "Survey", :survey ],
+          [ "Semester", :semester ],
+          [ "Domain", :domain ],
+          [ "Competency", :competency ],
+          [ "Score", :score ],
+          [ "Program Target", :program_target_level ],
+          [ "Updated At", :updated_at ]
+        ],
+        raw_rows(:survey_responses)
+      )
+    end
+
+    def add_raw_advisor_sheet(workbook)
+      add_raw_sheet(
+        workbook,
+        "Raw Advisor",
+        [
+          [ "Student ID", :student_id ],
+          [ "Student Name", :student_name ],
+          [ "Email", :email ],
+          [ "UIN", :uin ],
+          [ "Track", :track ],
+          [ "Year", :year ],
+          [ "Assigned Advisor", :assigned_advisor ],
+          [ "Rating Advisor", :advisor ],
+          [ "Rating Advisor ID", :advisor_id ],
+          [ "Survey", :survey ],
+          [ "Semester", :semester ],
+          [ "Domain", :domain ],
+          [ "Competency", :competency ],
+          [ "Score", :score ],
+          [ "Program Target", :program_target_level ],
+          [ "Updated At", :updated_at ]
+        ],
+        raw_rows(:advisor_ratings)
+      )
+    end
+
+    def add_raw_course_sheet(workbook)
+      add_raw_sheet(
+        workbook,
+        "Raw Course",
+        [
+          [ "Student ID", :student_id ],
+          [ "Student Name", :student_name ],
+          [ "Email", :email ],
+          [ "UIN", :uin ],
+          [ "Track", :track ],
+          [ "Year", :year ],
+          [ "Assigned Advisor", :assigned_advisor ],
+          [ "Semester", :semester ],
+          [ "Course", :course ],
+          [ "Competency", :competency ],
+          [ "Assignment", :assignment ],
+          [ "Raw Grade", :raw_grade ],
+          [ "Assessed Level", :assessed_level ],
+          [ "Course Target", :course_target_level ],
+          [ "Target Status", :target_status ],
+          [ "Source File", :source_file ],
+          [ "Imported At", :imported_at ],
+          [ "Updated At", :updated_at ]
+        ],
+        raw_rows(:course_evidence)
+      )
+    end
+
+    def add_raw_employment_sheet(workbook)
+      add_raw_sheet(
+        workbook,
+        "Raw Employment",
+        [
+          [ "Student ID", :student_id ],
+          [ "Student Name", :student_name ],
+          [ "Email", :email ],
+          [ "UIN", :uin ],
+          [ "Track", :track ],
+          [ "Year", :year ],
+          [ "Assigned Advisor", :assigned_advisor ],
+          [ "Survey", :survey ],
+          [ "Semester", :semester ],
+          [ "Question", :question ],
+          [ "Parsed Answer", :parsed_answer ],
+          [ "Raw Response", :raw_response ],
+          [ "Updated At", :updated_at ]
+        ],
+        raw_rows(:employment_responses)
+      )
+    end
+
+    def add_raw_sheet(workbook, name, columns, rows)
+      workbook.add_worksheet(name: name) do |sheet|
+        sheet.add_row columns.map(&:first)
+
+        if rows.blank?
+          sheet.add_row [ "No raw data available" ]
+          next
+        end
+
+        rows.each do |row|
+          sheet.add_row columns.map { |_label, key| format_raw_value(row[key]) }
+        end
+      end
+    end
+
+    def raw_rows(key)
+      Array(payload.dig(:raw_data, key))
+    end
+
+    def format_raw_value(value)
+      case value
+      when ActiveSupport::TimeWithZone, Time, DateTime
+        format_timestamp(value)
+      when Date
+        value.strftime("%Y-%m-%d")
+      when BigDecimal
+        value.to_f
+      else
+        value
       end
     end
 

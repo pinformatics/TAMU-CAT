@@ -9,6 +9,7 @@
   <% available_until_for_edit = @survey_assignment&.available_until %>
   <% can_edit_by_availability = available_until_for_edit.blank? || available_until_for_edit >= Time.current %>
   <% editing_mode = @return_to.present? || (@survey_assignment&.completed_at? && can_edit_by_availability) %>
+  <% allow_save_progress = !(@survey_assignment&.completed_at?) %>
 
   <header class="c-document-hero">
     <div class="u-stack u-stack--md">
@@ -44,7 +45,6 @@
     </div>
   <% end %>
 
-  <% allow_save_progress = !(@survey_assignment&.completed_at?) %>
   <%= form_with url: submit_survey_path(@survey),
                 method: :post,
                 local: true,
@@ -53,17 +53,12 @@
                   survey_student_form: true,
                   survey_shared_submit: true,
                   survey_autosave_url: save_progress_survey_path(@survey),
-                  survey_autosave_enabled: allow_save_progress.to_s
+                  survey_autosave_enabled: allow_save_progress.to_s,
+                  survey_editing_submitted_response: editing_mode.to_s
                 },
                 class: "u-stack u-stack--xl survey-form" do |form| %>
-    <% if allow_save_progress %>
-      <div class="c-floating-status c-floating-status--info" data-survey-autosave-prompt data-autosave-state="ready" role="status" aria-live="polite">
-        <span class="c-floating-status__dot" aria-hidden="true"></span>
-        <span class="c-floating-status__body">
-          <strong data-survey-autosave-prompt-title>Autosave ready</strong>
-          <span data-survey-autosave-prompt-message>Your answers will auto-save while you work.</span>
-        </span>
-      </div>
+    <% if @return_to.present? %>
+      <%= hidden_field_tag :return_to, @return_to %>
     <% end %>
 
     <% rendered_section_ids = [] %>
@@ -144,6 +139,7 @@
             <article id="question-block-<%= question.id %>"
                      class="<%= article_classes.join(' ') %>"
                      data-question-id="<%= question.id %>"
+                     data-question-type="<%= question.question_type %>"
                      data-survey-required="<%= display_required ? "true" : "false" %>"
                      <% if is_branch_parent %>
                        data-branch-parent="true"
@@ -354,10 +350,25 @@
     <div class="c-form-actions-bar">
       <div class="u-actions u-actions--split u-w-full">
         <div class="u-actions u-actions--start">
-          <%= link_to "Cancel", cancel_path, class: button_classes(:secondary) %>
           <% if allow_save_progress %>
-            <%= button_tag "Save Progress", type: "button", class: button_classes(:secondary), data: { survey_save_exit: true } %>
+            <%= button_tag "Cancel",
+                          type: "submit",
+                          class: button_classes(:secondary),
+                          formaction: save_progress_survey_path(@survey),
+                          formmethod: "post",
+                          formnovalidate: true,
+                          name: "exit_to",
+                          value: cancel_path,
+                          data: { survey_save_exit: true } %>
+            <%= button_tag "Save Progress",
+                          type: "button",
+                          class: button_classes(:secondary),
+                          data: { survey_save_stay: true } %>
             <span class="c-muted-meta" data-survey-autosave-status>Autosave ready</span>
+          <% else %>
+            <%= link_to "Cancel",
+                        cancel_path,
+                        class: button_classes(:secondary) %>
           <% end %>
         </div>
         <%= form.submit "Submit Survey", class: button_classes(:primary) %>

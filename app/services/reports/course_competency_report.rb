@@ -73,6 +73,7 @@ module Reports
         rows = rows.select { |row| row.course_code.to_s == filters[:course_code] } if filters[:course_code].present?
         rows = rows.select { |row| row.student&.track.to_s == filters[:track] || row.student&.track_key.to_s == filters[:track] } if filters[:track].present?
         rows = rows.select { |row| row.student&.program_year.to_s == filters[:class_of] } if filters[:class_of].present?
+        rows = rows.select { |row| row.student_id.to_s == filters[:student_id] } if filters[:student_id].present?
         rows = rows.select { |row| release_status(row) == filters[:release_status] } if filters[:release_status].present?
         rows
       end
@@ -94,12 +95,27 @@ module Reports
 
     def filters
       @filters ||= {
-        program_semester_id: params[:course_program_semester_id].presence || params[:program_semester_id].presence,
+        program_semester_id: params[:course_program_semester_id].presence || params[:program_semester_id].presence || semester_id_from_name(params[:semester]),
         course_code: params[:course_code].to_s.strip.presence,
         track: params[:course_track].presence || params[:track].presence,
-        class_of: params[:course_class_of].presence || params[:class_of].presence,
+        class_of: params[:course_class_of].presence || params[:class_of].presence || params[:program_year].presence,
+        student_id: normalized_student_id,
         release_status: params[:release_status].presence_in(%w[released embargoed no_semester])
       }.compact
+    end
+
+    def semester_id_from_name(value)
+      name = value.to_s.strip
+      return nil if name.blank? || name.casecmp?("all")
+
+      ProgramSemester.find_by_name_case_insensitive(name)&.id&.to_s
+    end
+
+    def normalized_student_id
+      value = params[:student_id].to_s.strip
+      return nil if value.blank? || value.casecmp?("all")
+
+      value
     end
 
     def filter_options
@@ -155,8 +171,8 @@ module Reports
     end
 
     def student_course_heatmap(rows)
-      rows.group_by { |row| [ row.student_id, row.course_code.presence || "No course code" ] }
-        .map do |(student_id, course_code), group|
+      rows.group_by { |row| [ row.student_id, row.course_code.presence || "No course code", row.grade_import_batch&.program_semester&.name.presence || "No semester" ] }
+        .map do |(student_id, course_code, semester_name), group|
           student = group.first.student
           statuses = group.map { |row| GradeImports::TargetAttainmentReport.status_for(row.mapped_level, row.course_target_level) }
           assessed_values = group.filter_map(&:mapped_level).map(&:to_f)
@@ -166,6 +182,7 @@ module Reports
             student_name: student&.user&.name || "Student #{student_id}",
             track: student&.track,
             class_of: student&.program_year,
+            semester_names: semester_name,
             course_code: course_code,
             average: average(assessed_values),
             evidence_count: group.size,
@@ -174,7 +191,7 @@ module Reports
             status: heatmap_status(average(assessed_values), statuses)
           }
         end
-        .sort_by { |row| [ row[:student_name].to_s.downcase, row[:course_code].to_s ] }
+        .sort_by { |row| [ row[:student_name].to_s.downcase, row[:semester_names].to_s, row[:course_code].to_s ] }
         .first(150)
     end
 

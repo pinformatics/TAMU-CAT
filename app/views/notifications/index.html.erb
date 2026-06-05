@@ -40,7 +40,15 @@
       </div>
     </header>
 
-    <% if @notifications.blank? %>
+    <% if @notifications_disabled %>
+      <div class="c-card c-card--compact c-card--dashed c-list-item--empty u-stack u-stack--sm">
+        <p class="c-strong">In-app notifications are turned off.</p>
+        <p class="c-help">Turn them back on from Settings when you want unread items to appear in the navbar and notification center.</p>
+        <div class="u-actions u-actions--start">
+          <%= link_to "Edit settings", edit_settings_path, class: button_classes(:primary, extra_classes: "btn-sm") %>
+        </div>
+      </div>
+    <% elsif @notifications.blank? %>
       <div class="c-card c-card--compact c-card--dashed c-list-item--empty">
         You're all caught up. New notifications will appear here when something needs attention.
       </div>

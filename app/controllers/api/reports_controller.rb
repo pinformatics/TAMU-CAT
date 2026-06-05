@@ -41,7 +41,20 @@ module Api
     end
 
     def reports_params
-      params.permit(:track, :semester, :survey_id, :category_id, :student_id, :advisor_id, :competency)
+      params.permit(
+        :track,
+        :semester,
+        :survey_id,
+        :category_id,
+        :student_id,
+        :advisor_id,
+        :competency,
+        :domain,
+        :q,
+        :program_year,
+        :student_status,
+        competencies: []
+      )
     end
   end
 end

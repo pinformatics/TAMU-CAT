@@ -55,6 +55,43 @@ class SurveyQuestionRulesTest < ActiveSupport::TestCase
 
     assert SurveyQuestionRules.blank_required_response?(question, { "answer" => "Other", "text" => "" })
     refute SurveyQuestionRules.blank_required_response?(question, { "answer" => "Other", "text" => "Rotating schedule" })
+    assert SurveyQuestionRules.blank_required_response?(question, { "answer" => "", "text" => "ignored" })
+    refute SurveyQuestionRules.blank_required_response?(question, { "answer" => "5", "text" => "" })
+  end
+
+  test "answer lookup and dropdown helpers support fallback objects" do
+    question_id = "custom_key"
+    assert_nil SurveyQuestionRules.answer_for(Object.new, question_id)
+    assert_equal "from symbol", SurveyQuestionRules.answer_for({ custom_key: "from symbol" }, question_id)
+
+    dropdown_like = Struct.new(:question_type).new("dropdown")
+    text_like = Struct.new(:question_type).new("short_answer")
+
+    assert SurveyQuestionRules.dropdown_question?(dropdown_like)
+    refute SurveyQuestionRules.dropdown_question?(text_like)
+  end
+
+  test "base required supports competency dropdowns and required fallback objects" do
+    section = SurveySection.new(title: SurveySection::MHA_COMPETENCY_SECTION_TITLE)
+    category = Struct.new(:section).new(section)
+    competency_dropdown = Struct.new(:question_type, :category) do
+      def answer_option_values = %w[1 2 3 4 5]
+      def choice_question? = true
+    end.new("dropdown", category)
+
+    required_like = Struct.new(:required_value) do
+      def required? = required_value
+      def choice_question? = false
+    end.new(true)
+
+    optional_like = Struct.new(:required_value) do
+      def required? = required_value
+      def choice_question? = false
+    end.new(false)
+
+    assert SurveyQuestionRules.base_required?(competency_dropdown)
+    assert SurveyQuestionRules.required_flag?(required_like)
+    refute SurveyQuestionRules.required_flag?(optional_like)
   end
 
   test "reflection questions are visible only after their assessment has an answer" do

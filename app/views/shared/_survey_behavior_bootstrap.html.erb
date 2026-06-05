@@ -4,6 +4,7 @@
     if (window.TamuCatSurveyBehavior.installed) {
       window.TamuCatSurveyBehavior.syncAll && window.TamuCatSurveyBehavior.syncAll();
       window.TamuCatSurveyBehavior.installSurveySubmissionForms && window.TamuCatSurveyBehavior.installSurveySubmissionForms();
+      window.TamuCatSurveyBehavior.installStudentSurveyAutosave && window.TamuCatSurveyBehavior.installStudentSurveyAutosave();
       return;
     }
 
@@ -214,7 +215,7 @@
       return new Promise(function(resolve) {
         var backdrop = document.createElement("div");
         var closed = false;
-        var saveButton = options.canSaveProgress ? '<button type="button" class="btn btn-secondary" data-survey-submit-choice="save">Save and exit</button>' : "";
+        var saveButton = options.canSaveProgress ? '<button type="button" class="btn btn-secondary" data-survey-submit-choice="save">Save progress</button>' : "";
 
         backdrop.className = "c-modal-backdrop";
         backdrop.innerHTML = [
@@ -314,6 +315,44 @@
       return null;
     }
 
+    async function previewEvidenceError(card, options) {
+      options = options || {};
+      if (card.getAttribute("data-question-type") !== "evidence") return null;
+
+      var input = previewEditableControls(card).find(function(control) {
+        return control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement;
+      });
+      if (!input) return null;
+
+      var value = (input.value || "").trim();
+      if (value === "") return null;
+
+      if (!/^https:\/\/sites\.google\.com(?:\/|$)\S*/i.test(value)) {
+        return "Use a published Google Sites link that starts with https://sites.google.com/.";
+      }
+
+      if (!options.checkAccess) return null;
+
+      try {
+        var response = await fetch("/evidence/check_access?url=" + encodeURIComponent(value), {
+          headers: {
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+          },
+          credentials: "same-origin"
+        });
+        var payload = await response.json().catch(function() { return {}; });
+
+        if (!response.ok || payload.ok === false || payload.accessible === false) {
+          return 'This evidence link could not be verified. In Google Sites, set sharing to "Anyone with the link can view," publish again, then try again.';
+        }
+      } catch (_error) {
+        return "This evidence link could not be verified. Check the link and try again.";
+      }
+
+      return null;
+    }
+
     function previewOtherTextError(card) {
       var visibleOtherWrappers = Array.prototype.slice.call(card.querySelectorAll("[data-other-input-wrapper]")).filter(function(wrapper) {
         return !wrapper.classList.contains("hidden") && wrapper.getAttribute("aria-hidden") !== "true";
@@ -344,28 +383,37 @@
       });
     }
 
-    function validatePreviewSurveyForm(form) {
+    async function validatePreviewSurveyForm(form) {
       var cards = Array.prototype.slice.call(form.querySelectorAll("[data-question-id]"));
       var errorCards = [];
+      var checkEvidenceAccess = form.getAttribute("data-preview-survey-form") === "true";
 
       cards.forEach(clearPreviewValidationError);
 
-      cards.forEach(function(card) {
-        if (isPreviewCardHidden(card)) return;
+      for (var index = 0; index < cards.length; index += 1) {
+        var card = cards[index];
+        if (isPreviewCardHidden(card)) continue;
 
         var required = card.getAttribute("data-survey-required") === "true" || card.getAttribute("data-preview-required") === "true";
 
         if (required && previewQuestionIsBlank(card)) {
           addPreviewValidationError(card, "This question is required.");
           errorCards.push(card);
-          return;
+          continue;
+        }
+
+        var evidenceError = await previewEvidenceError(card, { checkAccess: checkEvidenceAccess });
+        if (evidenceError) {
+          addPreviewValidationError(card, evidenceError);
+          errorCards.push(card);
+          continue;
         }
 
         var integerError = previewIntegerError(card);
         if (integerError) {
           addPreviewValidationError(card, integerError);
           errorCards.push(card);
-          return;
+          continue;
         }
 
         var otherError = previewOtherTextError(card);
@@ -373,7 +421,7 @@
           addPreviewValidationError(card, otherError);
           errorCards.push(card);
         }
-      });
+      }
 
       return {
         valid: errorCards.length === 0,
@@ -400,13 +448,18 @@
         form.addEventListener("submit", async function(event) {
           if (form.dataset.surveyInlineSubmitConfirmed === "true") return;
 
+          var submitter = event.submitter;
+          if (submitter && (submitter.hasAttribute("data-survey-save-stay") || submitter.hasAttribute("data-survey-save-exit"))) {
+            return;
+          }
+
           event.preventDefault();
           event.stopImmediatePropagation();
 
           syncForm(form);
 
           var isPreview = form.getAttribute("data-preview-survey-form") === "true";
-          var validation = validatePreviewSurveyForm(form);
+          var validation = await validatePreviewSurveyForm(form);
           if (!validation.valid) {
             await surveyAlert(
               isPreview ? "Preview needs attention" : "Survey needs attention",
@@ -418,13 +471,25 @@
           }
 
           var canSaveProgress = !isPreview && form.getAttribute("data-survey-autosave-enabled") === "true";
+          var isEditingSubmittedResponse = !isPreview && form.getAttribute("data-survey-editing-submitted-response") === "true";
+          var modalTitle = isEditingSubmittedResponse ? "Ready to update this submission?" : "Ready to submit?";
+          var modalMessage = isPreview
+            ? "Submit only when your answers are final. This is only a preview, so no responses will be saved."
+            : (isEditingSubmittedResponse
+                ? "This will update the submitted survey response. You can still go back and keep editing before saving these changes."
+                : (canSaveProgress
+                    ? "Submit only when your answers are final. You can also save progress and come back later."
+                    : "Submit only when your answers are final."));
           var choice = await surveyConfirm(
-            "Ready to submit?",
-            isPreview ? "Submit only when your answers are final. This is only a preview, so no responses will be saved." : "Submit only when your answers are final. You can also save progress and come back later.",
-            { canSaveProgress: canSaveProgress }
+            modalTitle,
+            modalMessage,
+            {
+              canSaveProgress: canSaveProgress,
+              confirmLabel: isEditingSubmittedResponse ? "Update submission" : "Submit"
+            }
           );
           if (choice === "save") {
-            form.querySelector("[data-survey-save-exit]")?.click();
+            form.querySelector("[data-survey-save-stay]")?.click();
             return;
           }
           if (choice !== "submit") return;
@@ -435,6 +500,312 @@
           }
 
           submitRealSurveyForm(form);
+        });
+      });
+    }
+
+    function autosaveTime() {
+      return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+    }
+
+    function csrfToken() {
+      var token = document.querySelector('meta[name="csrf-token"]');
+      return token ? token.content : "";
+    }
+
+    function setAutosaveStatus(form, title, detail, state) {
+      var statusText = detail ? title + ": " + detail : title;
+
+      form.querySelectorAll("[data-survey-autosave-status]").forEach(function(target) {
+        target.textContent = statusText;
+        target.dataset.autosaveState = state || "ready";
+      });
+    }
+
+    function installStudentSurveyAutosave() {
+      document.querySelectorAll('form.survey-form[data-survey-student-form="true"]').forEach(function(form) {
+        if (form.dataset.studentSurveyAutosaveInitialized === "true") return;
+        form.dataset.studentSurveyAutosaveInitialized = "true";
+
+        var saveUrl = form.getAttribute("data-survey-autosave-url") || "";
+        var autosaveEnabled = form.getAttribute("data-survey-autosave-enabled") === "true" && saveUrl !== "";
+        if (!autosaveEnabled) return;
+
+        var timer = null;
+        var inFlight = false;
+        var dirty = false;
+        var pending = false;
+        var submitting = false;
+        var controller = null;
+        var inFlightPromise = null;
+        var lastAnswerSnapshot = null;
+        var lastSavedSnapshot = null;
+        var lastSavedAt = null;
+        var answerWatchInterval = null;
+        var pendingImmediate = false;
+        var textAutosaveDelay = 3500;
+        var answerWatchDelay = 5000;
+
+        function answerSnapshot() {
+          return Array.from(new FormData(form).entries())
+            .filter(function(entry) {
+              return entry[0].indexOf("answers[") === 0 || entry[0].indexOf("other_answers[") === 0;
+            })
+            .sort(function(left, right) {
+              return String(left[0] + ":" + left[1]).localeCompare(String(right[0] + ":" + right[1]));
+            })
+            .map(function(entry) {
+              return entry[0] + "=" + entry[1];
+            })
+            .join("&");
+        }
+
+        function autosaveImmediatelyForControl(control) {
+          if (!control) return false;
+
+          var tagName = (control.tagName || "").toLowerCase();
+          if (tagName === "select") return true;
+          if (tagName === "textarea") return false;
+
+          if (tagName === "input") {
+            var type = (control.type || "").toLowerCase();
+            return type === "radio" || type === "checkbox";
+          }
+
+          return false;
+        }
+
+        function clearTimer() {
+          if (!timer) return;
+          window.clearTimeout(timer);
+          timer = null;
+        }
+
+        function abortAutosave() {
+          clearTimer();
+          if (controller) {
+            controller.abort();
+            controller = null;
+          }
+        }
+
+        function markSnapshotSaved(snapshot, savedAt) {
+          lastSavedSnapshot = snapshot;
+          lastSavedAt = savedAt;
+          lastAnswerSnapshot = snapshot;
+        }
+
+        function currentAnswersAlreadySaved() {
+          return !!lastSavedAt && answerSnapshot() === lastSavedSnapshot;
+        }
+
+        function showAlreadySavedProgress() {
+          dirty = false;
+          pending = false;
+          pendingImmediate = false;
+          clearTimer();
+          setAutosaveStatus(form, "Progress saved", "Already saved at " + lastSavedAt + ". You can keep working.", "saved");
+          return true;
+        }
+
+        async function performAutosave(options) {
+          options = options || {};
+          clearTimer();
+          if (!autosaveEnabled || submitting) return false;
+          if (!dirty && !pending && !options.force) return true;
+
+          if (inFlight) {
+            pending = true;
+            return inFlightPromise || false;
+          }
+
+          inFlight = true;
+          pending = false;
+          pendingImmediate = false;
+          controller = new AbortController();
+          setAutosaveStatus(
+            form,
+            options.savingTitle || "Autosaving",
+            options.savingDetail || ("Saving your latest answers at " + autosaveTime() + "."),
+            "saving"
+          );
+
+          var formData = new FormData(form);
+          formData.append("autosave", "1");
+          var submittedSnapshot = answerSnapshot();
+
+          inFlightPromise = (async function() {
+            try {
+            var response = await fetch(saveUrl, {
+              method: "POST",
+              body: formData,
+              signal: controller.signal,
+              headers: {
+                "X-CSRF-Token": csrfToken(),
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json"
+              },
+              credentials: "same-origin"
+            });
+
+            var payload = await response.json().catch(function() { return {}; });
+            if (!response.ok || payload.saved === false) {
+              throw new Error(payload.message || "Autosave failed.");
+            }
+
+            dirty = pending;
+            var savedAt = autosaveTime();
+            markSnapshotSaved(submittedSnapshot, savedAt);
+            var successDetail = typeof options.successDetail === "function" ? options.successDetail(savedAt) : (options.successDetail || ("Saved at " + savedAt + "."));
+            setAutosaveStatus(
+              form,
+              options.successTitle || "Progress auto-saved",
+              successDetail,
+              "saved"
+            );
+            return true;
+          } catch (error) {
+            if (error.name === "AbortError") return false;
+            setAutosaveStatus(form, "Autosave failed", error.message || "Use Save Progress before leaving.", "error");
+            return false;
+          } finally {
+            inFlight = false;
+            controller = null;
+            inFlightPromise = null;
+
+            if (pending && !submitting) {
+              queueAutosave({ immediate: pendingImmediate });
+            }
+          }
+          })();
+
+          return inFlightPromise;
+        }
+
+        function queueAutosave(options) {
+          options = options || {};
+          var immediate = options.immediate === true;
+          if (!autosaveEnabled || submitting) return;
+          dirty = true;
+          pending = true;
+          pendingImmediate = pendingImmediate || immediate;
+          lastAnswerSnapshot = answerSnapshot();
+          setAutosaveStatus(
+            form,
+            "Unsaved changes",
+            immediate ? ("Saving this answer now at " + autosaveTime() + ".") : "Autosave will run shortly.",
+            "dirty"
+          );
+          clearTimer();
+          if (inFlight) return;
+          timer = window.setTimeout(performAutosave, immediate ? 0 : textAutosaveDelay);
+        }
+
+        async function saveProgressInPlace() {
+          if (inFlight) {
+            setAutosaveStatus(form, "Saving progress", "Waiting for the current autosave to finish.", "saving");
+            await inFlightPromise;
+          }
+
+          if (currentAnswersAlreadySaved()) {
+            return showAlreadySavedProgress();
+          }
+
+          var saved = await performAutosave({
+            force: true,
+            savingTitle: "Saving progress",
+            savingDetail: "Saving your latest answers now.",
+            successTitle: "Progress saved",
+            successDetail: function(savedAt) {
+              return "Saved at " + savedAt + ". You can keep working.";
+            }
+          });
+
+          if (saved) {
+            dirty = false;
+            pending = false;
+            pendingImmediate = false;
+            lastAnswerSnapshot = lastSavedSnapshot || answerSnapshot();
+            clearTimer();
+          }
+
+          return saved;
+        }
+
+        function beaconAutosaveBeforeLeaving() {
+          if (!autosaveEnabled || submitting || (!dirty && !pending)) return;
+          clearTimer();
+
+          var formData = new FormData(form);
+          formData.append("autosave", "1");
+          formData.append("beacon", "1");
+
+          if (navigator.sendBeacon && navigator.sendBeacon(saveUrl, formData)) {
+            dirty = false;
+            pending = false;
+            return;
+          }
+
+          fetch(saveUrl, {
+            method: "POST",
+            body: formData,
+            keepalive: true,
+            headers: {
+              "X-CSRF-Token": csrfToken(),
+              "X-Requested-With": "XMLHttpRequest",
+              "Accept": "application/json"
+            },
+            credentials: "same-origin"
+          }).catch(function() {});
+        }
+
+        function handleAnswerChange(event) {
+          queueAutosave({ immediate: autosaveImmediatelyForControl(event.target) });
+        }
+
+        form.addEventListener("input", handleAnswerChange, true);
+        form.addEventListener("change", handleAnswerChange, true);
+        lastAnswerSnapshot = answerSnapshot();
+        answerWatchInterval = window.setInterval(function() {
+          if (!autosaveEnabled || submitting || inFlight) return;
+
+          var currentSnapshot = answerSnapshot();
+          if (currentSnapshot === lastAnswerSnapshot) return;
+
+          queueAutosave({ immediate: false });
+        }, answerWatchDelay);
+
+        form.querySelectorAll("[data-survey-save-stay]").forEach(function(button) {
+          button.addEventListener("click", function(event) {
+            event.preventDefault();
+            saveProgressInPlace();
+          });
+        });
+
+        form.addEventListener("submit", function(event) {
+          if (form.dataset.surveyInlineSubmitConfirmed === "true") {
+            submitting = true;
+            abortAutosave();
+            return;
+          }
+
+          var submitter = event.submitter;
+          if (submitter && (submitter.hasAttribute("data-survey-save-stay") || submitter.hasAttribute("data-survey-save-exit"))) {
+            return;
+          }
+        }, true);
+
+        window.addEventListener("pagehide", beaconAutosaveBeforeLeaving);
+        window.addEventListener("beforeunload", beaconAutosaveBeforeLeaving);
+        document.addEventListener("visibilitychange", function() {
+          if (document.visibilityState === "hidden") beaconAutosaveBeforeLeaving();
+        });
+        document.addEventListener("turbo:before-cache", beaconAutosaveBeforeLeaving);
+        document.addEventListener("turbo:before-cache", function() {
+          if (answerWatchInterval) {
+            window.clearInterval(answerWatchInterval);
+            answerWatchInterval = null;
+          }
         });
       });
     }
@@ -456,6 +827,7 @@
     window.TamuCatSurveyBehavior.syncOtherInputs = syncOtherInputs;
     window.TamuCatSurveyBehavior.validatePreviewSurveyForm = validatePreviewSurveyForm;
     window.TamuCatSurveyBehavior.installSurveySubmissionForms = installSurveySubmissionForms;
+    window.TamuCatSurveyBehavior.installStudentSurveyAutosave = installStudentSurveyAutosave;
     window.TamuCatSurveyBehavior.installPreviewForms = installPreviewForms;
     window.TamuCatSurveyBehavior.installed = true;
 
@@ -464,12 +836,15 @@
     document.addEventListener("DOMContentLoaded", function() {
       syncAll();
       installSurveySubmissionForms();
+      installStudentSurveyAutosave();
     });
     document.addEventListener("turbo:load", function() {
       syncAll();
       installSurveySubmissionForms();
+      installStudentSurveyAutosave();
     });
     syncAll();
     installSurveySubmissionForms();
+    installStudentSurveyAutosave();
   })();
 </script>

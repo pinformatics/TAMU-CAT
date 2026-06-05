@@ -18,12 +18,30 @@
   <% end %>
 
   <div class="c-app-header__content">
-    <div class="c-app-header__left">
+    <div class="c-app-header__left c-app-header__left--brand-only">
       <%= link_to advisor_dashboard_path, class: "c-brand-link", aria: { label: "Texas A&M University home" } do %>
         <div class="c-brand-logo" aria-hidden="true"></div>
         <span class="sr-only">Texas A&amp;M University</span>
       <% end %>
-      
+
+      <button type="button"
+              class="c-mobile-menu-button"
+              data-mobile-nav-toggle
+              aria-label="Open navigation menu"
+              aria-controls="advisor-mobile-nav"
+              aria-expanded="false">
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+        <span class="c-mobile-menu-button__bar" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <div id="advisor-mobile-nav" class="c-nav-drawer" data-mobile-nav-drawer aria-label="Advisor navigation">
+      <div class="c-nav-drawer__header">
+        <span class="c-nav-drawer__title">Advisor Menu</span>
+        <button type="button" class="c-nav-drawer__close" data-mobile-nav-close aria-label="Close navigation menu">&times;</button>
+      </div>
+
       <nav class="c-nav-links" aria-label="Primary">
         <a href="<%= advisor_dashboard_path %>"
            class="c-nav-link <%= 'active' if local_assigns[:active_page] == 'home' %>">
@@ -35,7 +53,7 @@
                     class: "c-nav-link #{'active' if local_assigns[:active_page] == 'reports'}" %>
                     
         <%= link_to "Survey Records",
-                    student_records_path,
+                    survey_records_path,
                     class: "c-nav-link #{'active' if local_assigns[:active_page] == 'students'}" %>
 
         <%= link_to "Student Overview",
@@ -43,16 +61,15 @@
                     class: "c-nav-link #{'active' if local_assigns[:active_page] == 'student_overviews'}" %>
 
         <%= link_to "Competencies",
-                    admin_competencies_path,
+                    competencies_path,
                     class: "c-nav-link #{'active' if local_assigns[:active_page] == 'competencies'}" %>
 
         <%= link_to "FAQ",
                     faq_path,
                     class: "c-nav-link #{'active' if current_page?(faq_path)}" %>
       </nav>
-    </div>
 
-    <div class="c-user-section">
+      <div class="c-user-section">
       <%= render ToggleSwitchComponent.new(
         id: "high-contrast-toggle",
         checked: false,
@@ -122,5 +139,8 @@
         </div>
       </div>
     </div>
+    </div>
+
+    <div class="c-nav-drawer-backdrop" data-mobile-nav-backdrop hidden></div>
   </div>
 </header>

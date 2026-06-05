@@ -42,6 +42,18 @@ class NotificationsControllerTest < ActionDispatch::IntegrationTest
     refute_includes response.body, "Jack Buckley assigned"
   end
 
+  test "index hides notification list when in app notifications are disabled" do
+    sign_in @student
+    @student.update!(in_app_notifications_enabled: false)
+
+    get notifications_path
+
+    assert_response :success
+    assert_includes response.body, "In-app notifications are turned off."
+    assert_select "table.c-table", count: 0
+    assert_not_nil @student_notification.reload.read_at
+  end
+
   test "advisor can use the notification center" do
     sign_in @advisor
 
@@ -145,6 +157,16 @@ class NotificationsControllerTest < ActionDispatch::IntegrationTest
     expected_target = @student_notification.target_path_for(@student) || notifications_path
     assert_redirected_to expected_target
     assert_not_nil @student_notification.reload.read_at
+  end
+
+  test "show redirects to settings when in app notifications are disabled" do
+    sign_in @student
+    @student.update!(in_app_notifications_enabled: false)
+
+    get notification_path(@student_notification)
+
+    assert_redirected_to settings_path
+    assert_equal "In-app notifications are turned off. Use Settings to turn them back on.", flash[:alert]
   end
 
   test "show marks expired survey notifications read without opening the survey" do

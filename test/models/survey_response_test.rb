@@ -74,4 +74,47 @@ class SurveyResponseTest < ActiveSupport::TestCase
     survey_response = SurveyResponse.build(student: @student, survey: @survey)
     assert_equal @advisor, survey_response.advisor
   end
+
+  test "find_from_param and signed token lookup handle invalid values" do
+    assert_raises(ActiveRecord::RecordNotFound) { SurveyResponse.find_from_param("missing") }
+    assert_raises(ActiveRecord::RecordNotFound) { SurveyResponse.find_from_param("-") }
+    assert_nil SurveyResponse.find_by_signed_download_token("bad-token")
+
+    response = SurveyResponse.build(student: @student, survey: @survey)
+    assert_equal response.id, SurveyResponse.find_by_signed_download_token(response.signed_download_token).id
+  end
+
+  test "answers override normalizes string keys and skips missing questions" do
+    response = SurveyResponse.build(
+      student: @student,
+      survey: @survey,
+      answers_override: {
+        @question.id.to_s => "Override answer",
+        "not_numeric" => "Ignored"
+      },
+      as_of: Time.zone.local(2026, 1, 1)
+    )
+
+    assert_equal "Override answer", response.answers[@question.id]
+    assert_equal 1, response.question_responses.size
+    assert_equal Time.zone.local(2026, 1, 1), response.completion_date
+  end
+
+  test "status handles optional-only surveys and blank array answers" do
+    survey = Survey.new(title: "Optional Survey", program_semester: program_semesters(:fall_2025), is_active: true)
+    survey.save!(validate: false)
+    category = survey.categories.create!(name: "Optional")
+    question = category.questions.create!(
+      question_text: "Optional",
+      question_type: "short_answer",
+      question_order: 1,
+      is_required: false
+    )
+
+    not_started = SurveyResponse.build(student: @student, survey: survey, answers_override: { question.id => [] })
+    assert_equal :not_started, not_started.status
+
+    submitted = SurveyResponse.build(student: @student, survey: survey, answers_override: { question.id => [ "Answered" ] })
+    assert_equal :submitted, submitted.status
+  end
 end

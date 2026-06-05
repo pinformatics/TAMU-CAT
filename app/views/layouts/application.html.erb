@@ -83,6 +83,300 @@
     </div>
   </body>
     <script>
+      (function () {
+        function installInlineModalFallback() {
+          if (window.__inlineModalFallbackInitialized === true) return;
+          window.__inlineModalFallbackInitialized = true;
+
+          function setModalOpen(modal, open) {
+            if (!modal) return;
+            modal.classList.toggle("hidden", !open);
+            document.body.classList.toggle("is-modal-open", !!document.querySelector("[data-inline-modal]:not(.hidden)"));
+
+            if (open) {
+              window.requestAnimationFrame(function () {
+                var focusTarget = modal.querySelector("[data-close-modal], button, input, select, textarea, a");
+                if (focusTarget && typeof focusTarget.focus === "function") focusTarget.focus();
+              });
+            }
+          }
+
+          document.addEventListener("click", function (event) {
+            var target = event.target && event.target.closest ? event.target : event.target && event.target.parentElement;
+            if (!target) return;
+
+            var trigger = target.closest("[data-open-modal]");
+            if (trigger) {
+              var modal = document.getElementById(trigger.getAttribute("data-open-modal") || "");
+              if (!modal) return;
+
+              event.preventDefault();
+              setModalOpen(modal, true);
+              return;
+            }
+
+            var closeButton = target.closest("[data-close-modal]");
+            if (closeButton) {
+              var closeModal = closeButton.closest("[data-inline-modal]");
+              if (!closeModal) return;
+
+              event.preventDefault();
+              setModalOpen(closeModal, false);
+              return;
+            }
+
+            if (target.matches && target.matches("[data-inline-modal]")) {
+              setModalOpen(target, false);
+            }
+          });
+
+          document.addEventListener("keydown", function (event) {
+            if (event.key !== "Escape") return;
+
+            var modal = document.querySelector("[data-inline-modal]:not(.hidden)");
+            if (modal) setModalOpen(modal, false);
+          });
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", installInlineModalFallback, { once: true });
+        } else {
+          installInlineModalFallback();
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        function installComboboxBehavior() {
+          if (window.__comboboxBehaviorInitialized === true) return;
+          window.__comboboxBehaviorInitialized = true;
+
+          function closestElement(target, selector) {
+            if (!target) return null;
+            if (target.closest) return target.closest(selector);
+            return target.parentElement && target.parentElement.closest ? target.parentElement.closest(selector) : null;
+          }
+
+          function comboboxInputFor(widget) {
+            return widget && widget.querySelector("[data-combobox-input='true']");
+          }
+
+          function comboboxHiddenFor(widget) {
+            return widget && widget.querySelector("[data-combobox-value='true']");
+          }
+
+          function comboboxMenuFor(widget) {
+            return widget && widget.querySelector("[data-combobox-menu='true']");
+          }
+
+          function setOpen(widget, open) {
+            var input = comboboxInputFor(widget);
+            var menu = comboboxMenuFor(widget);
+            if (!input || !menu) return;
+
+            menu.classList.toggle("hidden", !open);
+            menu.classList.toggle("u-hidden", !open);
+            input.setAttribute("aria-expanded", open ? "true" : "false");
+          }
+
+          function filter(widget) {
+            var input = comboboxInputFor(widget);
+            if (!input) return;
+
+            var q = (input.value || "").trim().toLowerCase();
+            var visible = 0;
+            widget.querySelectorAll("[data-combobox-option='true']").forEach(function (option) {
+              var haystack = (option.getAttribute("data-combobox-option-search") || "").toLowerCase();
+              var match = q === "" || haystack.indexOf(q) !== -1;
+              option.hidden = !match;
+              if (match) visible += 1;
+            });
+
+            var empty = widget.querySelector("[data-combobox-empty='true']");
+            if (empty) empty.hidden = !(q !== "" && visible === 0);
+          }
+
+          function visibleOptions(widget) {
+            return Array.from(widget.querySelectorAll("[data-combobox-option='true']")).filter(function (option) {
+              return !option.hidden;
+            });
+          }
+
+          function selectOption(widget, option) {
+            var input = comboboxInputFor(widget);
+            var hidden = comboboxHiddenFor(widget);
+            if (!input || !hidden || !option) return;
+
+            hidden.value = option.getAttribute("data-combobox-option-value") || "";
+            input.value = option.getAttribute("data-combobox-option-label") || "";
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            setOpen(widget, false);
+          }
+
+          document.addEventListener("focusin", function (event) {
+            var input = closestElement(event.target, "[data-combobox-input='true']");
+            var widget = input && closestElement(input, "[data-combobox='true']");
+            if (!widget) return;
+
+            filter(widget);
+            setOpen(widget, true);
+          });
+
+          document.addEventListener("input", function (event) {
+            var input = closestElement(event.target, "[data-combobox-input='true']");
+            var widget = input && closestElement(input, "[data-combobox='true']");
+            if (!widget) return;
+
+            var hidden = comboboxHiddenFor(widget);
+            if (hidden) hidden.value = "";
+            filter(widget);
+            setOpen(widget, true);
+          });
+
+          document.addEventListener("mousedown", function (event) {
+            if (closestElement(event.target, "[data-combobox-option='true']")) {
+              event.preventDefault();
+            }
+          });
+
+          document.addEventListener("click", function (event) {
+            var option = closestElement(event.target, "[data-combobox-option='true']");
+            if (option) {
+              var optionWidget = closestElement(option, "[data-combobox='true']");
+              selectOption(optionWidget, option);
+              return;
+            }
+
+            var input = closestElement(event.target, "[data-combobox-input='true']");
+            var activeWidget = input && closestElement(input, "[data-combobox='true']");
+            if (activeWidget) {
+              filter(activeWidget);
+              setOpen(activeWidget, true);
+              return;
+            }
+
+            document.querySelectorAll("[data-combobox='true']").forEach(function (widget) {
+              if (!widget.contains(event.target)) setOpen(widget, false);
+            });
+          });
+
+          document.addEventListener("keydown", function (event) {
+            var input = closestElement(event.target, "[data-combobox-input='true']");
+            var widget = input && closestElement(input, "[data-combobox='true']");
+            if (!widget) return;
+
+            if (event.key === "Escape") {
+              setOpen(widget, false);
+              return;
+            }
+
+            if (event.key === "Enter") {
+              var firstOption = visibleOptions(widget)[0];
+              if (!firstOption) return;
+
+              event.preventDefault();
+              selectOption(widget, firstOption);
+            }
+          });
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", installComboboxBehavior, { once: true });
+        } else {
+          installComboboxBehavior();
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        function installMobileNavFallback() {
+          if (window.__mobileNavigationInitialized === true) return;
+          window.__mobileNavigationInitialized = true;
+
+          function drawerFor(button) {
+            var id = button && button.getAttribute("aria-controls");
+            return id ? document.getElementById(id) : null;
+          }
+
+          function mobileViewport() {
+            return window.matchMedia("(max-width: 768px)").matches;
+          }
+
+          function setOpen(drawer, open) {
+            if (!drawer) return;
+            var button = document.querySelector("[data-mobile-nav-toggle][aria-controls='" + drawer.id + "']");
+            var header = drawer.closest(".c-app-header");
+            var backdrop = header && header.querySelector("[data-mobile-nav-backdrop]");
+
+            drawer.classList.toggle("is-open", open);
+            if (mobileViewport()) {
+              drawer.setAttribute("aria-hidden", open ? "false" : "true");
+            } else {
+              drawer.removeAttribute("aria-hidden");
+            }
+            if (button) button.setAttribute("aria-expanded", open ? "true" : "false");
+            if (backdrop) {
+              backdrop.hidden = !open;
+              backdrop.classList.toggle("is-open", open);
+            }
+            document.body.classList.toggle("is-mobile-nav-open", !!document.querySelector("[data-mobile-nav-drawer].is-open"));
+          }
+
+          function closeAll() {
+            document.querySelectorAll("[data-mobile-nav-drawer]").forEach(function (drawer) {
+              setOpen(drawer, false);
+            });
+          }
+
+          function syncState() {
+            document.querySelectorAll("[data-mobile-nav-drawer]").forEach(function (drawer) {
+              if (mobileViewport()) {
+                drawer.setAttribute("aria-hidden", drawer.classList.contains("is-open") ? "false" : "true");
+              } else {
+                setOpen(drawer, false);
+                drawer.removeAttribute("aria-hidden");
+              }
+            });
+          }
+
+          syncState();
+
+          document.addEventListener("click", function (event) {
+            var target = event.target && event.target.closest ? event.target : event.target.parentElement;
+            if (!target) return;
+
+            var toggle = target.closest("[data-mobile-nav-toggle]");
+            if (toggle) {
+              event.preventDefault();
+              var drawer = drawerFor(toggle);
+              var open = drawer && !drawer.classList.contains("is-open");
+              closeAll();
+              setOpen(drawer, open);
+              return;
+            }
+
+            var close = target.closest("[data-mobile-nav-close], [data-mobile-nav-backdrop]");
+            if (close) {
+              event.preventDefault();
+              closeAll();
+            }
+          });
+
+          document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") closeAll();
+          });
+
+          window.addEventListener("resize", syncState);
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", installMobileNavFallback, { once: true });
+        } else {
+          installMobileNavFallback();
+        }
+      })();
+    </script>
+    <script>
       // Ensure root font-size is enforced at runtime (helps override any CSS ordering issues)
       (function() {
         try {

@@ -11,20 +11,19 @@ class EvidenceController < ApplicationController
   def check_access
     url = params[:url].to_s
 
-    unless url =~ StudentQuestion::GOOGLE_URL_REGEX
+    unless url.match?(StudentQuestion::GOOGLE_URL_REGEX)
       render json: { ok: false, accessible: false, status: nil, reason: "invalid_url" }
       return
     end
 
-    begin
-      response = fetch_with_redirects(url, limit: 3)
-      code = response.code.to_i
-      # Consider 200 as accessible. 302 handled by redirects.
-      accessible = (code == 200)
-      render json: { ok: true, accessible: accessible, status: code, reason: reason_from_code(code) }
-    rescue => _e
-      render json: { ok: false, accessible: false, status: nil, reason: "network_error" }
-    end
+    accessible, reason = EvidenceLinkChecker.call(url)
+    response_reason = reason == :error ? "network_error" : reason.to_s
+    render json: {
+      ok: accessible,
+      accessible: accessible,
+      status: accessible ? 200 : nil,
+      reason: response_reason
+    }
   end
 
   private

@@ -1060,6 +1060,9 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     missing_target_items = Array(target_warning_summary[:missing_course_targets]).map { |row| approval_missing_target_item(row) }
     sections << approval_section("Missing Course Targets", missing_target_items)
 
+    mismatched_target_items = Array(target_warning_summary[:mismatched_configured_course_targets]).map { |row| approval_configured_target_mismatch_item(row) }
+    sections << approval_section("Configured Course Target Mismatches", mismatched_target_items)
+
     sections.compact
   end
 
@@ -1116,6 +1119,20 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     student = row[:student].presence || "Unknown student"
 
     [ student, row[:course_code], row[:competency], "missing course target" ].compact_blank.join(" | ")
+  end
+
+  def approval_configured_target_mismatch_item(row)
+    student = row[:student].presence || "Unknown student"
+    uploaded = row[:course_target].presence || "missing"
+    configured = row[:configured_course_target].presence || "missing"
+
+    [
+      student,
+      row[:course_code],
+      row[:competency],
+      "uploaded target #{uploaded}",
+      "configured target #{configured}"
+    ].compact_blank.join(" | ")
   end
 
   def target_met_label(assessed_level, course_target_level)

@@ -8,6 +8,7 @@ class ApplicationHelperTest < ActionView::TestCase
     assert_includes flash_classes(:success), "flash__success"
     assert_includes flash_classes(:alert), "flash__alert"
     assert_includes flash_classes(:warning), "flash__warning"
+    assert_equal "flash", flash_classes(:custom_key)
   end
 
   test "flash_title returns fallback for unknown keys" do
@@ -21,6 +22,15 @@ class ApplicationHelperTest < ActionView::TestCase
     assert_includes message, "student-level competency data"
     assert_includes message, "legitimate educational interest"
     assert_includes message, "store or share the file securely"
+  end
+
+  test "ferpa_export_notice gives visible warning copy" do
+    message = ferpa_export_notice("Student-level competency exports")
+
+    assert_includes message, "FERPA reminder"
+    assert_includes message, "Student-level competency exports"
+    assert_includes message, "legitimate educational or program review use"
+    assert_includes message, "store and share it securely"
   end
 
   test "app names expose short browser name and full display name" do
@@ -74,6 +84,16 @@ class ApplicationHelperTest < ActionView::TestCase
     assert_includes survey_status_badge_classes("unknown"), "slate"
   end
 
+  test "survey lifecycle label handles archived blank open and closed rows" do
+    survey = surveys(:fall_2025)
+
+    assert_equal "Archived", survey_lifecycle_label(nil, [])
+    assert_equal "Active", survey_lifecycle_label(survey, [])
+    assert_equal "Active", survey_lifecycle_label(survey, [ { available_until: nil } ])
+    assert_equal "Active", survey_lifecycle_label(survey, [ { available_until: 1.day.from_now } ])
+    assert_equal "Closed", survey_lifecycle_label(survey, [ { available_until: 1.day.ago } ])
+  end
+
   test "avatar_aria_label falls back when user missing or name blank" do
     assert_equal "User avatar", avatar_aria_label(nil)
 
@@ -88,6 +108,7 @@ class ApplicationHelperTest < ActionView::TestCase
     assert_equal "none", humanize_audit_value(nil)
     # Empty string should be normalized to "none"
     assert_equal "none", humanize_audit_value("")
+    assert_equal "a, b", humanize_audit_value([ "a", "", "b" ])
     assert_equal "a, b", humanize_audit_list([ "a", "b" ])
     assert_equal "none", humanize_audit_list([])
   end
@@ -103,6 +124,16 @@ class ApplicationHelperTest < ActionView::TestCase
     assert_includes summary, "Test note"
     assert_includes summary, "Title: Old -> New"
     assert_includes summary, "Tracks: A -> B"
+  end
+
+  test "summarize survey audit metadata skips unchanged and missing structures" do
+    summary = summarize_survey_audit_metadata(
+      attributes: { title: { before: "Same", after: "Same" } },
+      associations: { tracks: { before: [ "A" ], after: [ "A" ] } }
+    )
+
+    assert_equal "No recorded changes", summary
+    assert_equal "No recorded changes", summarize_survey_audit_metadata(note: "", attributes: [], associations: [])
   end
 
   test "tailwind_stylesheet_tag returns fallback link when asset pipeline raises" do
@@ -131,6 +162,46 @@ class ApplicationHelperTest < ActionView::TestCase
     end
   end
 
+  test "consolidated_stylesheet_tags falls back to resolved asset links" do
+    fake_asset = Struct.new(:digested_path).new("application-abc123.css")
+    load_path = Object.new
+    load_path.define_singleton_method(:find) do |name|
+      name == "application.css" ? fake_asset : nil
+    end
+    fake_assets = Struct.new(:load_path).new(load_path)
+
+    self.stub(:stylesheet_link_tag, ->(*) { raise StandardError, "boom" }) do
+      Rails.application.stub(:assets, fake_assets) do
+        html = consolidated_stylesheet_tags.to_s
+
+        assert_includes html, "application-abc123.css"
+        assert_includes html, "accessibility.css"
+        assert_includes html, "rel=\"stylesheet\""
+      end
+    end
+  end
+
+  test "consolidated_stylesheet_tags returns nil when all fallback links fail" do
+    self.stub(:stylesheet_link_tag, ->(*) { raise StandardError, "boom" }) do
+      self.stub(:stylesheet_fallback_tag, nil) do
+        assert_nil consolidated_stylesheet_tags
+      end
+    end
+  end
+
+  test "review_meetings_note formats blank single date and range values" do
+    offering = Struct.new(:review_meetings_start, :review_meetings_end)
+    start_date = Date.new(2026, 6, 2)
+    end_date = Date.new(2026, 6, 9)
+
+    assert_nil review_meetings_note(nil)
+    assert_nil review_meetings_note(offering.new(nil, nil))
+    assert_equal "June 2, 2026", review_meetings_note(offering.new(start_date, nil))
+    assert_equal "June 9, 2026", review_meetings_note(offering.new(nil, end_date))
+    assert_equal "June 2, 2026", review_meetings_note(offering.new(start_date, start_date))
+    assert_equal "June 2, 2026 – June 9, 2026", review_meetings_note(offering.new(start_date, end_date))
+  end
+
   test "render_question_prompt supports underscore markdown emphasis" do
     question = Question.new(
       prompt_format: "rich_text",
@@ -151,5 +222,32 @@ class ApplicationHelperTest < ActionView::TestCase
     html = render_question_prompt(question).to_s
     assert_includes html, "<strong>hours per week</strong>"
     assert_includes html, "<u>average</u>"
+  end
+
+  test "render_question_prompt escapes plain and nil prompts" do
+    escape = ->(value) { ERB::Util.html_escape(value) }
+    define_singleton_method(:h, &escape)
+
+    assert_equal "", render_question_prompt(nil)
+
+    question = Question.new(question_text: "<script>alert('x')</script>")
+    assert_includes render_question_prompt(question), "&lt;script&gt;"
+  end
+
+  test "sortable header preserves filters and toggles active direction" do
+    request.query_parameters.merge!("q" => "health", "track" => "Residential", "ignored" => "nope")
+    @sort_column = "title"
+    @sort_direction = "asc"
+
+    active_html = sortable_header("Title", "title")
+    assert_includes active_html, "direction=desc"
+    assert_includes active_html, "q=health"
+    assert_includes active_html, "track=Residential"
+    assert_includes active_html, "(asc)"
+    assert_includes active_html, "text-indigo-600"
+
+    inactive_html = sortable_header("Semester", "semester")
+    assert_includes inactive_html, "direction=asc"
+    refute_includes inactive_html, "(asc)"
   end
 end

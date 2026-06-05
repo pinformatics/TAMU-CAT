@@ -12,7 +12,7 @@
 <% filter_params = { semester: selected_semester_value, sources: visible_sources } %>
 <% export_path = @competency_export_path.presence || student_competencies_path(filter_params.merge(format: :csv)) %>
 <% pdf_path = @competency_pdf_path.presence || student_competencies_path(filter_params.merge(format: :pdf)) %>
-<% staff_export_confirm = (current_user&.role_admin? || current_user&.role_advisor?) ? ferpa_export_confirmation("student-level competency data") : nil %>
+<% competency_export_confirm = ferpa_export_confirmation("student-level competency data") %>
 <% staff_competency_view = current_user&.role_admin? || current_user&.role_advisor? %>
 <% semester_options = [["All semesters", @payload[:all_semesters_value]]] + @payload[:semesters].map { |semester| [semester, semester] } %>
 <% change_summary = @payload[:change_summary] || {} %>
@@ -71,12 +71,16 @@
       <%= link_to "Download PDF",
             pdf_path,
             class: button_classes(:secondary),
-            data: { turbo: false, turbo_confirm: staff_export_confirm }.compact %>
+            data: { turbo: false, turbo_confirm: competency_export_confirm } %>
 
       <%= link_to "Export CSV",
             export_path,
             class: button_classes(:secondary),
-            data: { turbo: false, turbo_confirm: staff_export_confirm }.compact %>
+            data: { turbo: false, turbo_confirm: competency_export_confirm } %>
+    </div>
+
+    <div class="c-callout c-callout--warning c-ferpa-export-notice no-print">
+      <p><%= ferpa_export_notice("Student-level competency exports") %></p>
     </div>
   </header>
 
@@ -271,8 +275,8 @@
     </div>
 
     <div class="c-chart-panels">
-      <div class="c-chart-panel is-active" id="competencySnapshotPanel" role="tabpanel" aria-labelledby="competencySnapshotTab" data-competency-chart-panel="snapshot">
-        <div class="c-chart-frame c-chart-frame--lg">
+      <div class="c-chart-panel c-chart-panel--scrollable is-active" id="competencySnapshotPanel" role="tabpanel" aria-labelledby="competencySnapshotTab" data-competency-chart-panel="snapshot">
+        <div class="c-chart-frame c-chart-frame--lg c-chart-frame--radar">
           <canvas id="competencyRadarChart"></canvas>
         </div>
       </div>
@@ -315,7 +319,7 @@
           </header>
 
           <div class="c-table-wrapper">
-            <table class="c-table c-matrix-table">
+            <table class="c-table c-table--sticky-header c-matrix-table">
               <thead>
                 <tr>
                   <th>Competency</th>
@@ -466,14 +470,32 @@
 
   const radarElement = document.getElementById("competencyRadarChart")
   const trendElement = document.getElementById("competencyTrendChart")
+  const compactChartViewport = () => window.matchMedia("(max-width: 768px)").matches
+  const compact = compactChartViewport()
   const radarChart = radarElement ? new Chart(radarElement, {
     type: "radar",
     data: { labels: radarPayload.labels, datasets: radarPayload.datasets.map(decorate) },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { r: { min: 0, max: 5, ticks: { stepSize: 1 } } },
-      plugins: { legend: { position: "bottom" } }
+      layout: { padding: compact ? 24 : 12 },
+      scales: {
+        r: {
+          min: 0,
+          max: 5,
+          ticks: { stepSize: 1 },
+          pointLabels: {
+            padding: compact ? 12 : 8,
+            font: { size: compact ? 10 : 12 }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { boxWidth: compact ? 10 : 40 }
+        }
+      }
     }
   }) : null
 

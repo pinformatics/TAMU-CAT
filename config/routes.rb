@@ -31,8 +31,16 @@ Rails.application.routes.draw do
   get "admin_dashboard", to: "dashboards#admin", as: :admin_dashboard
   post "switch_role", to: "dashboards#switch_role", as: :switch_role
 
-  get "student_records", to: "student_records#index", as: :student_records
-  get "student_records/export_excel", to: "student_records#export_excel", as: :export_student_records_excel
+  get "survey_records", to: "student_records#index", as: :survey_records
+  get "survey_records/export_excel", to: "student_records#export_excel", as: :export_survey_records_excel
+  get "student_records", to: redirect { |_params, request|
+    query = request.query_string.present? ? "?#{request.query_string}" : ""
+    "/survey_records#{query}"
+  }, as: :student_records
+  get "student_records/export_excel", to: redirect { |_params, request|
+    query = request.query_string.present? ? "?#{request.query_string}" : ""
+    "/survey_records/export_excel#{query}"
+  }, as: :export_student_records_excel
   resources :student_overviews, only: %i[index show] do
     get :export_excel, on: :collection
     get :competency_history, on: :member
@@ -52,6 +60,15 @@ Rails.application.routes.draw do
   get "reports/profile_export.xlsx", to: "reports#export_portfolio", as: :export_reports_portfolio
   get "reports/course_competencies.csv", to: "reports#export_course_competencies", as: :export_course_competency_reports
   get "reports/:section/export_pdf", to: "reports#export_pdf", as: :export_reports_pdf
+
+  # Competency matrix shared by admins and advisors. The admin-prefixed route
+  # remains available for admins and older bookmarks, but advisors use this
+  # neutral path so the page does not look admin-only.
+  resources :competencies, controller: "admin/competencies", only: %i[index show] do
+    collection do
+      get :export
+    end
+  end
 
   # Admin-specific management routes
   get "manage_members", to: "dashboards#manage_members", as: :manage_members
@@ -81,6 +98,7 @@ Rails.application.routes.draw do
     patch "target_levels", to: "target_levels#update"
     post "target_levels/fill_defaults", to: "target_levels#fill_defaults", as: :fill_default_target_levels
     post "target_levels/copy_to_current", to: "target_levels#copy_to_current", as: :copy_target_levels_to_current
+    resources :course_competency_targets, only: %i[create update destroy]
     resources :course_grade_release_dates, only: %i[index new create edit update destroy] do
       collection do
         patch :bulk_update
@@ -156,6 +174,11 @@ Rails.application.routes.draw do
     end
   end
 
+  get "survey_responses", to: redirect { |_params, request|
+    query = request.query_string.present? ? "?#{request.query_string}" : ""
+    "/survey_records#{query}"
+  }
+
   resources :survey_responses, only: :show do
     member do
       get :download
@@ -207,7 +230,8 @@ Rails.application.routes.draw do
   get "maintenance", to: "pages#maintenance", as: :maintenance
 
   # User settings page (accessible to any authenticated user)
-  get "settings", to: "settings#edit", as: :settings
+  get "settings", to: "settings#show", as: :settings
+  get "settings/edit", to: "settings#edit", as: :edit_settings
   patch "settings", to: "settings#update"
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.

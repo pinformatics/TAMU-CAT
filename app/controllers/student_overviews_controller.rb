@@ -19,7 +19,7 @@ class StudentOverviewsController < ApplicationController
     record_export_audit!(
       export_type: "student_overviews_excel",
       description: "Exported student overview workbook.",
-      metadata: { student_count: @students.size }
+      metadata: { student_count: @students.size, filters: student_overview_export_filters.to_h }
     )
 
     send_data package.to_stream.read,
@@ -29,11 +29,17 @@ class StudentOverviewsController < ApplicationController
   end
 
   def show
-    @student = accessible_student_scope(include_historical: true).includes(:user, advisor: :user).find(params[:id])
+    @student = accessible_student_scope(include_historical: true).includes(:user, advisor: :user).find_by(student_id: params[:id])
+    unless @student
+      redirect_to student_overviews_path, alert: "That student overview is not available from your account."
+      return
+    end
+
     @overview = overview_for(@student)
     @survey_rows = survey_rows_for(@student)
     @advisor_assignment_rows = advisor_assignment_rows_for(@student)
     @course_history_rows = course_history_rows_for(@student)
+    @course_history_groups = course_history_groups_for(@course_history_rows)
     @advisor_note_rows = advisor_note_rows_for(@student)
     @competency_payload = StudentCompetencyDashboard.new(
       student: @student,
@@ -46,7 +52,12 @@ class StudentOverviewsController < ApplicationController
   end
 
   def competency_history
-    student = accessible_student_scope(include_historical: true).includes(:user).find(params[:id])
+    student = accessible_student_scope(include_historical: true).includes(:user).find_by(student_id: params[:id])
+    unless student
+      redirect_to student_overviews_path, alert: "That student competency history is not available from your account."
+      return
+    end
+
     exporter = StudentCompetencyHistoryExporter.new(student: student)
     record_export_audit!(
       export_type: "student_competency_history_csv",
@@ -77,7 +88,7 @@ class StudentOverviewsController < ApplicationController
   def require_staff_access!
     return if current_user&.role_admin? || current_user&.role_advisor?
 
-    redirect_to dashboard_path, alert: "Advisor or admin access is required to open this page."
+    redirect_to dashboard_path, alert: STAFF_ONLY_MESSAGE
   end
 
   def overview_filters
@@ -224,6 +235,25 @@ class StudentOverviewsController < ApplicationController
       end
   end
 
+  def course_history_groups_for(rows)
+    Array(rows)
+      .group_by { |row| [ row[:semester], row[:course_code].presence || "Unknown course", row[:source_file].presence || "Import" ] }
+      .map do |(semester, course_code, source_file), group_rows|
+        statuses = group_rows.map { |row| row[:target_status].to_s }
+
+        {
+          semester: semester,
+          course_code: course_code,
+          source_file: source_file,
+          rows: group_rows,
+          competency_count: group_rows.size,
+          met_count: statuses.count("Met"),
+          below_target_count: statuses.count("Below target"),
+          no_target_count: statuses.count("No target")
+        }
+      end
+  end
+
   def advisor_note_rows_for(student)
     ConfidentialAdvisorNote
       .includes(:survey, advisor: :user)
@@ -286,12 +316,14 @@ class StudentOverviewsController < ApplicationController
       course_average = domain.dig(:averages, :course)
       self_average = domain.dig(:averages, :self)
       value = course_average || self_average
+      target_average = domain_target_average(domain)
 
       {
         name: domain[:name],
         average: value,
         source: course_average.present? ? "Course" : "Self",
-        status: heatmap_status(value)
+        target_average: target_average,
+        status: heatmap_status(value, target_average: target_average)
       }
     end
   end
@@ -312,12 +344,37 @@ class StudentOverviewsController < ApplicationController
     end
   end
 
-  def heatmap_status(value)
-    return "missing" if value.blank?
-    return "strong" if value.to_f >= 4.0
-    return "watch" if value.to_f >= 3.0
+  def domain_target_average(domain)
+    average_target = numeric_heatmap_value(domain.dig(:averages, :target))
+    return average_target if average_target.present?
+
+    targets = Array(domain[:competencies]).filter_map do |competency|
+      numeric_heatmap_value(competency[:end_program_target])
+    end
+    return nil if targets.empty?
+
+    (targets.sum / targets.size).round(2)
+  end
+
+  def heatmap_status(value, target_average: nil)
+    score = numeric_heatmap_value(value)
+    return "missing" if score.blank?
+
+    target = numeric_heatmap_value(target_average)
+    return score >= target ? "strong" : "attention" if target.present?
+
+    return "strong" if score >= 4.0
+    return "watch" if score >= 3.0
 
     "attention"
+  end
+
+  def numeric_heatmap_value(value)
+    return nil if value.blank?
+
+    Float(value)
+  rescue ArgumentError, TypeError
+    nil
   end
 
   def normalize_track(value)

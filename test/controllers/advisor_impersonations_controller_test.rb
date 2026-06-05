@@ -13,7 +13,7 @@ class AdvisorImpersonationsControllerTest < ActionDispatch::IntegrationTest
     get new_advisor_impersonation_path
 
     assert_redirected_to dashboard_path
-    assert_match(/admin access is required/i, flash[:alert].to_s)
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "advisor cannot open advisor impersonation page" do
@@ -22,7 +22,7 @@ class AdvisorImpersonationsControllerTest < ActionDispatch::IntegrationTest
     get new_advisor_impersonation_path
 
     assert_redirected_to dashboard_path
-    assert_match(/admin access is required/i, flash[:alert].to_s)
+    assert_equal ApplicationController::ADMIN_ONLY_MESSAGE, flash[:alert]
   end
 
   test "admin can open advisor impersonation page" do
@@ -31,6 +31,10 @@ class AdvisorImpersonationsControllerTest < ActionDispatch::IntegrationTest
     get new_advisor_impersonation_path
 
     assert_response :success
+    assert_select "input[type='hidden'][name='advisor_impersonation[user_id]'][data-combobox-value='true']"
+    assert_select "datalist", count: 0
+    assert_select "[data-combobox-option-value='#{@advisor.id}']"
+    assert_select "[data-combobox-option-search*='#{@advisor.email}']"
   end
 
   test "admin can impersonate an advisor" do
@@ -42,6 +46,22 @@ class AdvisorImpersonationsControllerTest < ActionDispatch::IntegrationTest
 
     delete advisor_impersonation_path
     assert_redirected_to admin_dashboard_path
+  end
+
+  test "admin can impersonate an advisor by email embedded in combobox value" do
+    sign_in @admin
+
+    post advisor_impersonation_path, params: { advisor_impersonation: { user_id: "#{@advisor.name} <#{@advisor.email}>" } }
+
+    assert_redirected_to advisor_dashboard_path
+  end
+
+  test "admin can impersonate an advisor by name when no email present" do
+    sign_in @admin
+
+    post advisor_impersonation_path, params: { advisor_impersonation: { user_id: @advisor.name } }
+
+    assert_redirected_to advisor_dashboard_path
   end
 
   test "advisor impersonation rejects unknown advisor" do

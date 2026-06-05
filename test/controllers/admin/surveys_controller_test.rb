@@ -460,6 +460,64 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_equal 2, sibling_question.program_target_level
   end
 
+  test "autosave update logs nested payload counts in development" do
+    category = categories(:clinical_skills)
+    question = questions(:fall_q1)
+    section = @survey.sections.create!(title: "Autosave section", position: 1)
+    env = ActiveSupport::StringInquirer.new("development")
+
+    Rails.stub(:env, env) do
+      assert_no_enqueued_jobs only: ReconcileSurveyAssignmentsJob do
+        patch admin_survey_path(@survey), params: {
+          autosave: "1",
+          survey: {
+            title: @survey.title,
+            sections_attributes: {
+              "0" => {
+                id: section.id,
+                title: section.title,
+                position: section.position,
+                form_uid: "section-#{section.id}"
+              }
+            },
+            categories_attributes: {
+              "0" => {
+                id: category.id,
+                name: category.name,
+                section_form_uid: "section-#{section.id}",
+                questions_attributes: {
+                  "0" => {
+                    id: question.id,
+                    question_text: question.question_text,
+                    question_type: question.question_type,
+                    question_order: question.question_order
+                  }
+                }
+              }
+            }
+          }
+        }
+      end
+    end
+
+    assert_redirected_to admin_surveys_path
+    assert_equal section.id, category.reload.survey_section_id
+  end
+
+  test "autosave update re-renders edit with validation errors in development" do
+    env = ActiveSupport::StringInquirer.new("development")
+
+    Rails.stub(:env, env) do
+      patch admin_survey_path(@survey), params: {
+        autosave: "1",
+        survey: { title: "" }
+      }
+    end
+
+    assert_response :unprocessable_entity
+    assert_select "form"
+  end
+
   test "updating competency question target level mirrors to competency target levels" do
     @survey.assign_tracks!([ "Residential" ])
 
@@ -614,8 +672,9 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     get admin_surveys_path
 
     assert_response :success
-    assert_select "button[data-open-modal=?]", "copy-survey-modal-#{@survey.id}", text: "Copy"
+    assert_select "a[href=?][data-open-modal=?][data-turbo='false']", copy_admin_survey_path(@survey), "copy-survey-modal-#{@survey.id}", text: "Copy"
     assert_select "div#copy-survey-modal-#{@survey.id} form[action=?]", copy_to_semester_admin_survey_path(@survey)
+    assert_select "div#copy-survey-modal-#{@survey.id} form[data-turbo='false']"
     assert_select "div#copy-survey-modal-#{@survey.id} select[name='survey_copy[target_program_semester_id]']"
   end
 
@@ -1206,6 +1265,12 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
       tooltip_text: "Use your best evidence.",
       has_feedback: true,
       program_target_level: 3,
+      is_required: true,
+      answer_options: [
+        { label: "Yes", value: "Yes" },
+        { label: "No", value: "No" },
+        { label: "Other - please describe", value: "Other", requires_text: true }
+      ].to_json,
       configuration: { "prompt_format" => "rich_text", "integer_min" => "1", "integer_max" => "5" }
     )
 
@@ -1215,7 +1280,8 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
         question_type: "short_answer",
         question_order: parent_question.question_order,
         parent_question: parent_question,
-        sub_question_order: 1
+        sub_question_order: 1,
+        is_required: true
       )
     end
 
@@ -1277,10 +1343,14 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Use your best evidence.", copied_parent.tooltip_text
     assert_equal 3, copied_parent.program_target_level
     assert_equal "rich_text", copied_parent.prompt_format
+    assert copied_parent.is_required?
+    assert_equal parent_question.answer_option_definitions, copied_parent.answer_option_definitions
 
     if Question.sub_question_columns_supported?
       copied_child = copied_category.questions.find_by!(question_text: "Describe the evidence behind that rating")
       assert_equal copied_parent.id, copied_child.parent_question_id
+      assert_equal 1, copied_child.sub_question_order
+      assert copied_child.is_required?
     end
 
     log = SurveyChangeLog.order(:created_at).last
@@ -1563,6 +1633,25 @@ class Admin::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_select "article#question-block-#{reflection.id}[data-reflection-question='true'][data-reflection-source-id='#{assessment.id}'][data-preview-required='false'].hidden[aria-hidden='true']"
     assert_select "article#question-block-#{reflection.id} .u-danger", text: "*", count: 0
     assert_includes response.body, "syncReflectionQuestions"
+  end
+
+  test "preview marks evidence questions for submit validation" do
+    category = @survey.categories.first || @survey.categories.create!(name: "Evidence")
+    evidence = category.questions.create!(
+      question_text: "Portfolio evidence",
+      question_type: "evidence",
+      question_order: 903,
+      is_required: true
+    )
+
+    get preview_admin_survey_path(@survey)
+
+    assert_response :success
+    assert_select "form[data-preview-survey-form='true'] article#question-block-#{evidence.id}[data-question-type='evidence'][data-preview-required='true']"
+    assert_select "input[name='answers[#{evidence.id}]'][placeholder='https://sites.google.com/tamu.edu/...']"
+    assert_includes response.body, "previewEvidenceError"
+    assert_includes response.body, "/evidence/check_access"
+    assert_includes response.body, "https://sites.google.com/"
   end
 
   test "preview with flexibility scale questions" do

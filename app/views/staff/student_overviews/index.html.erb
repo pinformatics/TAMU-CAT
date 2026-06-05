@@ -13,7 +13,7 @@
 
           <div class="u-actions">
             <%= link_to "Back", current_user&.role_admin? ? admin_dashboard_path : advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
-            <%= link_to "Survey Records", student_records_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "Survey Records", survey_records_path, class: button_classes(:secondary), data: { turbo: false } %>
             <%= link_to "Download Excel",
                         export_excel_student_overviews_path(request.query_parameters),
                         class: button_classes(:secondary),
@@ -66,7 +66,7 @@
         <header class="c-panel-header">
           <div>
             <p class="c-eyebrow">Overview workspace</p>
-            <h2 class="c-section-title c-heading-inline">Student Records and Stats</h2>
+            <h2 class="c-section-title c-heading-inline">Survey Records and Stats</h2>
           </div>
           <div class="c-tabs" role="tablist" aria-label="Student overview sections">
             <button type="button"
@@ -189,7 +189,7 @@
 
           <% if @heatmap_rows.present? %>
             <div class="c-table-wrapper">
-              <table class="c-table c-table--sm">
+              <table class="c-table c-table--sm c-table--sticky-header">
                 <thead>
                   <tr>
                     <th>Student</th>

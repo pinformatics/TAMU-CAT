@@ -6,7 +6,8 @@ import ReportsApp from "reports/app"
 export default class extends Controller {
   static values = {
     pdfUrl: String,
-    excelUrl: String
+    excelUrl: String,
+    initialFilters: Object
   }
 
   connect() {
@@ -14,8 +15,9 @@ export default class extends Controller {
       pdf: this.hasPdfUrlValue ? this.pdfUrlValue : null,
       excel: this.hasExcelUrlValue ? this.excelUrlValue : null
     }
+    const initialFilters = this.hasInitialFiltersValue ? this.initialFiltersValue : {}
     this.reactRoot = createRoot(this.element)
-    this.reactRoot.render(React.createElement(ReportsApp, { exportUrls }))
+    this.reactRoot.render(React.createElement(ReportsApp, { exportUrls, initialFilters }))
   }
 
   disconnect() {

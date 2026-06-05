@@ -40,6 +40,8 @@ class StudentPortfolioExporter
           uin: student.uin,
           track: student.track,
           program_year: student.program_year,
+          year: student.program_year,
+          cohort: student.program_year,
           advisor: student.advisor&.display_name,
           portfolio_url: answer&.response_value,
           submitted_at: answer&.updated_at
@@ -69,7 +71,7 @@ class StudentPortfolioExporter
 
   def workbook
     package = Axlsx::Package.new
-    package.workbook.add_worksheet(name: "Portfolio URLs") do |sheet|
+    package.workbook.add_worksheet(name: "Student Profile") do |sheet|
       sheet.add_row workbook_headers
       rows.each do |row|
         sheet.add_row [
@@ -77,7 +79,7 @@ class StudentPortfolioExporter
           row[:name],
           row[:email],
           row[:track],
-          row[:program_year],
+          row[:year],
           row[:advisor],
           row[:portfolio_url],
           row[:submitted_at],
@@ -140,7 +142,7 @@ class StudentPortfolioExporter
       "Name",
       "Email",
       "Track",
-      "Cohort",
+      "Year",
       "Advisor",
       "Google Sites URL",
       "Submitted At",

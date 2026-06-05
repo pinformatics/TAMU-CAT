@@ -93,7 +93,12 @@ end %>
         </span>
         <span id="edit-disabled-hint-completed<%= survey.id %>" class="sr-only"><%= edit_disabled_hint %></span>
       <% end %>
-      <%= link_to "Download PDF", download_survey_response_path(survey_response, token: download_token), class: button_classes(:primary), target: "_blank", rel: "noopener noreferrer" %>
+      <%= link_to "Download PDF",
+                  download_survey_response_path(survey_response, token: download_token),
+                  class: button_classes(:primary),
+                  target: "_blank",
+                  rel: "noopener noreferrer",
+                  data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student survey response data") } %>
     <% else %>
       <%= link_to "Open", survey_path(survey), class: button_classes(:primary) %>
     <% end %>

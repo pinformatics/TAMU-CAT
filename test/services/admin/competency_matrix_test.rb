@@ -125,6 +125,84 @@ class Admin::CompetencyMatrixTest < ActiveSupport::TestCase
     assert_equal 3, default_row.dig(:ratings, @competency_name, :program_target)
   end
 
+  test "private helpers cover empty scopes blank tracks and rating parsing" do
+    matrix = Admin::CompetencyMatrix.new(params: { sources: [ "self" ] }, actor_user: @admin)
+
+    assert_equal({}, matrix.send(:latest_self_ratings, []))
+    assert_equal({}, matrix.send(:latest_advisor_ratings, []))
+    assert_equal({}, matrix.send(:latest_course_ratings, []))
+    assert_equal({}, matrix.send(:target_levels_for, []))
+
+    blank_track_student = Struct.new(:student_id, :track, :program_year) do
+      def track_key = nil
+      def [](key) = key == :track ? track : nil
+    end.new(987_654, nil, nil)
+
+    assert_equal({}, matrix.send(:target_levels_for, [ blank_track_student ]))
+    assert_nil matrix.send(:normalize_rating, nil)
+    assert_nil matrix.send(:normalize_rating, "not rated")
+    assert_equal 4.0, matrix.send(:normalize_rating, "Level 4")
+
+    fallback_track_student = Struct.new(:track) do
+      def [](key) = key == :track ? "executive" : nil
+    end.new("")
+    assert_equal "Executive", matrix.send(:track_label_for, fallback_track_student)
+  end
+
+  test "student row falls back when optional associations are absent" do
+    row_student = Struct.new(:student_id, :user, :uin, :track, :program_year, :advisor) do
+      def [](key) = key == :track ? track : nil
+      def track_key = nil
+      def lifecycle_label = "Current"
+      def current_record? = true
+    end.new(111_222, nil, "000111222", nil, 2026, nil)
+
+    matrix = Admin::CompetencyMatrix.new(params: { competencies: [ @competency_name ] }, actor_user: @admin)
+    row = matrix.send(
+      :build_student_row,
+      row_student,
+      self_ratings: {},
+      advisor_ratings: {},
+      course_ratings: {},
+      target_levels: {}
+    )
+
+    assert_equal "111222", row[:name]
+    assert_nil row[:email]
+    assert_nil row[:advisor_name]
+    assert_equal "000111222", row[:uin]
+    assert_equal [ @competency_name ], row[:ratings].keys
+  end
+
+  test "advisor actor scope and normalized filters cover alternate branches" do
+    advisor_user = users(:advisor)
+    matrix = Admin::CompetencyMatrix.new(
+      params: {
+        q: "  student  ",
+        track: "Residential",
+        program_year: "2026",
+        advisor_id: advisors(:advisor).advisor_id.to_s,
+        semester: "Fall 2025",
+        domain: Reports::DataAggregator::REPORT_DOMAINS.first,
+        student_status: "graduated",
+        competencies: [ @competency_name, "", "Not real" ]
+      },
+      actor_user: advisor_user
+    )
+
+    filters = matrix.send(:normalized_filters)
+
+    assert_equal "student", filters[:q]
+    assert_equal "residential", filters[:track]
+    assert_equal 2026, filters[:program_year]
+    assert_equal advisors(:advisor).advisor_id, filters[:advisor_id]
+    assert_equal "Fall 2025", filters[:semester]
+    assert_equal Reports::DataAggregator::REPORT_DOMAINS.first, filters[:domain]
+    assert_equal [ @competency_name ], filters[:competencies]
+    assert matrix.send(:base_student_scope).where(advisor_id: advisor_user.id).exists? || matrix.send(:base_student_scope).empty?
+    assert_equal "public_and_population_health_assessment", matrix.send(:competency_slug, @competency_name)
+  end
+
   private
 
   def create_course_rating(level:, semester: nil)

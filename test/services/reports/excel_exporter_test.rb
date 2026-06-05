@@ -4,6 +4,18 @@ require "test_helper"
 
 module Reports
   class ExcelExporterTest < ActiveSupport::TestCase
+    EXPECTED_SHEETS = [
+      "Trend",
+      "Domain",
+      "Competency",
+      "Track",
+      "Employment",
+      "Raw Survey",
+      "Raw Advisor",
+      "Raw Course",
+      "Raw Employment"
+    ].freeze
+
     test "exports include target percent and target level columns" do
       payload = {
         generated_at: Time.zone.parse("2025-12-01 10:00"),
@@ -68,12 +80,13 @@ module Reports
             }
           ]
         },
-        track_summary: []
+        track_summary: [],
+        raw_data: {}
       }
 
       package = Reports::ExcelExporter.new(payload).generate
       sheet_names = package.workbook.worksheets.map(&:name)
-      assert_equal [ "Trend", "Domain", "Competency", "Track", "Employment" ], sheet_names
+      assert_equal EXPECTED_SHEETS, sheet_names
 
       summary_sheet = package.workbook.worksheets.find { |ws| ws.name == "Trend" }
       competency_sheet = package.workbook.worksheets.find { |ws| ws.name == "Domain" }
@@ -103,6 +116,116 @@ module Reports
       assert_includes detail_header_values, "Course % Meeting Target"
     end
 
+    test "exports raw report rows in dedicated sheets" do
+      payload = {
+        generated_at: Time.zone.parse("2025-12-01 10:00"),
+        filters: { track: "Residential" },
+        benchmark: { cards: [], timeline: [] },
+        competency_summary: [],
+        competency_detail: { items: [] },
+        track_summary: [],
+        employment_summary: {},
+        raw_data: {
+          survey_responses: [
+            {
+              student_id: 123,
+              student_name: "Student User",
+              email: "student@example.com",
+              uin: "123456789",
+              track: "Residential",
+              year: 2026,
+              assigned_advisor: "Advisor User",
+              survey: "Fall Survey",
+              semester: "Fall 2025",
+              domain: "Health Care Environment and Community",
+              competency: "Public and Population Health Assessment",
+              score: 4.0,
+              program_target_level: 3,
+              updated_at: Time.zone.parse("2025-12-01 09:00")
+            }
+          ],
+          advisor_ratings: [
+            {
+              student_id: 123,
+              student_name: "Student User",
+              email: "student@example.com",
+              uin: "123456789",
+              track: "Residential",
+              year: 2026,
+              assigned_advisor: "Advisor User",
+              advisor: "Advisor User",
+              advisor_id: 456,
+              survey: "Fall Survey",
+              semester: "Fall 2025",
+              domain: "Health Care Environment and Community",
+              competency: "Public and Population Health Assessment",
+              score: 5.0,
+              program_target_level: 3,
+              updated_at: Time.zone.parse("2025-12-01 09:15")
+            }
+          ],
+          course_evidence: [
+            {
+              student_id: 123,
+              student_name: "Student User",
+              email: "student@example.com",
+              uin: "123456789",
+              track: "Residential",
+              year: 2026,
+              assigned_advisor: "Advisor User",
+              semester: "Fall 2025",
+              course: "PHPM-601",
+              competency: "Public and Population Health Assessment",
+              assignment: "Canvas Result",
+              raw_grade: BigDecimal("95.5"),
+              assessed_level: 4,
+              course_target_level: 3,
+              target_status: "Met",
+              source_file: "Outcomes-26S-PHPM-601.csv",
+              imported_at: Time.zone.parse("2025-12-01 08:30"),
+              updated_at: Time.zone.parse("2025-12-01 08:45")
+            }
+          ],
+          employment_responses: [
+            {
+              student_id: 123,
+              student_name: "Student User",
+              email: "student@example.com",
+              uin: "123456789",
+              track: "Residential",
+              year: 2026,
+              assigned_advisor: "Advisor User",
+              survey: "Fall Survey",
+              semester: "Fall 2025",
+              question: "Are you currently employed?",
+              parsed_answer: "Yes",
+              raw_response: "{\"answer\":\"Yes\"}",
+              updated_at: Time.zone.parse("2025-12-01 09:30")
+            }
+          ]
+        }
+      }
+
+      package = Reports::ExcelExporter.new(payload).generate
+
+      raw_survey = package.workbook.worksheets.find { |ws| ws.name == "Raw Survey" }
+      assert_equal "Student ID", raw_survey.rows.first.cells.first.value
+      assert_includes raw_survey.rows.second.cells.map(&:value), "Public and Population Health Assessment"
+
+      raw_advisor = package.workbook.worksheets.find { |ws| ws.name == "Raw Advisor" }
+      assert_includes raw_advisor.rows.first.cells.map(&:value), "Rating Advisor"
+      assert_includes raw_advisor.rows.second.cells.map(&:value), 456
+
+      raw_course = package.workbook.worksheets.find { |ws| ws.name == "Raw Course" }
+      assert_includes raw_course.rows.first.cells.map(&:value), "Raw Grade"
+      assert_includes raw_course.rows.second.cells.map(&:value), "PHPM-601"
+      assert_includes raw_course.rows.second.cells.map(&:value), 95.5
+
+      raw_employment = package.workbook.worksheets.find { |ws| ws.name == "Raw Employment" }
+      assert_includes raw_employment.rows.second.cells.map(&:value), "Are you currently employed?"
+      assert_includes raw_employment.rows.second.cells.map(&:value), "Yes"
+    end
+
     test "track section export includes Tracks sheet and excludes Courses sheet" do
       payload = {
         generated_at: Time.zone.parse("2025-12-01 10:00"),
@@ -124,12 +247,13 @@ module Reports
             not_met_percent: 0.0,
             not_assessed_percent: 0.0
           }
-        ]
+        ],
+        raw_data: {}
       }
 
       package = Reports::ExcelExporter.new(payload).generate
       sheet_names = package.workbook.worksheets.map(&:name)
-      assert_equal [ "Trend", "Domain", "Competency", "Track", "Employment" ], sheet_names
+      assert_equal EXPECTED_SHEETS, sheet_names
 
       tracks_sheet = package.workbook.worksheets.find { |ws| ws.name == "Track" }
       assert tracks_sheet

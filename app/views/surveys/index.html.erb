@@ -80,7 +80,10 @@
               <% can_edit = survey.is_active? && (assignment.available_until.blank? || assignment.available_until >= Time.current) %>
               <% edit_disabled_hint = survey.is_active? ? "Edit disabled: deadline has passed." : "Edit disabled: this survey is archived." %>
               <%= link_to "View Submission", survey_response_path(survey_response), class: button_classes(:secondary) %>
-              <%= link_to "Download PDF", download_survey_response_path(survey_response), class: button_classes(:secondary) %>
+              <%= link_to "Download PDF",
+                          download_survey_response_path(survey_response),
+                          class: button_classes(:secondary),
+                          data: { turbo_confirm: ferpa_export_confirmation("student survey response data") } %>
               <% if can_edit %>
                 <%= link_to "Edit", survey_path(survey), class: button_classes(:primary) %>
               <% else %>

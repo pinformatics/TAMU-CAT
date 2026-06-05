@@ -4,7 +4,7 @@
 class User < ApplicationRecord
   self.primary_key = :id
 
-  devise :omniauthable, omniauth_providers: [ :google_oauth2 ]
+  devise :omniauthable, :timeoutable, omniauth_providers: [ :google_oauth2 ]
 
   enum :role, { student: "student", advisor: "advisor", admin: "admin" }, prefix: true
 

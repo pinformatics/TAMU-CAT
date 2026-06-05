@@ -132,6 +132,50 @@ class SurveyTest < ActiveSupport::TestCase
     assert_equal custom_deadline.to_i, custom_assignment.reload.available_until.to_i
   end
 
+  test "category and availability validations cover destroyed questions and reversed windows" do
+    survey = build_survey(title: "Destroyed Question Survey", semester: "Fall 2038")
+    survey.categories.first.questions.first.mark_for_destruction
+
+    refute survey.valid?
+    assert_includes survey.errors[:base], "Each category must include at least one question"
+
+    survey = build_survey(title: "Reversed Window Survey", semester: "Spring 2039")
+    survey.available_from = Time.zone.local(2039, 3, 1, 12, 0)
+    survey.available_until = Time.zone.local(2039, 2, 1, 12, 0)
+
+    refute survey.valid?
+    assert_includes survey.errors[:available_until], "must be after Available from"
+  end
+
+  test "track normalization handles aliases non strings and long custom labels" do
+    survey = surveys(:fall_2025)
+    long_label = "x" * 300
+
+    normalized = survey.send(:normalize_track_values, [ " RMHA ", [ 123, "", nil, long_label ] ])
+
+    assert_includes normalized, "Residential"
+    assert_includes normalized, "123"
+    assert_includes normalized, long_label[0..254]
+    refute_includes normalized, ""
+  end
+
+  test "duplicate title diagnostic falls back when semester association is unavailable" do
+    existing = surveys(:fall_2025)
+    survey = Survey.new(title: existing.title, program_semester_id: existing.program_semester_id, is_active: true)
+    category = survey.categories.build(name: "Basics")
+    category.questions.build(
+      question_text: "Describe your progress",
+      question_type: "short_answer",
+      question_order: 1
+    )
+    survey.singleton_class.define_method(:program_semester) { nil }
+
+    refute survey.valid?
+    assert_match(/this semester/, survey.errors[:base].join(" "))
+  ensure
+    survey&.singleton_class&.send(:remove_method, :program_semester) if survey&.singleton_class&.method_defined?(:program_semester)
+  end
+
   private
 
   def build_survey(attrs = {})

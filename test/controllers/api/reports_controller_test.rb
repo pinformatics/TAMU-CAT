@@ -80,6 +80,7 @@ module Api
       assert_not_nil @response.body
       json_response = JSON.parse(@response.body)
       assert (json_response.is_a?(Hash) || json_response.is_a?(Array))
+      assert_includes json_response.keys, "program_years"
     end
 
     test "benchmark allows admin access" do

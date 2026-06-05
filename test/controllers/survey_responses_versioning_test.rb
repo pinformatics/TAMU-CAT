@@ -68,6 +68,45 @@ class SurveyResponsesVersioningTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "first submit ignores legacy draft edited versions" do
+    question = @survey.questions.order(:id).first
+    assert question, "Expected survey to have at least one question"
+    SurveyResponseVersion.for_pair(student_id: @student.student_id, survey_id: @survey.id).delete_all
+    StudentQuestion.where(student_id: @student.student_id, question_id: question.id).delete_all
+
+    answers = { question.id.to_s => "Draft answer that becomes submitted" }
+    StudentQuestion.create!(
+      student_id: @student.student_id,
+      advisor_id: @student.advisor_id,
+      question_id: question.id,
+      response_value: answers[question.id.to_s]
+    )
+    assignment = SurveyAssignment.find_or_create_by!(student_id: @student.student_id, survey_id: @survey.id) do |row|
+      row.advisor_id = @student.advisor_id
+      row.assigned_at = 1.day.ago
+    end
+    assignment.update!(completed_at: nil, available_until: 2.days.from_now)
+    SurveyResponseVersion.create!(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: @student.advisor_id,
+      survey_assignment_id: assignment.id,
+      event: "edited",
+      answers: answers
+    )
+
+    sign_in @student_user
+
+    assert_difference -> { SurveyResponseVersion.where(student_id: @student.student_id, survey_id: @survey.id, event: "submitted").count }, 1 do
+      post submit_survey_path(@survey), params: { answers: answers }
+      assert_response :redirect
+    end
+
+    versions = SurveyResponseVersion.for_pair(student_id: @student.student_id, survey_id: @survey.id).chronological
+    assert_equal [ "edited", "submitted" ], versions.map(&:event)
+    assert_equal answers, versions.last.answers
+  end
+
   test "admin edit captures a baseline when no prior versions exist" do
     question = @survey.questions.order(:id).detect do |candidate|
       StudentQuestion.where(student_id: @student.student_id, question_id: candidate.id).none?
@@ -183,6 +222,6 @@ class SurveyResponsesVersioningTest < ActionDispatch::IntegrationTest
       delete survey_response_path(survey_response)
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
   end
 end

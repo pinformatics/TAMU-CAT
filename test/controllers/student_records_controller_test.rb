@@ -1,6 +1,7 @@
 require "test_helper"
 require "roo"
 require "tempfile"
+require "uri"
 
 class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   setup do
@@ -11,7 +12,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   test "admin can see all students and feedback summaries" do
     sign_in @admin
 
-    get student_records_path
+    get survey_records_path
     assert_response :success
     assert_includes response.body, "Survey Records"
     assert_match(/Completion.*Feedback.*Advisor Feedback.*Actions/m, response.body)
@@ -22,10 +23,32 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Submitted"
   end
 
+  test "legacy survey response index and student records urls redirect to survey records" do
+    sign_in @admin
+
+    get "/survey_responses"
+    assert_redirected_to survey_records_path
+
+    get "/student_records", params: { student_status: "all", q: users(:student).email }
+    assert_response :redirect
+    redirect_uri = URI.parse(response.location)
+    assert_equal survey_records_path, redirect_uri.path
+    assert_equal(
+      { "student_status" => "all", "q" => users(:student).email },
+      Rack::Utils.parse_nested_query(redirect_uri.query)
+    )
+
+    get "/student_records/export_excel", params: { q: users(:student).email }
+    assert_response :redirect
+    export_redirect_uri = URI.parse(response.location)
+    assert_equal export_survey_records_excel_path, export_redirect_uri.path
+    assert_equal({ "q" => users(:student).email }, Rack::Utils.parse_nested_query(export_redirect_uri.query))
+  end
+
   test "admin can export current survey records view as xlsx" do
     sign_in @admin
 
-    get export_student_records_excel_path(q: users(:student).name)
+    get export_survey_records_excel_path(q: users(:student).name)
     assert_response :success
     assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
     assert_includes response.headers["Content-Disposition"], "survey-records"
@@ -39,6 +62,38 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "survey records export button preserves current filters" do
+    sign_in @admin
+    survey = surveys(:fall_2025)
+
+    get survey_records_path(
+      q: users(:student).email,
+      survey_query: "Final",
+      survey_id: survey.id,
+      semester: survey.program_semester.name,
+      status: "completed",
+      track: "Residential",
+      program_year: "2026",
+      student_status: "all",
+      sort: "completed_desc"
+    )
+
+    assert_response :success
+    assert_link_path_and_query(
+      "Export Excel",
+      export_survey_records_excel_path,
+      "q" => users(:student).email,
+      "survey_query" => "Final",
+      "survey_id" => survey.id.to_s,
+      "semester" => survey.program_semester.name,
+      "status" => "completed",
+      "track" => "Residential",
+      "program_year" => "2026",
+      "student_status" => "all",
+      "sort" => "completed_desc"
+    )
+  end
+
   test "advisor export with no advisees returns readable xlsx" do
     advisor_user = User.create!(
       email: "advisor-empty@example.com",
@@ -48,7 +103,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     )
     sign_in advisor_user
 
-    get export_student_records_excel_path
+    get export_survey_records_excel_path
 
     assert_response :success
     assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
@@ -64,7 +119,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   test "advisor only sees their assigned students" do
     sign_in @advisor
 
-    get student_records_path
+    get survey_records_path
     assert_response :success
     assert_includes response.body, users(:student).name
     assert_not_includes response.body, users(:other_student).name
@@ -80,12 +135,12 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     archived_student.archive!(archived_by: @admin, reason: "Historical records test")
     sign_in @admin
 
-    get student_records_path
+    get survey_records_path
 
     assert_response :success
     assert_not_includes response.body, archived_student.user.name
 
-    get student_records_path(student_status: "all")
+    get survey_records_path(student_status: "all")
 
     assert_response :success
     assert_includes response.body, archived_student.user.name
@@ -94,7 +149,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   test "admin can filter students by search query" do
     sign_in @admin
 
-    get student_records_path(q: users(:student).name)
+    get survey_records_path(q: users(:student).name)
     assert_response :success
     assert_includes response.body, users(:student).name
     assert_not_includes response.body, users(:other_student).name
@@ -106,7 +161,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     target = surveys(:fall_2025)
     other = surveys(:spring_2025)
 
-    get student_records_path(survey_id: target.id)
+    get survey_records_path(survey_id: target.id)
     assert_response :success
     assert_includes response.body, target.title
     # Other surveys still appear in the Survey dropdown options; ensure they do
@@ -126,12 +181,12 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
       assignment.assigned_at = Time.current
     end
 
-    get student_records_path(survey_id: residential_survey.id)
+    get survey_records_path(survey_id: residential_survey.id)
     assert_response :success
     assert_includes response.body, users(:student).name
     assert_includes response.body, users(:other_student).name
 
-    get student_records_path(survey_id: executive_survey.id)
+    get survey_records_path(survey_id: executive_survey.id)
     assert_response :success
     assert_not_includes response.body, users(:student).name
     assert_not_includes response.body, users(:other_student).name
@@ -144,7 +199,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     executive_title = surveys(:fall_2025_executive).title
     residential_title = surveys(:fall_2025).title
 
-    get student_records_path(survey_query: "executive")
+    get survey_records_path(survey_query: "executive")
     assert_response :success
     assert_includes response.body, executive_title
     assert_not_includes response.body, residential_title
@@ -153,7 +208,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   test "student records hide unassigned rows by default" do
     sign_in @admin
 
-    get student_records_path
+    get survey_records_path
     assert_response :success
     assert_not_includes response.body, ">Unassigned</span>"
   end
@@ -161,7 +216,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   test "unassigned status filter renders no rows" do
     sign_in @admin
 
-    get student_records_path(status: "unassigned")
+    get survey_records_path(status: "unassigned")
     assert_response :success
     assert_not_includes response.body, ">Unassigned</span>"
     assert_includes response.body, "No survey records match this survey yet."
@@ -170,7 +225,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   test "admin can filter students by track" do
     sign_in @admin
 
-    get student_records_path(track: "Executive")
+    get survey_records_path(track: "Executive")
     assert_response :success
     assert_includes response.body, users(:other_student).name
     assert_not_includes response.body, users(:student).name
@@ -179,7 +234,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   test "admin can filter students by program year" do
     sign_in @admin
 
-    get student_records_path(program_year: "2026")
+    get survey_records_path(program_year: "2026")
     assert_response :success
     assert_includes response.body, users(:student).name
     assert_not_includes response.body, users(:other_student).name
@@ -200,7 +255,7 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
 
     survey_response = SurveyResponse.build(student: student, survey: survey)
 
-    get student_records_path(survey_id: survey.id)
+    get survey_records_path(survey_id: survey.id)
     assert_response :success
 
     assert_includes response.body, survey_response_path(survey_response)
@@ -212,23 +267,23 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
   test "advisor search stays within assigned scope" do
     sign_in @advisor
 
-    get student_records_path(q: users(:other_student).email)
+    get survey_records_path(q: users(:other_student).email)
     assert_response :success
     assert_not_includes response.body, users(:other_student).name
   end
 
   test "unauthenticated user redirected" do
-    get student_records_path
+    get survey_records_path
     assert_response :redirect
   end
 
   test "student users are redirected away" do
     sign_in users(:student)
 
-    get student_records_path
+    get survey_records_path
 
     assert_redirected_to dashboard_path
-    assert_match "Advisor or admin access is required", flash[:alert]
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   test "student record status remains assigned until submission completed" do
@@ -294,6 +349,19 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
       file.write(response.body)
       file.flush
       yield Roo::Excelx.new(file.path)
+    end
+  end
+
+  def assert_link_path_and_query(label, expected_path, expected_query)
+    link = css_select("a").find { |anchor| anchor.text.squish == label }
+    assert link, "Expected to find #{label.inspect} link"
+
+    uri = URI.parse(link["href"])
+    assert_equal expected_path, uri.path
+
+    query = Rack::Utils.parse_nested_query(uri.query)
+    expected_query.each do |key, value|
+      assert_equal value, query[key], "Expected #{label} query #{key}=#{value.inspect}; found #{query.inspect}"
     end
   end
 end

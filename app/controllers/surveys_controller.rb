@@ -531,23 +531,10 @@ class SurveysController < ApplicationController
       progress: progress_summary
     )
 
-    begin
-      SurveyResponseVersion.capture_current!(
-        student: student,
-        survey: @survey,
-        assignment: assignment,
-        actor_user: current_user,
-        event: :edited,
-        skip_if_unchanged: true
-      )
-    rescue StandardError => version_error
-      Rails.logger.warn "[SAVE_PROGRESS] Failed to capture survey response version: #{version_error.class}: #{version_error.message}"
-    end
-
     if autosave_request?
       render json: { saved: true, message: notice_message, saved_count: saved_count }
     else
-      redirect_to student_dashboard_path, notice: notice_message
+      redirect_to save_progress_redirect_path, notice: notice_message
     end
   end
 
@@ -562,6 +549,23 @@ class SurveysController < ApplicationController
 
   def autosave_request?
     params[:autosave].present? || request.xhr? || request.format.json?
+  end
+
+  def save_progress_redirect_path
+    if params[:stay].present?
+      return_to = safe_internal_path(params[:return_to])
+      return return_to.present? ? survey_path(@survey, return_to:) : survey_path(@survey)
+    end
+
+    safe_internal_path(params[:exit_to]) || student_dashboard_path
+  end
+
+  def safe_internal_path(value)
+    path = value.to_s
+    return nil if path.blank?
+    return nil unless path.start_with?("/") && !path.start_with?("//")
+
+    path
   end
 
   def question_ids_in_display_order(category_groups)
@@ -691,126 +695,7 @@ class SurveysController < ApplicationController
   # Checks if a Google Sites link is publicly accessible.
   # Returns [Boolean accessible, Symbol reason]
   def evidence_accessible?(url)
-    require "uri"
-    require "net/http"
-
-    begin
-      uri = URI.parse(url)
-    rescue URI::InvalidURIError
-      return [ false, :invalid ]
-    end
-
-    return [ false, :invalid ] unless uri.is_a?(URI::HTTPS)
-
-  host = uri.host.to_s.downcase
-  allowlist_hosts = %w[sites.google.com]
-  allowlist_suffixes = %w[googleusercontent.com]
-  allowlisted_host = lambda do |candidate|
-    candidate_host = candidate.to_s.downcase
-    allowlist_hosts.include?(candidate_host) || allowlist_suffixes.any? { |suffix| candidate_host == suffix || candidate_host.end_with?("." + suffix) }
-  end
-  return [ false, :invalid ] unless allowlisted_host.call(host)
-
-    max_redirects = 3
-    redirects = 0
-    current_uri = uri
-
-    loop do
-      begin
-        http = Net::HTTP.new(current_uri.host, current_uri.port)
-        http.use_ssl = true
-        http.open_timeout = 5
-        http.read_timeout = 5
-
-        head = Net::HTTP::Head.new(current_uri.request_uri)
-        head["User-Agent"] = "HealthProfessions/1.0"
-        response = http.request(head)
-
-        case response
-        when Net::HTTPSuccess
-          # Even with 200, page might be an interstitial requiring auth; sniff small content (avoid generic 'sign in')
-          begin
-            sniff_http = Net::HTTP.new(current_uri.host, current_uri.port)
-            sniff_http.use_ssl = true
-            sniff_http.open_timeout = 5
-            sniff_http.read_timeout = 5
-            sniff = Net::HTTP::Get.new(current_uri.request_uri)
-            sniff["Range"] = "bytes=0-2047"
-            sniff["User-Agent"] = "HealthProfessions/1.0"
-            sniff_resp = sniff_http.request(sniff)
-            if sniff_resp.is_a?(Net::HTTPSuccess)
-              body_start = (sniff_resp.body || "")
-              if body_start =~ /(you need access|request access|sign in to continue|don[’']t have access|do not have access)/i
-                return [ false, :forbidden ]
-              end
-              # If page contains clear public markers, consider accessible
-              if body_start =~ /(open with google docs|file|view only|anyone with the link)/i
-                return [ true, :ok ]
-              end
-            end
-          rescue Net::OpenTimeout, Net::ReadTimeout
-            return [ false, :timeout ]
-          rescue StandardError
-          end
-          return [ true, :ok ]
-        when Net::HTTPRedirection
-          if (location = response["location"])
-            redirects += 1
-            return [ false, :too_many_redirects ] if redirects > max_redirects
-            current_uri = URI.parse(location)
-            # Block redirects to hosts outside the Google family (e.g., third-party login walls)
-            new_host = current_uri.host.to_s
-            unless allowlisted_host.call(new_host)
-              return [ false, :forbidden ]
-            end
-            next
-          else
-            return [ false, :error ]
-          end
-        when Net::HTTPForbidden
-          return [ false, :forbidden ]
-        when Net::HTTPNotFound
-          return [ false, :not_found ]
-        when Net::HTTPMethodNotAllowed
-          # Fallback to minimal GET when HEAD not allowed
-          get = Net::HTTP::Get.new(current_uri.request_uri)
-          get["Range"] = "bytes=0-0"
-          get["User-Agent"] = "HealthProfessions/1.0"
-          get_resp = http.request(get)
-          if get_resp.is_a?(Net::HTTPSuccess)
-            # Sniff small portion for access-required hints
-            begin
-              sniff_http = Net::HTTP.new(current_uri.host, current_uri.port)
-              sniff_http.use_ssl = true
-              sniff_http.open_timeout = 5
-              sniff_http.read_timeout = 5
-              sniff = Net::HTTP::Get.new(current_uri.request_uri)
-              sniff["Range"] = "bytes=0-2047"
-              sniff["User-Agent"] = "HealthProfessions/1.0"
-              sniff_resp = sniff_http.request(sniff)
-              if sniff_resp.is_a?(Net::HTTPSuccess)
-                body_start = (sniff_resp.body || "")
-                if body_start =~ /(you need access|request access|sign in to continue|don[’']t have access|do not have access)/i
-                  return [ false, :forbidden ]
-                end
-              end
-            rescue Net::OpenTimeout, Net::ReadTimeout
-              return [ false, :timeout ]
-            rescue StandardError
-            end
-            return [ true, :ok ]
-          else
-            return [ false, :error ]
-          end
-        else
-          return [ false, :error ]
-        end
-      rescue Net::OpenTimeout, Net::ReadTimeout
-        return [ false, :timeout ]
-      rescue StandardError
-        return [ false, :error ]
-      end
-    end
+    EvidenceLinkChecker.call(url)
   end
 
   def build_progress_notice(prefix:, progress: {})

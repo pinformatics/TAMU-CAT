@@ -1,6 +1,7 @@
 <div data-survey-scroll-scope class="c-document-shell">
   <% return_to = @return_to.presence %>
   <% back_path = return_to.presence || student_dashboard_path %>
+  <% survey_response_export_confirm = ferpa_export_confirmation("student survey response data") %>
   <% viewer_is_student_owner = defined?(current_user) && current_user.present? && current_user.role == 'student' && @survey_response&.student.present? && (current_user.id == @survey_response.student.user&.id) %>
   <% available_until = defined?(@survey_assignment) ? @survey_assignment&.available_until : nil %>
   <% can_edit_by_closing_time = available_until.blank? || available_until >= Time.current %>
@@ -32,7 +33,8 @@
                   download_survey_response_path(@survey_response, token: @survey_response.signed_download_token),
                   class: button_classes(:primary),
                   target: "_blank",
-                  rel: "noopener noreferrer" %>
+                  rel: "noopener noreferrer",
+                  data: { turbo: false, turbo_confirm: survey_response_export_confirm } %>
 
       <% if defined?(@versions) && @versions.present? && @versions.size > 0 %>
         <% nav_date = @survey_response&.completion_date %>
@@ -85,6 +87,41 @@
 
   <%= render @survey_response %>
 
+  <% if defined?(@self_target_summary) && @self_target_summary.present? %>
+    <%= render "survey_responses/self_target_summary", summary: @self_target_summary %>
+  <% end %>
+
+  <% if defined?(@confidential_advisor_note_enabled) && @confidential_advisor_note_enabled %>
+    <section class="c-card c-card--advisor u-stack u-stack--md" aria-labelledby="confidential-advisor-note-title">
+      <header class="c-panel-header">
+        <div>
+          <p class="c-eyebrow">Advisor only</p>
+          <h2 id="confidential-advisor-note-title" class="c-section-title c-heading-inline">Confidential advisor notes</h2>
+          <p class="c-help">Visible only to the assigned advisor. This note is tied to this student and survey.</p>
+        </div>
+      </header>
+
+      <%= form_with url: confidential_advisor_note_survey_response_path(@survey_response),
+                    method: :patch,
+                    local: true,
+                    class: "u-stack u-stack--md",
+                    data: { turbo: false } do %>
+        <%= hidden_field_tag :return_to, request.fullpath %>
+        <div class="c-field">
+          <label class="c-label" for="confidential_advisor_note_body">Note</label>
+          <textarea id="confidential_advisor_note_body"
+                    name="confidential_advisor_note[body]"
+                    rows="4"
+                    class="c-input u-w-full"><%= @confidential_advisor_note&.body.to_s %></textarea>
+        </div>
+
+        <div class="u-actions u-actions--end">
+          <%= button_tag "Save confidential note", type: :submit, class: button_classes(:primary) %>
+        </div>
+      <% end %>
+    </section>
+  <% end %>
+
   <div class="c-toolbar c-toolbar--spaced">
     <div class="c-toolbar__row">
       <%= link_to "← Back", back_path, class: button_classes(:secondary) %>
@@ -111,7 +148,8 @@
                   download_survey_response_path(@survey_response, token: @survey_response.signed_download_token),
                   class: button_classes(:primary),
                   target: "_blank",
-                  rel: "noopener noreferrer" %>
+                  rel: "noopener noreferrer",
+                  data: { turbo: false, turbo_confirm: survey_response_export_confirm } %>
 
       <% if defined?(@versions) && @versions.present? && @versions.size > 0 %>
         <% nav_date = @survey_response&.completion_date %>

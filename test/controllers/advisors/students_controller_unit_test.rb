@@ -13,7 +13,7 @@ class Advisors::StudentsControllerUnitTest < ActionController::TestCase
   test "index redirects to student records" do
     with_routing do |set|
       set.draw do
-        get "student_records", to: "student_records#index", as: :student_records
+        get "survey_records", to: "student_records#index", as: :survey_records
         namespace :advisors do
           get "students", to: "students#index"
         end
@@ -21,7 +21,7 @@ class Advisors::StudentsControllerUnitTest < ActionController::TestCase
       @routes = set
 
       get :index
-      assert_redirected_to student_records_path
+      assert_redirected_to survey_records_path
     end
   end
 

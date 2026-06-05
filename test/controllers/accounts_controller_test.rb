@@ -36,6 +36,10 @@ class AccountsControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name='student[advisor_id]']", count: 0
     assert_select "input[name='user[name]']", count: 0
     assert_select "input[type='submit'][value='Save changes']", count: 0
+    assert_select "nav[aria-label='Account and settings navigation']"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].is-active", account_path, text: "Account"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?]", settings_path, text: "Settings"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].c-tab--danger", destroy_user_session_path, text: "Sign out"
     assert_select "a[href=?]", edit_account_path, text: "Edit"
   end
 
@@ -51,6 +55,10 @@ class AccountsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Account identity details are read-only"
     assert_select "form[action=?]", account_path, count: 0
     assert_select "input[name='user[name]']", count: 0
+    assert_select "nav[aria-label='Account and settings navigation']"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].is-active", account_path, text: "Account"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?]", settings_path, text: "Settings"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].c-tab--danger", destroy_user_session_path, text: "Sign out"
     assert_select "a", text: "Edit", count: 0
   end
 
@@ -68,6 +76,9 @@ class AccountsControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name='student[track]']"
     assert_select "select[name='student[advisor_id]']"
     assert_select "input[name='user[name]']", count: 0
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].is-active", account_path, text: "Account"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?]", settings_path, text: "Settings"
+    assert_select "nav[aria-label='Account and settings navigation'] a[href=?].c-tab--danger", destroy_user_session_path, text: "Sign out"
   end
 
   test "edit redirects non-student user to account page" do

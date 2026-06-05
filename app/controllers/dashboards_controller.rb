@@ -134,7 +134,7 @@ class DashboardsController < ApplicationController
       end
     end
 
-    @dashboard_notifications = current_user.notifications.unread.recent.limit(5)
+    @dashboard_notifications = dashboard_notifications_scope.unread.recent.limit(5)
   end
 
   # Displays advisor-specific information such as advisees and recent feedback.
@@ -145,14 +145,14 @@ class DashboardsController < ApplicationController
     @advisees = (@advisor&.advisees || Student.none).current_records.includes(:user)
     advisee_ids = @advisees.map(&:student_id)
     @recent_feedback = Feedback.where(advisor_id: @advisor&.advisor_id, student_id: advisee_ids).includes(:category, :survey, :student).order(created_at: :desc).limit(5)
-    @pending_notifications_count = current_user.notifications.unread.count
+    @pending_notifications_count = dashboard_notifications_scope.unread.count
 
     @advisee_count = @advisees.size
     @active_survey_count = Survey.count
     advisee_ids = Array(@advisees).map(&:student_id).compact
     @total_reports = advisee_ids.empty? ? 0 : SurveyAssignment.where(student_id: advisee_ids).count
     @survey_record_counts = survey_record_counts(student_ids: advisee_ids)
-    @dashboard_notifications = current_user.notifications.recent.limit(5)
+    @dashboard_notifications = dashboard_notifications_scope.recent.limit(5)
   end
 
   # Shows high-level system metrics for administrators.
@@ -172,7 +172,7 @@ class DashboardsController < ApplicationController
     @total_reports = SurveyAssignment.count
     @survey_record_counts = survey_record_counts
     @maintenance_enabled = SiteSetting.maintenance_enabled?
-    @dashboard_notifications = current_user.notifications.recent.limit(5)
+    @dashboard_notifications = dashboard_notifications_scope.recent.limit(5)
   end
 
   # Provides a single admin workspace for member and student management.
@@ -510,6 +510,7 @@ class DashboardsController < ApplicationController
 
     advisor_updates = normalize_student_updates(params[:advisor_updates])
     track_updates = normalize_student_updates(params[:track_updates])
+    program_year_updates = normalize_student_updates(params[:program_year_updates])
     assignment_group_updates = normalize_student_updates(params[:assignment_group_updates])
     status_updates = normalize_student_updates(params[:status_updates])
     selected_student_ids = normalize_student_ids(params[:selected_student_ids])
@@ -527,13 +528,13 @@ class DashboardsController < ApplicationController
       end
     end
 
-    if advisor_updates.blank? && track_updates.blank? && assignment_group_updates.blank? && status_updates.blank?
+    if advisor_updates.blank? && track_updates.blank? && program_year_updates.blank? && assignment_group_updates.blank? && status_updates.blank?
       redirect_to people_management_path(tab: "students"), alert: "No student changes were submitted."
       return
     end
 
     advisor_lookup = build_advisor_lookup(advisor_updates.values)
-    student_ids = (advisor_updates.keys + track_updates.keys + assignment_group_updates.keys + status_updates.keys).uniq
+    student_ids = (advisor_updates.keys + track_updates.keys + program_year_updates.keys + assignment_group_updates.keys + status_updates.keys).uniq
     students = Student.includes(:user, advisor: :user)
                       .where(student_id: student_ids)
                       .index_by { |student| student.student_id.to_s }
@@ -542,6 +543,8 @@ class DashboardsController < ApplicationController
     advisor_failures = []
     track_successes = []
     track_failures = []
+    program_year_successes = []
+    program_year_failures = []
     group_successes = []
     group_failures = []
     status_successes = []
@@ -554,6 +557,7 @@ class DashboardsController < ApplicationController
         if student.nil?
           advisor_failures << "Student ##{student_id} not found" if advisor_updates.key?(student_id)
           track_failures << "Student ##{student_id} not found" if track_updates.key?(student_id)
+          program_year_failures << "Student ##{student_id} not found" if program_year_updates.key?(student_id)
           group_failures << "Student ##{student_id} not found" if assignment_group_updates.key?(student_id)
           status_failures << "Student ##{student_id} not found" if status_updates.key?(student_id)
           next
@@ -565,6 +569,10 @@ class DashboardsController < ApplicationController
 
         if track_updates.key?(student_id)
           apply_track_update(student, track_updates[student_id], track_successes, track_failures)
+        end
+
+        if program_year_updates.key?(student_id)
+          apply_program_year_update(student, program_year_updates[student_id], program_year_successes, program_year_failures)
         end
 
         if assignment_group_updates.key?(student_id)
@@ -610,6 +618,16 @@ class DashboardsController < ApplicationController
 
     if track_failures.present?
       alert_parts << "Track update errors: #{track_failures.join(', ')}"
+    end
+
+    if program_year_successes.present?
+      summary = "Updated #{program_year_successes.size} class year#{'s' if program_year_successes.size != 1}"
+      summary += ". Changes: #{program_year_successes.join(', ')}" if program_year_successes.any?
+      notice_parts << "#{summary}."
+    end
+
+    if program_year_failures.present?
+      alert_parts << "Class year update errors: #{program_year_failures.join(', ')}"
     end
 
     if group_successes.present?
@@ -659,6 +677,12 @@ class DashboardsController < ApplicationController
     }
   end
 
+  def dashboard_notifications_scope
+    return Notification.none unless in_app_notifications_enabled_for?(current_user)
+
+    current_user.notifications
+  end
+
   def load_student_management_state
     @student_status_filter = Student.normalize_lifecycle_filter(params[:student_status])
     @students = load_students
@@ -672,10 +696,12 @@ class DashboardsController < ApplicationController
     @advisors = Advisor.left_joins(:user).includes(:user).order(Arel.sql("LOWER(users.name) ASC"))
     @advisor_select_options = [ [ "Unassigned", "" ] ] + @advisors.map { |advisor| [ advisor.display_name, advisor.advisor_id.to_s ] }
     @track_select_options = Student.tracks.keys.map { |key| [ key.titleize, key ] }
+    @program_year_select_options = ProgramYear.values.map { |year| [ year.to_s, year.to_s ] }
     @assignment_group_select_options = build_assignment_group_select_options
     @student_status_options = Student.lifecycle_filter_options
     @lifecycle_status_select_options = Student::STATUSES.map { |status| [ status.titleize, status ] }
     @student_status_counts = Student.group(:status).count
+    @student_profile_warnings = build_student_profile_warnings(@students.select(&:current_record?))
     @assignment_stats = {
       total: @students.size,
       assigned: @students.count { |student| student.advisor_id.present? },
@@ -685,6 +711,27 @@ class DashboardsController < ApplicationController
       archived: Student.archived_records.count
     }
     @can_manage = current_user.role_admin?
+  end
+
+  def build_student_profile_warnings(students)
+    warning_definitions = [
+      [ :missing_track, "Missing track", ->(student) { student.track_key.blank? } ],
+      [ :missing_class_year, "Missing class year", ->(student) { student.program_year.blank? } ],
+      [ :missing_advisor, "Unassigned advisor", ->(student) { student.advisor_id.blank? } ],
+      [ :missing_uin, "Missing UIN", ->(student) { student.uin.blank? } ]
+    ]
+
+    warning_definitions.filter_map do |key, label, predicate|
+      affected_students = Array(students).select { |student| predicate.call(student) }
+      next if affected_students.blank?
+
+      {
+        key: key,
+        label: label,
+        count: affected_students.size,
+        students: affected_students.first(4).map { |student| student_display_label(student) }
+      }
+    end
   end
 
   # Ensures the current user has the necessary profile record for their role.
@@ -708,13 +755,7 @@ class DashboardsController < ApplicationController
   def ensure_admin!
     return true if current_user.role_admin?
 
-    # Students may occasionally hit admin-only URLs (bookmarks, stale links, etc.)
-    # but we don't want to show an admin-only warning in the student experience.
-    if current_user.role_student?
-      redirect_to dashboard_path
-    else
-      redirect_to dashboard_path, alert: "Admin access is required to open this page."
-    end
+    redirect_to dashboard_path, alert: ADMIN_ONLY_MESSAGE
     false
   end
 
@@ -911,6 +952,46 @@ class DashboardsController < ApplicationController
       metadata: {
         previous_track: previous_track,
         new_track: new_track_key
+      }
+    )
+  rescue StandardError => e
+    failures << "#{student_label}: #{e.message}"
+  end
+
+  def apply_program_year_update(student, new_program_year_value, successes, failures)
+    student_label = student_display_label(student)
+    normalized_year = new_program_year_value.to_s.strip
+
+    if normalized_year.blank?
+      return if student.program_year.blank?
+
+      failures << "#{student_label}: class year selection is required"
+      return
+    end
+
+    unless ProgramYear.values.map(&:to_i).include?(normalized_year.to_i) && normalized_year.match?(/\A\d+\z/)
+      failures << "#{student_label}: invalid class year selection"
+      return
+    end
+
+    new_program_year = normalized_year.to_i
+    current_program_year = student.program_year
+    return if current_program_year.to_i == new_program_year
+
+    previous_label = current_program_year.presence || "Unassigned"
+    new_label = new_program_year.to_s
+
+    student.update!(program_year: new_program_year)
+    successes << "#{student_label}: #{previous_label} → #{new_label}"
+
+    AdminActivityLog.record!(
+      admin: current_user,
+      action: "program_year_update",
+      description: "Class year updated for #{student_label}: #{previous_label} → #{new_label}",
+      subject: student,
+      metadata: {
+        previous_program_year: current_program_year,
+        new_program_year: new_program_year
       }
     )
   rescue StandardError => e

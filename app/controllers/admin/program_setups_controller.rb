@@ -12,24 +12,55 @@ class Admin::ProgramSetupsController < Admin::BaseController
     @program_years = ProgramYear.data_source_ready? ? ProgramYear.active.ordered : []
     @new_program_year = ProgramYear.new(active: true)
 
-    @program_semesters = ProgramSemester.order(Arel.sql("current DESC"), Arel.sql("LOWER(name) ASC"))
+    @program_semesters = ProgramSemester.ordered
     @current_program_semester = ProgramSemester.current
     @new_program_semester = ProgramSemester.new
 
     load_target_levels_state if @tab == "targets"
+    load_course_targets_state if @tab == "course_targets"
   end
 
   private
 
   def normalize_tab(value)
-    allowed = %w[tracks majors years semesters targets]
+    allowed = %w[tracks majors years semesters targets course_targets]
     tab = value.to_s.strip
     allowed.include?(tab) ? tab : "tracks"
   end
 
+  def load_course_targets_state
+    @course_target_semesters = ProgramSemester.ordered
+    @selected_course_target_semester_id = params[:course_target_program_semester_id].presence&.to_i || ProgramSemester.current&.id
+    @course_target_competencies = Competency.ordered
+    @new_course_competency_target = CourseCompetencyTarget.new
+
+    scope = CourseCompetencyTarget
+      .ordered
+      .includes(course_offering: [ :program_semester, { course: :department } ], competency: :domain)
+
+    if @selected_course_target_semester_id.present?
+      scope = scope.joins(:course_offering)
+                   .where(course_offerings: { program_semester_id: @selected_course_target_semester_id })
+    end
+
+    @course_competency_targets = scope.to_a
+    @course_target_coverage = course_target_coverage(@course_competency_targets)
+  end
+
+  def course_target_coverage(targets)
+    course_count = targets.map(&:course_offering_id).uniq.size
+    competency_count = targets.map(&:competency_id).uniq.size
+
+    {
+      target_count: targets.size,
+      course_count: course_count,
+      competency_count: competency_count
+    }
+  end
+
   def load_target_levels_state
     @post_save_warning = session.delete(:target_levels_post_save_warning)
-    @semesters = ProgramSemester.order(Arel.sql("current DESC"), Arel.sql("LOWER(name) ASC"))
+    @semesters = ProgramSemester.ordered
     @tracks = Student.tracks.values
     @class_of_options = [ [ "Select a cohort", "" ] ] + ProgramYear.options_for_select.map { |label, value| [ label, value.to_s ] }
 

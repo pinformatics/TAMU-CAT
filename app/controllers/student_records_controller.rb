@@ -23,7 +23,7 @@ class StudentRecordsController < ApplicationController
     record_export_audit!(
       export_type: "survey_records_excel",
       description: "Exported survey records Excel workbook.",
-      metadata: { student_count: @students.size }
+      metadata: { student_count: @students.size, filters: student_records_export_filters.to_h }
     )
     send_data package.to_stream.read,
               filename: "survey-records-#{Time.current.strftime('%Y%m%d-%H%M%S')}.xlsx",
@@ -65,7 +65,7 @@ class StudentRecordsController < ApplicationController
   def require_staff_access!
     return if current_user&.role_admin? || current_user&.role_advisor?
 
-    redirect_to dashboard_path, alert: "Advisor or admin access is required to open this page."
+    redirect_to dashboard_path, alert: STAFF_ONLY_MESSAGE
   end
 
   # Loads students accessible to the current staff member.

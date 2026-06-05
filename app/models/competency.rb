@@ -1,6 +1,7 @@
 class Competency < ApplicationRecord
   belongs_to :domain
   has_many :competency_target_levels, dependent: :nullify
+  has_many :course_competency_targets, dependent: :destroy
   has_many :grade_competency_evidences, dependent: :nullify
   has_many :grade_competency_ratings, dependent: :nullify
   has_many :grade_import_pending_rows, dependent: :nullify

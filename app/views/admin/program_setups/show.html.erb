@@ -4,7 +4,8 @@
     ["Majors", "majors", "Control the degree and major options students can select."],
     ["Cohorts", "years", "Maintain class-year options used for reporting and assignment."],
     ["Semesters", "semesters", "Define survey terms and choose the current active semester."],
-    ["Competency Targets", "targets", "Set benchmark proficiency targets by semester, track, and class."]
+    ["Competency Targets", "targets", "Set benchmark proficiency targets by semester, track, and class."],
+    ["Course Targets", "course_targets", "Set course-level competency targets by semester and course."]
   ] %>
 
   <div class="c-page">
@@ -317,6 +318,10 @@
 
     <% if @tab == "targets" %>
       <%= render "target_levels_tab" %>
+    <% end %>
+
+    <% if @tab == "course_targets" %>
+      <%= render "course_targets_tab" %>
     <% end %>
   </div>
 </main>

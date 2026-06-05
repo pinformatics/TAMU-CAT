@@ -33,7 +33,7 @@
                       data: { turbo: false } %>
         <% end %>
         <%= link_to "Export Excel",
-                    export_student_records_excel_path(request.query_parameters),
+                    export_survey_records_excel_path(request.query_parameters),
                     class: button_classes(:secondary),
                     data: {
                       turbo: false,
@@ -45,7 +45,7 @@
 
     <section class="c-card c-card--spacious u-stack u-stack--xl">
     <div class="c-callout u-w-full">
-        <%= form_with url: student_records_path, method: :get, local: true, class: "u-w-full u-stack u-stack--md" do %>
+        <%= form_with url: survey_records_path, method: :get, local: true, class: "u-w-full u-stack u-stack--md" do %>
           <div class="c-filter-bar">
             <div class="c-filter-bar__field c-filter-bar__field--wide">
               <%= label_tag :survey_id, "Survey", class: "c-label c-label--eyebrow" %>
@@ -141,7 +141,7 @@
 
             <div class="u-actions u-actions--start">
               <%= button_tag "Apply", type: :submit, class: button_classes(:primary) %>
-              <%= link_to "Clear", student_records_path, class: button_classes(:ghost), data: { turbo: false } %>
+              <%= link_to "Clear", survey_records_path, class: button_classes(:ghost), data: { turbo: false } %>
             </div>
           </div>
         <% end %>
@@ -327,7 +327,9 @@
                                     <%= link_to "Download PDF",
                                                 download_survey_response_path(survey_response, token: download_token),
                                                 class: button_classes(:primary),
-                                                target: "_blank", rel: "noopener noreferrer" %>
+                                                target: "_blank",
+                                                rel: "noopener noreferrer",
+                                                data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student survey response data") } %>
                                   <% end %>
 
                                   <% if show_actions && survey_response.present? && admin_can_open %>

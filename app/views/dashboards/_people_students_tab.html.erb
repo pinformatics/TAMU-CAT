@@ -41,6 +41,27 @@
     </div>
   </div>
 
+  <% if @student_profile_warnings.present? %>
+    <div class="c-callout c-callout--warning u-stack u-stack--sm" role="alert">
+      <div>
+        <div class="c-callout__title">Student profile data needs attention</div>
+        <p class="c-help">These current students are missing fields used for advisor assignment, reports, grade imports, and notifications.</p>
+      </div>
+
+      <div class="u-grid u-grid--dense" style="--u-grid-min: 220px">
+        <% @student_profile_warnings.each do |warning| %>
+          <div class="u-stack u-stack--xs">
+            <div class="u-actions u-actions--start u-gap-xs">
+              <span class="c-pill c-pill--muted"><%= pluralize(warning[:count], "student") %></span>
+              <span class="c-strong"><%= warning[:label] %></span>
+            </div>
+            <p class="c-help"><%= warning[:students].join(", ") %><%= warning[:count] > warning[:students].size ? ", and #{warning[:count] - warning[:students].size} more" : "" %></p>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
   <div class="c-callout">
     <div class="c-callout__title">Search students</div>
     <form class="c-toolbar__row c-toolbar__row--airy u-w-full u-flex-nowrap" action="<%= people_management_path %>" accept-charset="UTF-8" method="get">
@@ -72,6 +93,7 @@
     <%= form_with url: update_student_advisors_path, method: :patch, local: true, id: "advisor-management-form", data: { turbo: false }, remote: false do |form| %>
       <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
       <% track_select_options = [["Select track", ""]] + @track_select_options %>
+      <% program_year_select_options = [["Select class year", ""]] + @program_year_select_options %>
       <% status_select_options = @lifecycle_status_select_options %>
 
       <div class="c-callout u-stack u-stack--sm">
@@ -125,6 +147,12 @@
                   Click a track tag to change.
                 </div>
               </th>
+              <th class="table-header-track" style="min-width: 12rem;">
+                Class Year
+                <div class="c-table__meta">
+                  Click a year tag to change.
+                </div>
+              </th>
               <th class="table-header-track" style="min-width: 14rem;">
                 Assignment Group
                 <div class="c-table__meta">
@@ -148,6 +176,8 @@
               <% current_advisor_id = student.advisor_id.present? ? student.advisor_id.to_s : "" %>
               <% track_key = student.track_key.presence || "" %>
               <% track_label = student.track.presence || "Unassigned" %>
+              <% program_year_value = student.program_year.present? ? student.program_year.to_s : "" %>
+              <% program_year_label = program_year_value.presence || "Unassigned" %>
               <% status_key = student.status.to_s.presence || "active" %>
               <% status_label = student.lifecycle_label %>
               <% assignment_group_value = student.respond_to?(:assignment_group) ? student.assignment_group.to_s.strip : "" %>
@@ -218,6 +248,22 @@
                   </div>
                 </td>
 
+                <td class="user-track-cell" style="min-width: 12rem;">
+                  <div class="c-role-badge c-role-badge--track u-inline-flex js-program-year-badge" id="program_year_badge_<%= student.student_id %>" tabindex="0" style="cursor:pointer;"><%= program_year_label %></div>
+                  <div class="u-mt-sm c-select-wrapper" id="program_year_select_wrapper_<%= student.student_id %>" style="display:none;">
+                    <%= select_tag "program_year_updates[#{student.student_id}]",
+                            options_for_select(program_year_select_options, program_year_value),
+                            class: "c-select u-w-full program-year-select",
+                            data: {
+                              student_id: student.student_id,
+                              original_program_year: program_year_value,
+                              original_program_year_name: program_year_label,
+                              student_name: user&.name || "Student ##{student.student_id}"
+                            },
+                            id: "program_year_select_#{student.student_id}" %>
+                  </div>
+                </td>
+
                 <td class="user-track-cell" style="min-width: 14rem;">
                   <div class="c-role-badge c-role-badge--track u-inline-flex js-assignment-group-badge" id="assignment_group_badge_<%= student.student_id %>" tabindex="0" style="cursor:pointer;"><%= assignment_group_label %></div>
                   <div class="u-mt-sm c-select-wrapper" id="assignment_group_select_wrapper_<%= student.student_id %>" style="display:none;">
@@ -284,6 +330,7 @@
             <th class="table-header-name" style="min-width: 15rem;">Student</th>
             <th class="table-header-current-role" style="min-width: 10rem;">Status</th>
             <th class="table-header-track" style="min-width: 8rem;">Track</th>
+            <th class="table-header-track" style="min-width: 8rem;">Class Year</th>
             <th class="table-header-current-role">Advisor</th>
           </tr>
         </thead>
@@ -315,6 +362,9 @@
               </td>
               <td class="user-track-cell" style="min-width: 8rem;">
                 <span class="c-role-badge c-role-badge--track"><%= student.track.present? ? student.track.titleize : "Unassigned" %></span>
+              </td>
+              <td class="user-track-cell" style="min-width: 8rem;">
+                <span class="c-role-badge c-role-badge--track"><%= student.program_year.presence || "Unassigned" %></span>
               </td>
               <td class="user-current-role-cell" style="min-width: 12rem;">
                 <span class="c-role-badge c-role-badge--advisor"><%= current_advisor&.display_name || "Unassigned" %></span>
@@ -375,6 +425,10 @@
 
         if (entry && entry.track) {
           messages.push(`Track: ${entry.track.from} → ${entry.track.to}`);
+        }
+
+        if (entry && entry.programYear) {
+          messages.push(`Class year: ${entry.programYear.from} → ${entry.programYear.to}`);
         }
 
         if (entry && entry.assignmentGroup) {
@@ -504,6 +558,21 @@
         });
       });
 
+      form.querySelectorAll('.program-year-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const studentId = select.dataset.studentId;
+          const fromLabel = normalizeLabel(select.dataset.originalProgramYearName, 'Unassigned');
+          const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Unassigned');
+          const badge = document.getElementById(`program_year_badge_${studentId}`);
+
+          if (badge) {
+            badge.textContent = toLabel;
+          }
+
+          updateRegistry(studentId, 'programYear', fromLabel, toLabel);
+        });
+      });
+
       form.querySelectorAll('.assignment-group-select').forEach(select => {
         select.addEventListener('change', () => {
           const studentId = select.dataset.studentId;
@@ -553,6 +622,7 @@
 
       attachToggleHandlers('.js-advisor-badge', 'advisor_select_wrapper_');
       attachToggleHandlers('.js-track-badge', 'track_select_wrapper_');
+      attachToggleHandlers('.js-program-year-badge', 'program_year_select_wrapper_');
       attachToggleHandlers('.js-assignment-group-badge', 'assignment_group_select_wrapper_');
       attachToggleHandlers('.js-status-badge', 'status_select_wrapper_');
 

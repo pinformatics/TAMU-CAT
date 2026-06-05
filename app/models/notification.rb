@@ -6,7 +6,7 @@ class Notification < ApplicationRecord
   belongs_to :notifiable, polymorphic: true, optional: true
 
   scope :unread, -> { where(read_at: nil) }
-  scope :recent, -> { order(created_at: :desc) }
+  scope :recent, -> { order(updated_at: :desc, created_at: :desc) }
 
   validates :title, presence: true
   validates :message, presence: true
@@ -30,6 +30,8 @@ class Notification < ApplicationRecord
     record = relation.first_or_initialize
     record.message = message
     record.notifiable = notifiable
+    record.read_at = user_in_app_notifications_enabled?(user) ? nil : Time.current
+    record.created_at = Time.current if record.persisted?
     record.save!
     record
   end
@@ -44,6 +46,12 @@ class Notification < ApplicationRecord
   # @return [Boolean] true when read_at contains a timestamp
   def read?
     read_at.present?
+  end
+
+  def self.user_in_app_notifications_enabled?(user)
+    return true unless user.respond_to?(:in_app_notifications_enabled?)
+
+    user.in_app_notifications_enabled?
   end
 
   # Returns clear, recipient-facing copy for display surfaces.

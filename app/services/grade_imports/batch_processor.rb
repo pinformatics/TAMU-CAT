@@ -85,8 +85,8 @@ module GradeImports
       student_id: %w[student_id],
       student_sis_id: %w[student_sis_id student_uin uin]
     }.freeze
-    DIRECT_TARGET_SUFFIXES = %w[result course_target].freeze
-    DIRECT_LEVEL_SUFFIXES = %w[mastery_points assessed_level level].freeze
+    DIRECT_RESULT_SUFFIXES = %w[result assessed_level level].freeze
+    DIRECT_TARGET_SUFFIXES = %w[mastery_points course_target].freeze
     COURSE_CODE_PATTERN = /([A-Z]{2,5})[\s_-]*(\d{3})(?:[\s_-]*(\d{3}))?/i.freeze
 
     def initialize(batch:, files:, dry_run: false, replace_existing_files: false)
@@ -96,6 +96,7 @@ module GradeImports
       @replace_existing_files = replace_existing_files
       @student_cache_by_uin = {}
       @student_cache_by_email = {}
+      @student_cache_by_name = {}
     end
 
     def call
@@ -179,7 +180,7 @@ module GradeImports
 
     private
 
-    attr_reader :batch, :files, :student_cache_by_uin, :student_cache_by_email
+    attr_reader :batch, :files, :student_cache_by_uin, :student_cache_by_email, :student_cache_by_name
 
     def dry_run?
       @dry_run == true
@@ -406,59 +407,51 @@ module GradeImports
 
         student = find_student_by_uin(student_sis_id)
         student ||= find_student_by_canvas_identifier(student_id_token)
+        student ||= find_student_by_name(student_name)
         matched_students << student.student_id if student
 
         row_had_value = false
 
         competency_columns.each do |column|
           result_value = row[column[:result_header]]
-          course_target_level = parse_level_value(result_value)
-          mastery_value = column[:mastery_points_header].present? ? row[column[:mastery_points_header]] : nil
-          mastery_level = parse_level_value(mastery_value)
-          raw_points = parse_decimal(mastery_value)
+          result_level = parse_level_value(result_value)
+          target_value = column[:target_header].present? ? row[column[:target_header]] : nil
+          course_target_level = parse_level_value(target_value)
+          raw_points = parse_decimal(result_value)
 
-          if mastery_value.blank?
-            if result_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
-              row_had_value = true
-              error_rows += 1
-              errors << invalid_direct_level_error(
-                row_number,
-                label: direct_target_label(column),
-                column: column[:result_header],
-                value: result_value
-              )
-            elsif result_value.present?
+          if result_value.blank?
+            if target_value.present?
               row_had_value = true
               error_rows += 1
               errors << invalid_direct_level_error(
                 row_number,
                 label: direct_assessed_level_label(column),
-                column: column[:mastery_points_header],
-                value: mastery_value
+                column: column[:result_header],
+                value: result_value
               )
             end
             next
           end
 
           row_had_value = true
-          if mastery_level.nil? || !(1..5).cover?(mastery_level)
+          if result_level.nil? || !(1..5).cover?(result_level)
             error_rows += 1
             errors << invalid_direct_level_error(
               row_number,
               label: direct_assessed_level_label(column),
-              column: column[:mastery_points_header],
-              value: mastery_value
+              column: column[:result_header],
+              value: result_value
             )
             next
           end
 
-          if result_value.present? && (course_target_level.nil? || !(1..5).cover?(course_target_level))
+          if course_target_level.nil? || !(1..5).cover?(course_target_level)
             error_rows += 1
             errors << invalid_direct_level_error(
               row_number,
               label: direct_target_label(column),
-              column: column[:result_header],
-              value: result_value
+              column: column[:target_header],
+              value: target_value
             )
             next
           end
@@ -492,13 +485,13 @@ module GradeImports
               student_name: student_name,
               assignment_name: assignment_name,
               course_code: course_code,
-              raw_points: raw_points || mastery_level,
-              mapped_level: mastery_level,
+              raw_points: raw_points || result_level,
+              mapped_level: result_level,
               course_target_level: course_target_level,
               competency_title: column[:competency_title],
               row_number: row_number,
-              score_for_mapping: raw_points || mastery_level,
-              score_basis: "direct_mastery_points",
+              score_for_mapping: raw_points || result_level,
+              score_basis: "direct_result",
               points_possible: nil,
               source_key: source_key,
               import_fingerprint: import_fingerprint
@@ -521,13 +514,13 @@ module GradeImports
             import_fingerprint: import_fingerprint,
             assignment_name: assignment_name,
             course_code: course_code,
-            raw_points: raw_points || mastery_level,
-            mapped_level: mastery_level,
+            raw_points: raw_points || result_level,
+            mapped_level: result_level,
             course_target_level: course_target_level,
             competency_title: column[:competency_title],
             row_number: row_number,
-            score_for_mapping: raw_points || mastery_level,
-            score_basis: "direct_mastery_points",
+            score_for_mapping: raw_points || result_level,
+            score_basis: "direct_result",
             points_possible: nil,
             student_identifiers: {
               student_uin: student_sis_id.presence,
@@ -544,7 +537,7 @@ module GradeImports
         next if row_had_value
 
         error_rows += 1
-        errors << row_error(row_number, "No direct competency mastery points values were found in this row", type: "missing_value")
+        errors << row_error(row_number, "No direct competency result values were found in this row", type: "missing_value")
       end
 
       {
@@ -627,11 +620,11 @@ module GradeImports
           next
         end
 
-        mastery_header = direct_mastery_header_for(headers, header_text)
-        if mastery_header.blank?
+        target_header = direct_target_header_for(headers, header_text)
+        if target_header.blank?
           errors << row_error(
             1,
-            "Missing mastery points/assessed level column for '#{competency_title}'. Direct competency imports use mastery points or assessed level as the student competency score and result or course target as the course target.",
+            "Missing mastery points/course target column for '#{competency_title}'. Direct competency imports use result or assessed level as the student competency score and mastery points or course target as the course target.",
             type: "mapping",
             column: header_text,
             value: competency_title
@@ -640,7 +633,8 @@ module GradeImports
 
         columns << {
           result_header: header_text,
-          mastery_points_header: mastery_header,
+          target_header: target_header,
+          mastery_points_header: target_header,
           competency_title: competency_title
         }
       end
@@ -655,25 +649,25 @@ module GradeImports
         header_text = header.to_s.strip
         normalized = normalize_key(header_text)
         next unless direct_competency_header?(normalized)
-        next unless DIRECT_TARGET_SUFFIXES.any? { |suffix| normalized.end_with?("_#{suffix}") }
+        next unless DIRECT_RESULT_SUFFIXES.any? { |suffix| normalized.end_with?("_#{suffix}") }
 
         header_text
       end
     end
 
-    def direct_mastery_header_for(headers, result_header)
-      target_prefix = direct_competency_header_prefix(result_header, DIRECT_TARGET_SUFFIXES)
+    def direct_target_header_for(headers, result_header)
+      target_prefix = direct_competency_header_prefix(result_header, DIRECT_RESULT_SUFFIXES)
       return if target_prefix.blank?
 
       headers.find do |header|
         normalized = normalize_key(header)
-        DIRECT_LEVEL_SUFFIXES.any? { |suffix| normalized == "#{target_prefix}_#{suffix}" }
+        DIRECT_TARGET_SUFFIXES.any? { |suffix| normalized == "#{target_prefix}_#{suffix}" }
       end
     end
 
     def extract_direct_competency_title(header_text)
       normalized = normalize_key(header_text)
-      if (suffix = (DIRECT_TARGET_SUFFIXES + DIRECT_LEVEL_SUFFIXES).find { |candidate| normalized.end_with?("_#{candidate}") })
+      if (suffix = (DIRECT_RESULT_SUFFIXES + DIRECT_TARGET_SUFFIXES).find { |candidate| normalized.end_with?("_#{candidate}") })
         return header_text.to_s.sub(/\s+#{suffix.tr("_", " ")}\z/i, "").split(">").map(&:strip).last.to_s
       end
 
@@ -692,7 +686,7 @@ module GradeImports
       return true if DIRECT_COMPETENCY_PREFIXES.any? { |prefix| normalized_header.start_with?("#{prefix}_competencies_") }
       return false if normalized_header.start_with?("hpmc_")
 
-      DIRECT_TARGET_SUFFIXES.any? { |suffix| normalized_header.end_with?("_#{suffix}") }
+      DIRECT_RESULT_SUFFIXES.any? { |suffix| normalized_header.end_with?("_#{suffix}") }
     end
 
     def direct_competency_header_prefix(header_text, suffixes)
@@ -1321,7 +1315,9 @@ module GradeImports
           next
         end
 
+        student_name = id_index[:student_name].nil? ? nil : row_values[id_index[:student_name]].to_s.strip.presence
         identifier = normalize_numeric_identifier(row_values[id_index[:student_identifier]])
+        identifier_type = "uin"
         canvas_id = id_index[:canvas_id] ? row_values[id_index[:canvas_id]].to_s.strip : nil
         raw_section = id_index[:section].nil? ? "" : row_values[id_index[:section]].to_s.strip
         sheet_name = grade_sheet.respond_to?(:name) ? grade_sheet.name : nil
@@ -1329,18 +1325,27 @@ module GradeImports
                       normalize_course_code(sheet_name) ||
                       normalize_course_code(grade_file.file_name) ||
                       raw_section.presence
+        if identifier.blank? && student_name.present?
+          identifier = student_name
+          identifier_type = "student_name"
+        end
+
         if identifier.blank?
           debug_rows_skipped_blank_identifier += 1
           next
         end
 
-        if canvas_identifier_requires_uin?(normalized_headers, id_index[:student_identifier]) && invalid_uin?(identifier)
+        if identifier_type != "student_name" && canvas_identifier_requires_uin?(normalized_headers, id_index[:student_identifier]) && invalid_uin?(identifier)
           error_rows += 1
           errors << invalid_uin_error(row_number, column: grade_sheet.row(header_row_number)[id_index[:student_identifier]], value: row_values[id_index[:student_identifier]])
           next
         end
 
-        student = find_student_by_canvas_identifier(identifier)
+        student = if identifier_type == "student_name"
+          find_student_by_name(student_name)
+        else
+          find_student_by_canvas_identifier(identifier) || find_student_by_name(student_name)
+        end
         debug_student_not_found += 1 if student.nil?
         matched_students << student.student_id if student
 
@@ -1383,10 +1388,10 @@ module GradeImports
             create_pending_row!(
               grade_file: grade_file,
               identifier: identifier,
-              identifier_type: "uin",
-              student_uin: identifier,
+              identifier_type: identifier_type,
+              student_uin: identifier_type == "student_name" ? nil : identifier,
               student_email: nil,
-              student_name: row_values[id_index[:student_name]].to_s.strip.presence,
+              student_name: student_name,
               assignment_name: assignment_name,
               course_code: course_code.presence || applied_mapping[:mapping][:course_code],
               raw_points: applied_mapping[:raw_points],
@@ -1400,7 +1405,7 @@ module GradeImports
               import_fingerprint: import_fingerprint
             )
             pending_rows += 1
-            pending_students << [ "uin", identifier.to_s.downcase.strip ]
+            pending_students << [ identifier_type, identifier.to_s.downcase.strip ]
             next
           end
 
@@ -1425,9 +1430,10 @@ module GradeImports
             score_basis: applied_mapping[:mapping][:score_basis],
             points_possible: applied_mapping[:points_possible],
             student_identifiers: {
-              student_uin: identifier,
+              student_uin: identifier_type == "student_name" ? nil : identifier,
               canvas_id: canvas_id,
               student_email: nil,
+              student_name: student_name,
               assignment_count: applied_mapping[:assignment_count],
               assignment_names: applied_mapping[:assignment_names]
             }
@@ -1476,10 +1482,10 @@ module GradeImports
               create_pending_row!(
                 grade_file: grade_file,
                 identifier: identifier,
-                identifier_type: "uin",
-                student_uin: identifier,
+                identifier_type: identifier_type,
+                student_uin: identifier_type == "student_name" ? nil : identifier,
                 student_email: nil,
-                student_name: row_values[id_index[:student_name]].to_s.strip.presence,
+                student_name: student_name,
                 assignment_name: assignment_name,
                 course_code: course_code.presence || applied_mapping[:mapping][:course_code],
                 raw_points: raw_points,
@@ -1493,7 +1499,7 @@ module GradeImports
                 import_fingerprint: import_fingerprint
               )
               pending_rows += 1
-              pending_students << [ "uin", identifier.to_s.downcase.strip ]
+              pending_students << [ identifier_type, identifier.to_s.downcase.strip ]
               next
             end
 
@@ -1517,7 +1523,12 @@ module GradeImports
               score_for_mapping: applied_mapping[:score_for_mapping],
               score_basis: applied_mapping[:mapping][:score_basis],
               points_possible: points_possible,
-              student_identifiers: { student_uin: identifier, canvas_id: canvas_id, student_email: nil }
+              student_identifiers: {
+                student_uin: identifier_type == "student_name" ? nil : identifier,
+                canvas_id: canvas_id,
+                student_email: nil,
+                student_name: student_name
+              }
             )
             imported_rows += 1
           end
@@ -1704,7 +1715,8 @@ module GradeImports
       return true if first_cell.include?("points possible")
 
       identifier = id_index[:student_identifier] ? row_values[id_index[:student_identifier]].to_s.strip : ""
-      return true if identifier.blank?
+      student_name = id_index[:student_name] ? row_values[id_index[:student_name]].to_s.strip : ""
+      return true if identifier.blank? && student_name.blank?
 
       # Canvas often includes non-student metadata rows with repeated labels.
       compact_tokens = row_values.compact.map { |value| normalize_key(value) }.reject(&:blank?)
@@ -1909,6 +1921,51 @@ module GradeImports
       return nil if numeric_id.nil?
 
       Student.find_by(student_id: numeric_id)
+    end
+
+    def find_student_by_name(name)
+      signature = person_name_signature(name)
+      return nil if signature.blank?
+      return student_cache_by_name[signature] if student_cache_by_name.key?(signature)
+
+      first_name, last_name = signature.split(":", 2)
+      matches = Student.joins(:user)
+        .where("LOWER(users.name) LIKE ? AND LOWER(users.name) LIKE ?", "%#{first_name}%", "%#{last_name}%")
+        .to_a
+        .select { |student| person_name_signature(student.user&.name) == signature }
+
+      student_cache_by_name[signature] = matches.one? ? matches.first : nil
+    end
+
+    def person_name_signature(name)
+      token = name.to_s.strip
+      return "" if token.blank?
+
+      first_name = nil
+      last_name = nil
+
+      if token.include?(",")
+        last_token, rest = token.split(",", 2)
+        first_name = normalized_name_words(rest).first
+        last_name = normalized_name_words(last_token).last
+      else
+        words = normalized_name_words(token)
+        first_name = words.first
+        last_name = words.last
+      end
+
+      return "" if first_name.blank? || last_name.blank?
+
+      "#{first_name}:#{last_name}"
+    end
+
+    def normalized_name_words(value)
+      value.to_s
+        .downcase
+        .gsub(/[^a-z\s]/, " ")
+        .squeeze(" ")
+        .strip
+        .split
     end
 
     def normalize_numeric_identifier(value)

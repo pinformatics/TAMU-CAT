@@ -14,6 +14,8 @@ class SurveyResponsesController < ApplicationController
     load_versions!
     @survey_assignment = SurveyAssignment.find_by(student_id: @survey_response.student_id, survey_id: @survey_response.survey_id)
     @question_responses = preload_question_responses
+    load_self_target_summary!
+    load_confidential_advisor_note!
   end
 
   # Admin-only: edit a student's survey answers.
@@ -181,7 +183,7 @@ class SurveyResponsesController < ApplicationController
       )
     end
 
-    redirect_to student_records_path, notice: "Survey responses deleted."
+    redirect_to survey_records_path, notice: "Survey responses deleted."
   end
 
   # Streams a PDF version of the survey response that matches the composite report payload.
@@ -205,6 +207,11 @@ class SurveyResponsesController < ApplicationController
       )
       result = generator.render
       filename = survey_pdf_filename(pdf_source_response)
+      record_survey_response_export_audit!(
+        export_type: "survey_response_pdf",
+        description: "Exported survey response PDF.",
+        survey_response: pdf_source_response
+      )
       stream_pdf_result(result, filename, unavailable_message: unavailable_message)
     rescue CompositeReportGenerator::MissingDependency
       render plain: "Server-side PDF generation unavailable. WickedPdf not configured.", status: :service_unavailable
@@ -262,6 +269,11 @@ class SurveyResponsesController < ApplicationController
       generator = CompositeReportGenerator.new(survey_response: @survey_response)
       result = generator.render
       filename = "composite_assessment_#{@survey_response.id}.pdf"
+      record_survey_response_export_audit!(
+        export_type: "survey_response_composite_pdf",
+        description: "Exported composite survey response PDF.",
+        survey_response: @survey_response
+      )
       stream_pdf_result(result, filename, unavailable_message: unavailable_message)
     rescue CompositeReportGenerator::MissingDependency
       render plain: "Composite PDF generation unavailable. WickedPdf not configured.", status: :service_unavailable
@@ -401,6 +413,49 @@ class SurveyResponsesController < ApplicationController
     @survey_response.question_responses
   end
 
+  def load_confidential_advisor_note!
+    @confidential_advisor_note_enabled = false
+    @confidential_advisor_note = nil
+
+    current = current_user
+    return unless current&.role_advisor?
+
+    advisor_profile = current_advisor_profile
+    return unless advisor_profile
+    return unless @survey_response&.advisor_id.present? && advisor_profile.advisor_id == @survey_response.advisor_id
+
+    @confidential_advisor_note_enabled = true
+    @confidential_advisor_note = ConfidentialAdvisorNote.find_by(
+      student_id: @survey_response.student_id,
+      survey_id: @survey_response.survey_id,
+      advisor_id: advisor_profile.advisor_id
+    )
+  end
+
+  def load_self_target_summary!
+    @self_target_summary = nil
+    return unless completed_survey_response?
+
+    @self_target_summary = SurveyResponses::SelfTargetSummary.build(survey_response: @survey_response)
+  end
+
+  def completed_survey_response?
+    return true if @survey_assignment&.completed_at.present?
+    return true if SurveyResponses::SelfTargetSummary.completed_version_event?(@selected_version&.event)
+    return true if legacy_completed_survey_response?
+
+    false
+  end
+
+  def legacy_completed_survey_response?
+    return false unless @survey_response&.status == :submitted
+    return true if @survey_assignment.blank?
+    return true unless @survey_response.survey&.is_active?
+
+    deadline = @survey_assignment.effective_available_until
+    deadline.present? && deadline < Time.current
+  end
+
   def load_versions!
     @versions = SurveyResponseVersion
                   .for_pair(student_id: @survey_response.student_id, survey_id: @survey_response.survey_id)
@@ -454,6 +509,19 @@ class SurveyResponsesController < ApplicationController
     end
 
     send_data pdf_data, filename: filename, disposition: "attachment", type: "application/pdf"
+  end
+
+  def record_survey_response_export_audit!(export_type:, description:, survey_response:)
+    record_export_audit!(
+      export_type: export_type,
+      description: description,
+      subject: survey_response&.student,
+      metadata: {
+        student_id: survey_response&.student_id,
+        survey_id: survey_response&.survey_id,
+        advisor_id: survey_response&.advisor_id
+      }
+    )
   end
 
   def read_pdf_bytes(path)

@@ -45,7 +45,10 @@
               <% end %>
               <%= link_to "Preview", preview_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
               <% copy_modal_id = "copy-survey-modal-#{survey.id}" %>
-              <button type="button" class="<%= button_classes(:subtle, extra_classes: "btn-sm") %>" data-open-modal="<%= copy_modal_id %>">Copy</button>
+              <%= link_to "Copy",
+                          copy_admin_survey_path(survey),
+                          class: button_classes(:subtle, extra_classes: "btn-sm"),
+                          data: { open_modal: copy_modal_id, turbo: false } %>
               <% unless archived %>
                 <%= link_to "Edit", edit_admin_survey_path(survey), class: button_classes(:subtle, extra_classes: "btn-sm") %>
                 <%= button_to "Archive", archive_admin_survey_path(survey), method: :patch, data: { turbo_confirm: "Archive '#{survey.title}'? Advisors will no longer be able to assign it." }, class: button_classes(:secondary) %>
@@ -69,7 +72,7 @@
                   <% if copy_target_semesters.blank? %>
                     <p>Add another semester in Program Setup before copying this survey.</p>
                   <% else %>
-                    <%= form_with url: copy_to_semester_admin_survey_path(survey), method: :post, local: true, class: "u-stack u-stack--md" do %>
+                    <%= form_with url: copy_to_semester_admin_survey_path(survey), method: :post, local: true, data: { turbo: false }, class: "u-stack u-stack--md" do %>
                       <div class="c-field">
                         <%= label_tag "survey_copy_target_program_semester_id_#{survey.id}", "Copy into semester", class: "c-label" %>
                         <%= select_tag "survey_copy[target_program_semester_id]",

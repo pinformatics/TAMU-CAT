@@ -1,8 +1,7 @@
-# A simple combobox input implemented via <input list="..."> + <datalist>.
+# A simple searchable combobox backed by the global combobox JavaScript.
 #
-# The user types into the textbox and the browser presents matching options.
-# The submitted value is whatever you choose as option[:value] (commonly an
-# email or id).
+# The user types into the textbox, chooses from the filtered popup, and the
+# component submits the selected option value through a hidden field.
 #
 # Usage:
 #   render SearchableSelectComponent.new(

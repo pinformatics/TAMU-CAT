@@ -449,7 +449,35 @@ class StudentCompetencyDashboard
   end
 
   def target_program_semester
-    selected_program_semester || ProgramSemester.current
+    selected_program_semester || graduated_target_program_semester || ProgramSemester.current
+  end
+
+  def graduated_target_program_semester
+    return unless filters[:all_semesters]
+    return unless student.respond_to?(:graduated?) && student.graduated?
+
+    @graduated_target_program_semester ||= begin
+      target_semester_from_graduation_date || target_semester_from_latest_student_data
+    end
+  end
+
+  def target_semester_from_graduation_date
+    return unless student.respond_to?(:graduated_at)
+
+    graduation_date = student.graduated_at&.to_date
+    return if graduation_date.blank?
+
+    ProgramSemester
+      .where("starts_on <= ? AND ends_on >= ?", graduation_date, graduation_date)
+      .ordered
+      .to_a
+      .last ||
+      ProgramSemester.where("ends_on <= ?", graduation_date).ordered.to_a.last
+  end
+
+  def target_semester_from_latest_student_data
+    latest_name = student_enrollment_semester_names.max_by { |name| semester_sort_key(name) || [ 0, 0, name.to_s ] }
+    ProgramSemester.find_by_name_case_insensitive(latest_name)
   end
 
   def target_lookup_for(program_semester)

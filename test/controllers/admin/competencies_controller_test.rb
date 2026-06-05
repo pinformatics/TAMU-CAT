@@ -1,5 +1,6 @@
 require "test_helper"
 require "csv"
+require "uri"
 
 class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
   setup do
@@ -15,23 +16,40 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
   test "advisor can view competencies matrix for assigned students only" do
     sign_in @advisor
 
-    get admin_competencies_path
+    get competencies_path
 
     assert_response :success
     assert_includes response.body, "Competencies"
-    assert_includes response.body, "1 student"
+    assert_includes response.body, @student.email
+    assert_includes response.body, competency_path(students(:student))
     refute_includes response.body, "Course competency rule"
     refute_includes response.body, "Global setting applied to course-derived competency values for all users."
     refute_includes response.body, @other_student.email
   end
 
-  test "student is redirected without admin warning" do
+  test "advisor old admin competency URL redirects to neutral shared route" do
+    sign_in @advisor
+
+    get admin_competencies_path
+
+    assert_redirected_to competencies_path
+  end
+
+  test "advisor old admin competency URL redirects for head requests" do
+    sign_in @advisor
+
+    head admin_competencies_path
+
+    assert_redirected_to competencies_path
+  end
+
+  test "student is redirected with shared staff-only warning" do
     sign_in @student
 
     get admin_competencies_path
 
     assert_redirected_to dashboard_path
-    assert_nil flash[:alert]
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   test "admin can view competencies matrix" do
@@ -47,6 +65,93 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Details"
     assert_includes response.body, admin_competency_path(students(:student))
     assert_includes response.body, "Health Care Environment and Community"
+  end
+
+  test "competencies matrix renders domain headers competency headers and source score rows" do
+    sign_in @admin
+    fall = program_semesters(:fall_2025)
+    domain_name = Reports::DataAggregator::REPORT_DOMAINS.first
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    create_course_rating(student: students(:student), competency_title: competency_title, level: 4.0, semester: fall)
+
+    get admin_competencies_path(q: @student.email, semester: fall.name)
+
+    assert_response :success
+    assert_select "th.c-table__domain-header", text: domain_name
+    assert_select "th.c-table__competency-header .c-table__competency-title", text: competency_title
+    assert_select "tr.c-table-row--self th.c-table__source-cell", text: /Self/
+    assert_select "tr.c-table-row--advisor th.c-table__source-cell", text: /Advisor/
+    assert_select "tr.c-table-row--course th.c-table__source-cell", text: /Course/
+    assert_select "tr.c-table-row--course td.c-table__score-cell .c-score-pill--course", text: "4"
+  end
+
+  test "competencies matrix remembers filters across page returns and clears them on request" do
+    sign_in @admin
+    unique_search = students(:student).uin
+
+    get admin_competencies_path(q: unique_search, semester: program_semesters(:fall_2025).name)
+
+    assert_response :success
+    assert_select "input[name='q'][value='#{unique_search}']"
+    assert_select "select[name='semester'] option[selected][value='#{program_semesters(:fall_2025).name}']"
+    assert_includes response.body, @student.email
+    refute_includes response.body, @other_student.email
+
+    get admin_dashboard_path
+    assert_response :success
+
+    get admin_competencies_path
+
+    assert_response :success
+    assert_select "input[name='q'][value='#{unique_search}']"
+    assert_select "select[name='semester'] option[selected][value='#{program_semesters(:fall_2025).name}']"
+    assert_includes response.body, @student.email
+    refute_includes response.body, @other_student.email
+
+    get export_admin_competencies_path(format: :csv)
+
+    assert_response :success
+    csv = CSV.parse(response.body, headers: true)
+    assert_equal [ @student.email ], csv.map { |row| row["Student Email"] }.uniq
+
+    get admin_competencies_path(clear_filters: 1)
+
+    assert_response :success
+    assert_select "input[name='q'][value='#{unique_search}']", count: 0
+    assert_select "select[name='semester'] option[selected][value='#{program_semesters(:fall_2025).name}']", count: 0
+  end
+
+  test "competency matrix export link preserves current filters" do
+    sign_in @admin
+    competency_title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    semester = program_semesters(:fall_2025).name
+
+    get admin_competencies_path, params: {
+      q: @student.email,
+      track: "Residential",
+      program_year: "2026",
+      advisor_id: @advisor.id,
+      semester: semester,
+      domain: Reports::DataAggregator::REPORT_DOMAINS.first,
+      student_status: "all",
+      competencies: [ competency_title ]
+    }
+
+    assert_response :success
+    assert_select ".c-ferpa-export-notice", text: /Student-level competency matrix exports/
+    assert_select "a[data-turbo='false'][data-turbo-confirm*='FERPA reminder']", text: "Export CSV"
+    assert_link_path_and_query(
+      "Export CSV",
+      export_admin_competencies_path,
+      "q" => @student.email,
+      "track" => "residential",
+      "program_year" => "2026",
+      "advisor_id" => @advisor.id.to_s,
+      "semester" => semester,
+      "domain" => Reports::DataAggregator::REPORT_DOMAINS.first,
+      "student_status" => "all",
+      "competencies" => [ competency_title ]
+    )
   end
 
   test "competencies matrix defaults to current students and can include archived students" do
@@ -241,28 +346,30 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
   test "advisor can view detailed dashboard for assigned student" do
     sign_in @advisor
 
-    get admin_competency_path(students(:student))
+    get competency_path(students(:student))
 
     assert_response :success
     assert_includes response.body, "#{@student.display_name} Competencies"
     assert_includes response.body, "Competency Snapshot"
+    assert_includes response.body, competencies_path
   end
 
-  test "advisor cannot view detailed dashboard for unassigned student" do
+  test "advisor cannot view detailed dashboard for unassigned student and is redirected gracefully" do
     sign_in @advisor
 
-    get admin_competency_path(students(:other_student))
+    get competency_path(students(:other_student))
 
-    assert_response :not_found
+    assert_redirected_to competencies_path
+    assert_equal "That student competency record is not available from your account.", flash[:alert]
   end
 
   test "advisor filter options stay scoped to assigned students" do
     sign_in @advisor
 
-    get admin_competencies_path, params: { advisor_id: @other_advisor.id }
+    get competencies_path, params: { advisor_id: @other_advisor.id }
 
     assert_response :success
-    assert_includes response.body, "0 students"
+    assert_includes response.body, "No students match the current filters."
     refute_includes response.body, @other_student.email
   end
 
@@ -383,7 +490,7 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
   test "advisor export remains scoped to assigned students" do
     sign_in @advisor
 
-    get export_admin_competencies_path(format: :csv)
+    get export_competencies_path(format: :csv)
 
     assert_response :success
     csv = CSV.parse(response.body, headers: true)
@@ -439,5 +546,18 @@ class Admin::CompetenciesControllerTest < ActionDispatch::IntegrationTest
       aggregation_rule: "max",
       evidence_count: 1
     )
+  end
+
+  def assert_link_path_and_query(label, expected_path, expected_query)
+    link = css_select("a").find { |anchor| anchor.text.squish == label }
+    assert link, "Expected to find #{label.inspect} link"
+
+    uri = URI.parse(link["href"])
+    assert_equal expected_path, uri.path
+
+    query = Rack::Utils.parse_nested_query(uri.query)
+    expected_query.each do |key, value|
+      assert_equal value, query[key], "Expected #{label} query #{key}=#{value.inspect}; found #{query.inspect}"
+    end
   end
 end

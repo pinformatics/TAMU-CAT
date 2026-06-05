@@ -169,6 +169,32 @@ module Reports
       assert_in_delta 100.0, domain_entry[:course_target_percent], 0.001
     end
 
+    test "export payload includes raw survey advisor and course evidence rows" do
+      create_student_response(score: "4.0")
+      create_advisor_feedback(score: 5.0)
+      create_course_evidence(raw_grade: 95.0, assessed_level: 4, target_level: 3)
+
+      aggregator = Reports::DataAggregator.new(user: @admin, params: { student_id: @student.student_id })
+      raw_data = aggregator.export_payload[:raw_data]
+
+      survey_row = raw_data[:survey_responses].find { |row| row[:competency] == @competency_name }
+      assert_equal @student.student_id, survey_row[:student_id]
+      assert_equal 4.0, survey_row[:score]
+      assert_equal "Student User", survey_row[:student_name]
+
+      advisor_row = raw_data[:advisor_ratings].find { |row| row[:competency] == @competency_name }
+      assert_equal @advisor.advisor_id, advisor_row[:advisor_id]
+      assert_equal "Advisor User", advisor_row[:advisor]
+      assert_equal 5.0, advisor_row[:score]
+
+      course_row = raw_data[:course_evidence].find { |row| row[:course] == "PHPM-601" }
+      assert_equal "Canvas Result", course_row[:assignment]
+      assert_equal BigDecimal("95.0"), course_row[:raw_grade]
+      assert_equal 4, course_row[:assessed_level]
+      assert_equal 3, course_row[:course_target_level]
+      assert_equal "Met", course_row[:target_status]
+    end
+
     private
 
     def create_competency_questions(competency_name, domain_name)
@@ -239,6 +265,33 @@ module Reports
         aggregated_level: level,
         aggregation_rule: "max",
         evidence_count: 1
+      )
+    end
+
+    def create_course_evidence(raw_grade:, assessed_level:, target_level:)
+      batch = GradeImportBatch.create!(
+        uploaded_by: @admin,
+        program_semester: @survey.program_semester,
+        status: "completed",
+        summary: { "dry_run" => false }
+      )
+      file = batch.grade_import_files.create!(
+        file_name: "Outcomes-26S-PHPM-601.csv",
+        file_checksum: SecureRandom.hex(16),
+        status: "processed"
+      )
+
+      batch.grade_competency_evidences.create!(
+        grade_import_file: file,
+        student: @student,
+        competency_title: @competency_name,
+        course_code: "PHPM-601",
+        assignment_name: "Canvas Result",
+        raw_grade: raw_grade,
+        mapped_level: assessed_level,
+        course_target_level: target_level,
+        source_key: SecureRandom.uuid,
+        import_fingerprint: SecureRandom.uuid
       )
     end
 

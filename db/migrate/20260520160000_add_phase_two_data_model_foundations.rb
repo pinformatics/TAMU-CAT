@@ -10,9 +10,11 @@ class AddPhaseTwoDataModelFoundations < ActiveRecord::Migration[8.0]
   COURSE_CODE_PATTERN = /\A\s*([A-Z]{2,5})[\s_-]*(\d{3})(?:[\s_-]*(\d{3}))?\s*\z/i.freeze
 
   def up
+    add_user_notification_preferences
     add_student_lifecycle_columns
     add_semester_lifecycle_columns
     create_course_catalog_tables
+    create_course_competency_targets
     add_canonical_references
     backfill_competency_references
     backfill_course_catalog
@@ -24,6 +26,7 @@ class AddPhaseTwoDataModelFoundations < ActiveRecord::Migration[8.0]
 
     remove_canonical_references
 
+    drop_table :course_competency_targets if table_exists?(:course_competency_targets)
     drop_table :course_offerings if table_exists?(:course_offerings)
     drop_table :courses if table_exists?(:courses)
     drop_table :departments if table_exists?(:departments)
@@ -39,9 +42,17 @@ class AddPhaseTwoDataModelFoundations < ActiveRecord::Migration[8.0]
     remove_column :program_semesters, :ends_on if column_exists?(:program_semesters, :ends_on)
     remove_column :program_semesters, :starts_on if column_exists?(:program_semesters, :starts_on)
     remove_column :program_semesters, :status if column_exists?(:program_semesters, :status)
+
+    remove_column :users, :in_app_notifications_enabled if column_exists?(:users, :in_app_notifications_enabled)
   end
 
   private
+
+  def add_user_notification_preferences
+    return if column_exists?(:users, :in_app_notifications_enabled)
+
+    add_column :users, :in_app_notifications_enabled, :boolean, null: false, default: true
+  end
 
   def add_student_lifecycle_columns
     add_column :students, :status, :string, null: false, default: "active" unless column_exists?(:students, :status)
@@ -125,6 +136,23 @@ class AddPhaseTwoDataModelFoundations < ActiveRecord::Migration[8.0]
     add_index :course_offerings, :source_code
     add_index :course_offerings, :active
     add_index :course_offerings, :archived_at
+  end
+
+  def create_course_competency_targets
+    return if table_exists?(:course_competency_targets)
+
+    create_table :course_competency_targets do |t|
+      t.references :course_offering, null: false, foreign_key: true
+      t.references :competency, null: false, foreign_key: true
+      t.integer :target_level, null: false
+
+      t.timestamps
+    end
+
+    add_index :course_competency_targets,
+              [ :course_offering_id, :competency_id ],
+              unique: true,
+              name: "index_course_competency_targets_unique_offering_competency"
   end
 
   def add_canonical_references

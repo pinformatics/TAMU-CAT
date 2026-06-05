@@ -96,6 +96,86 @@ class Reports::CourseCompetencyReportTest < ActiveSupport::TestCase
     refute_includes courses, "PHPM-999"
   end
 
+  test "advisor without profile sees no evidence" do
+    advisor_without_profile = OpenStruct.new(role_advisor?: true, advisor_profile: nil)
+    create_evidence!("advisor-no-profile", course_code: "PHPM-601", competency_title: "Policy Analysis", mapped_level: 5, course_target_level: 4)
+
+    payload = Reports::CourseCompetencyReport.new(user: advisor_without_profile).call
+
+    assert_equal 0, payload[:summary][:evidence_count]
+    assert_empty payload[:course_contributions]
+  end
+
+  test "private summaries handle no-semester missing course and nil student branches" do
+    service = Reports::CourseCompetencyReport.new
+    no_semester_batch = OpenStruct.new(program_semester: nil)
+    row = OpenStruct.new(
+      id: nil,
+      grade_import_batch: no_semester_batch,
+      course_code: nil,
+      competency_title: nil,
+      student_id: 12345,
+      student: nil,
+      mapped_level: nil,
+      course_target_level: nil
+    )
+
+    summary = service.send(:summary_for, [ row ])
+    assert_equal 0, summary[:course_count]
+    assert_equal 1, summary[:evidence_count]
+    assert_nil summary[:met_rate]
+
+    contribution = service.send(:course_contributions, [ row ]).first
+    assert_equal "No course code", contribution[:course_code]
+    assert_equal "No competency", contribution[:competency_title]
+    assert_equal "No semester", contribution[:release_statuses]
+    assert_nil contribution[:assessed_average]
+    assert_nil contribution[:course_target_average]
+
+    heatmap = service.send(:student_course_heatmap, [ row ]).first
+    assert_equal "Student 12345", heatmap[:student_name]
+    assert_equal "No course code", heatmap[:course_code]
+    assert_equal "missing", heatmap[:status]
+  end
+
+  test "filter parsing ignores invalid release statuses and supports alternate param names" do
+    invalid = Reports::CourseCompetencyReport.new(params: { release_status: "invalid", program_semester_id: @semester.id.to_s })
+    assert_equal({ program_semester_id: @semester.id.to_s }, invalid.send(:filters))
+
+    alternate = Reports::CourseCompetencyReport.new(
+      params: {
+        course_program_semester_id: @semester.id.to_s,
+        course_code: " PHPM-601 ",
+        course_track: "Residential",
+        course_class_of: "2026",
+        release_status: "released"
+      }
+    )
+
+    assert_equal(
+      {
+        program_semester_id: @semester.id.to_s,
+        course_code: "PHPM-601",
+        track: "Residential",
+        class_of: "2026",
+        release_status: "released"
+      },
+      alternate.send(:filters)
+    )
+  end
+
+  test "heatmap status and average helpers cover each branch" do
+    service = Reports::CourseCompetencyReport.new
+
+    assert_equal "attention", service.send(:heatmap_status, 5, [ :below_target ])
+    assert_equal "missing", service.send(:heatmap_status, nil, [ :met ])
+    assert_equal "strong", service.send(:heatmap_status, 4, [ :met ])
+    assert_equal "watch", service.send(:heatmap_status, 3, [ :met ])
+    assert_equal "attention", service.send(:heatmap_status, 2, [ :met ])
+    assert_nil service.send(:average, [])
+    assert_equal 2.5, service.send(:average, [ 2.0, nil, 3 ])
+  end
+
   private
 
   def create_evidence!(suffix, course_code:, competency_title:, mapped_level:, course_target_level:)

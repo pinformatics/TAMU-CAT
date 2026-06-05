@@ -212,6 +212,7 @@
             <div>
               <p class="c-table__title">Exports</p>
               <p class="c-help">Download the row-level student data or a correction file for rows that need attention.</p>
+              <p class="c-help c-ferpa-export-notice"><%= ferpa_export_notice("Row-level student competency exports") %></p>
             </div>
             <div class="u-actions u-actions--start">
               <%= link_to "Export rows CSV",
@@ -219,13 +220,13 @@
                     class: button_classes(:secondary),
                     title: button_help[:export_evidence_csv],
                     aria: { label: button_help[:export_evidence_csv] },
-                    data: { turbo_confirm: ferpa_export_confirmation("row-level student competency data") } %>
+                    data: { turbo: false, turbo_confirm: ferpa_export_confirmation("row-level student competency data") } %>
               <%= link_to "Correction file",
                     correction_file_admin_grade_import_batch_path(@batch, format: :csv),
                     class: button_classes(:secondary),
                     title: button_help[:correction_file],
                     aria: { label: button_help[:correction_file] },
-                    data: { turbo_confirm: ferpa_export_confirmation("student identifiers and course data") } %>
+                    data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student identifiers and course data") } %>
             </div>
           </section>
 
@@ -269,7 +270,8 @@
           <summary class="c-section-group__header">
             <h2 class="c-section-title">Target Warnings Before Commit</h2>
             <span>
-              <%= pluralize(@target_warning_summary.dig(:counts, :missing_course_targets).to_i, "missing uploaded target") %>
+              <%= pluralize(@target_warning_summary.dig(:counts, :missing_course_targets).to_i, "missing uploaded target") %>,
+              <%= pluralize(@target_warning_summary.dig(:counts, :mismatched_configured_course_targets).to_i, "configured target mismatch") %>
             </span>
           </summary>
 
@@ -279,7 +281,8 @@
             </div>
 
             <% warning_groups = [
-              ["Missing Uploaded Course Targets", @target_warning_summary[:missing_course_targets]]
+              ["Missing Uploaded Course Targets", @target_warning_summary[:missing_course_targets]],
+              ["Configured Course Target Mismatches", @target_warning_summary[:mismatched_configured_course_targets]]
             ] %>
             <% warning_groups.each do |title, rows| %>
               <% next if rows.blank? %>
@@ -293,6 +296,9 @@
                         <th>Course</th>
                         <th>Competency</th>
                         <th>Uploaded Target</th>
+                        <% if title == "Configured Course Target Mismatches" %>
+                          <th>Configured Target</th>
+                        <% end %>
                       </tr>
                     </thead>
                     <tbody>
@@ -305,6 +311,9 @@
                           <td><%= row[:course_code] %></td>
                           <td class="c-table__title"><%= row[:competency] %></td>
                           <td><%= row[:course_target].presence || "Missing" %></td>
+                          <% if title == "Configured Course Target Mismatches" %>
+                            <td><%= row[:configured_course_target].presence || "—" %></td>
+                          <% end %>
                         </tr>
                       <% end %>
                     </tbody>
@@ -595,7 +604,7 @@
             <% mappings = Array(parsed["mapping_rows_preview"]) %>
             <% direct_competencies = Array(parsed["direct_competencies_preview"] || debug["direct_competencies_preview"]) %>
             <% mapping_course_codes = mappings.filter_map { |mapping| mapping["course_code"] || mapping[:course_code] }.compact_blank.uniq.sort %>
-            <% course_label = parsed["direct_course_code"].presence || file.course_offering&.course_code || (mapping_course_codes.one? ? mapping_course_codes.first : nil) || (mapping_course_codes.any? ? mapping_course_codes.to_sentence : "Detected from file, section, or mapping rows") %>
+            <% course_label = parsed["direct_course_code"].presence || file.course_offering&.display_code || (mapping_course_codes.one? ? mapping_course_codes.first : nil) || (mapping_course_codes.any? ? mapping_course_codes.to_sentence : "Detected from file, section, or mapping rows") %>
             <% identifier_column = debug["student_identifier_column"] %>
             <% student_identifier_label = if mode == "direct_competency"
               "Student SIS ID, Student ID, then student name"
@@ -734,8 +743,8 @@
                         <% direct_competencies.first(30).each do |column| %>
                           <tr>
                             <td class="c-table__title"><%= column["competency_title"] || column[:competency_title] %></td>
-                            <td><%= (column["mastery_points_header"] || column[:mastery_points_header]).presence || "No score column" %></td>
-                            <td><%= column["result_header"] || column[:result_header] %></td>
+                            <td><%= (column["result_header"] || column[:result_header]).presence || "No score column" %></td>
+                            <td><%= (column["target_header"] || column[:target_header] || column["mastery_points_header"] || column[:mastery_points_header]).presence || "No target column" %></td>
                           </tr>
                         <% end %>
                       </tbody>

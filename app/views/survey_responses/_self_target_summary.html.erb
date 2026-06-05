@@ -1,0 +1,63 @@
+<% met_rate = summary[:met_rate] %>
+<% comparable_count = summary[:comparable_count].to_i %>
+<% total_count = summary[:total_count].to_i %>
+
+<section class="c-card c-card--compact c-card--student u-stack u-stack--sm" aria-labelledby="self-target-summary-title">
+  <div class="u-actions u-actions--split">
+    <div>
+      <p class="c-eyebrow">Completed survey summary</p>
+      <h2 id="self-target-summary-title" class="c-h3">Self-assessment target summary</h2>
+    </div>
+    <% if met_rate.present? %>
+      <span class="c-pill c-pill--primary"><%= number_with_precision(met_rate, precision: 1, strip_insignificant_zeros: true) %>% met</span>
+    <% end %>
+  </div>
+
+  <p class="c-help">
+    <% if comparable_count.positive? %>
+      <strong><%= summary[:met_count] %> of <%= comparable_count %></strong>
+      rated self-assessments met the end-of-program target
+      <% if met_rate.present? %>
+        (<%= number_with_precision(met_rate, precision: 1, strip_insignificant_zeros: true) %>%).
+      <% else %>
+        .
+      <% end %>
+    <% else %>
+      No rated self-assessments could be compared to an end-of-program target.
+    <% end %>
+  </p>
+
+  <div class="c-stats-grid c-stats-grid--inline" aria-label="Self-assessment target summary counts">
+    <div class="c-stat c-stat--success" aria-label="Met <%= summary[:met_count] %>">
+      <div class="c-stat__label">Met</div>
+      <div class="c-stat__value"><%= summary[:met_count] %></div>
+      <div class="c-stat__subtext">at target</div>
+    </div>
+
+    <div class="c-stat c-stat--warning" aria-label="Below <%= summary[:below_count] %>">
+      <div class="c-stat__label">Below</div>
+      <div class="c-stat__value"><%= summary[:below_count] %></div>
+      <div class="c-stat__subtext">needs review</div>
+    </div>
+
+    <div class="c-stat c-stat--muted" aria-label="Not rated <%= summary[:missing_self_count] %>">
+      <div class="c-stat__label">Not rated</div>
+      <div class="c-stat__value"><%= summary[:missing_self_count] %></div>
+      <div class="c-stat__subtext">blank</div>
+    </div>
+
+    <% if summary[:missing_target_count].to_i.positive? %>
+      <div class="c-stat c-stat--muted" aria-label="No target <%= summary[:missing_target_count] %>">
+        <div class="c-stat__label">No target</div>
+        <div class="c-stat__value"><%= summary[:missing_target_count] %></div>
+        <div class="c-stat__subtext">not set</div>
+      </div>
+    <% end %>
+
+    <div class="c-stat c-stat--muted" aria-label="Competencies <%= total_count %>">
+      <div class="c-stat__label">Total</div>
+      <div class="c-stat__value"><%= total_count %></div>
+      <div class="c-stat__subtext">competencies</div>
+    </div>
+  </div>
+</section>

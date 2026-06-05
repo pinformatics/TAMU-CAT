@@ -239,7 +239,7 @@ The main admin workflows in the current application are:
 - **Survey Builder** – create and maintain surveys, questions, and availability settings.
 - **Grade Import Batches** – process mapping workbooks and direct competency exports.
 - **Competencies** – compare self, advisor, and course-derived ratings side by side.
-- **Student Records** – review survey progress and exports by semester.
+- **Survey Records** – review survey progress and exports by semester.
 - **Reports** – program-level visualizations and exports.
 
 ## Handoff

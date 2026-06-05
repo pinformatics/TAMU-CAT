@@ -79,6 +79,8 @@
   <% target_values = competency_rows.map { |row| row[:target_level].to_s[/\d+/] }.compact.map(&:to_f) %>
   <% student_values = competency_rows.map { |row| row[:student_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
   <% advisor_values = competency_rows.map { |row| row[:advisor_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
+  <% show_advisor_rating_column = advisor_values.any? %>
+  <% competency_summary_colspan = show_advisor_rating_column ? 5 : 4 %>
   <% avg_target = target_values.any? ? (target_values.sum / target_values.size) : nil %>
   <% avg_student = student_values.any? ? (student_values.sum / student_values.size) : nil %>
   <% avg_advisor = advisor_values.any? ? (advisor_values.sum / advisor_values.size) : nil %>
@@ -91,7 +93,9 @@
           <th>Competency</th>
           <th>End of Program Target Level</th>
           <th>Student Rating</th>
-          <th>Advisor Rating</th>
+          <% if show_advisor_rating_column %>
+            <th>Advisor Rating</th>
+          <% end %>
           <th>Grade-Derived Rating</th>
         </tr>
       </thead>
@@ -101,7 +105,9 @@
             <td><%= row[:competency] %></td>
             <td class="numeric"><%= row[:target_level].present? ? row[:target_level] : "—" %></td>
             <td class="numeric"><%= row[:student_rating].present? ? row[:student_rating] : "—" %></td>
-            <td class="numeric"><%= row[:advisor_rating].present? ? row[:advisor_rating] : "—" %></td>
+            <% if show_advisor_rating_column %>
+              <td class="numeric"><%= row[:advisor_rating].present? ? row[:advisor_rating] : "—" %></td>
+            <% end %>
             <td class="numeric">
               <% if row[:grade_derived_rating].present? %>
                 <%= row[:grade_derived_rating] %>
@@ -116,7 +122,7 @@
           </tr>
           <% if row[:grade_derived_provenance].any? %>
             <tr>
-              <td colspan="5">
+              <td colspan="<%= competency_summary_colspan %>">
                 <strong>Grade provenance:</strong>
                 <%= row[:grade_derived_provenance].map { |item| [item[:course_code], item[:assignment_name], "level #{item[:mapped_level]}"].compact.join(" · ") }.join(" | ") %>
               </td>
@@ -128,7 +134,9 @@
           <td><strong>Average</strong></td>
           <td class="numeric"><%= avg_target ? format("%.2f", avg_target) : "—" %></td>
           <td class="numeric"><%= avg_student ? format("%.2f", avg_student) : "—" %></td>
-          <td class="numeric"><%= avg_advisor ? format("%.2f", avg_advisor) : "—" %></td>
+          <% if show_advisor_rating_column %>
+            <td class="numeric"><%= avg_advisor ? format("%.2f", avg_advisor) : "—" %></td>
+          <% end %>
           <td class="numeric">—</td>
         </tr>
       </tbody>

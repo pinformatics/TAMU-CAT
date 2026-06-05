@@ -1,5 +1,7 @@
 require "test_helper"
+require "csv"
 require "securerandom"
+require "ostruct"
 
 class StudentCompetencyDashboardTest < ActiveSupport::TestCase
   setup do
@@ -145,6 +147,37 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
     assert payload[:domain_averages].values.any? { |averages| averages[:self].present? }
   end
 
+  test "all semesters view uses graduated student's latest data semester target" do
+    ProgramSemester.create!(name: "Fall 2026", current: true)
+    @student.update!(status: "graduated", graduated_at: Time.zone.local(2026, 5, 15))
+
+    create_self_rating(
+      value: 3,
+      updated_at: Time.zone.local(2026, 4, 15, 10, 0, 0),
+      survey: surveys(:spring_2026_residential)
+    )
+    CompetencyTargetLevel.create!(
+      program_semester: program_semesters(:spring_2026),
+      track: @student.track,
+      program_year: @student.program_year,
+      competency_title: @competency_title,
+      target_level: 3
+    )
+    CompetencyTargetLevel.create!(
+      program_semester: ProgramSemester.find_by!(name: "Fall 2026"),
+      track: @student.track,
+      program_year: @student.program_year,
+      competency_title: @competency_title,
+      target_level: 5
+    )
+
+    payload = StudentCompetencyDashboard.new(student: @student, params: { semester: "all" }).call
+    competency = find_competency(payload, @competency_title)
+
+    assert_equal 3, competency[:end_program_target]
+    refute competency[:self_below_target]
+  end
+
   test "change summary compares selected semester with the previous semester" do
     ProgramSemester.update_all(current: false)
     program_semesters(:spring_2026).update!(current: true)
@@ -184,6 +217,75 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
     assert_includes labels, "Self average"
     assert_includes labels, "Advisor average"
     assert_includes labels, "Course average"
+  end
+
+  test "private helpers cover semester source rating and change fallbacks" do
+    dashboard = StudentCompetencyDashboard.new(student: @student, params: { sources: "self,unknown,,course" })
+
+    assert_equal [ "self", "course" ], dashboard.send(:selected_source_keys)
+    assert_equal [ 2026, 1 ], dashboard.send(:semester_sort_key, "Spring 2026")
+    assert_nil dashboard.send(:semester_sort_key, "Not A Term")
+    assert_equal "Fall 2025", dashboard.send(:cohort_semester_names).first
+    assert_equal "Fall 2025", dashboard.send(:fallback_first_enrollment_semester_name)
+    assert_equal({}, dashboard.send(:source_details_for_semester, "unknown", "Fall 2025"))
+    assert_nil dashboard.send(:program_target_level_for, "Not a competency")
+    assert_equal 4.0, dashboard.send(:normalize_rating, "Level 4")
+    assert_nil dashboard.send(:normalize_rating, nil)
+    assert_equal "increased", dashboard.send(:change_direction, 1)
+    assert_equal "decreased", dashboard.send(:change_direction, -1)
+    assert_equal "stayed about the same", dashboard.send(:change_direction, 0)
+    assert_includes dashboard.send(:change_sentence, "Self", 2, 4, 2), "increased from 2 to 4"
+    assert_includes dashboard.send(:change_sentence, "Self", 4, 4, 0), "stayed about the same"
+
+    blank_student = OpenStruct.new(student_id: 123, program_year: nil, track: nil, track_key: nil)
+    blank_dashboard = StudentCompetencyDashboard.new(student: blank_student)
+    assert_equal [], blank_dashboard.send(:cohort_semester_names)
+    assert_nil blank_dashboard.send(:fallback_first_enrollment_semester_name)
+
+    ProgramSemester.stub(:current, OpenStruct.new(name: "Outside 2099")) do
+      dashboard.stub(:semester_options, [ "Spring 2025", "Fall 2025" ]) do
+        assert_equal "Fall 2025", dashboard.send(:current_semester_name)
+      end
+    end
+  end
+
+  test "private helpers cover release target duplicate and csv source fallbacks" do
+    dashboard = StudentCompetencyDashboard.new(student: @student, params: { semester: "Fall 2025" })
+
+    dashboard.stub(:course_released?, false) do
+      assert_includes dashboard.send(:release_label), "Not released"
+    end
+
+    dashboard.stub(:filters, { semester: "Missing Semester", all_semesters: false, sources: %w[self course target] }) do
+      dashboard.stub(:selected_program_semester, nil) do
+        assert_equal [], dashboard.send(:filter_course_rows_by_semester, GradeCompetencyEvidence.all).to_a
+      end
+    end
+
+    blank_student = OpenStruct.new(student_id: 987_123, program_year: nil, track: nil, track_key: nil)
+    blank_dashboard = StudentCompetencyDashboard.new(student: blank_student)
+    assert_equal({}, blank_dashboard.send(:target_detail_lookup_for, program_semesters(:fall_2025)))
+
+    first = OpenStruct.new(question_text: @competency_title, response_value: "2", updated_at: 2.days.ago)
+    duplicate = OpenStruct.new(question_text: @competency_title, response_value: "5", updated_at: Time.current)
+    lookup = dashboard.send(:latest_rating_detail_lookup, [ first, duplicate ], value_method: :response_value)
+    assert_equal 2.0, lookup[@competency_title][:value]
+
+    assert_nil dashboard.send(:format_change_score, nil)
+    assert_equal "3.25", dashboard.send(:format_change_score, 3.2500)
+  end
+
+  test "student summary and csv handle narrow source selections" do
+    create_self_rating(value: 4, updated_at: Time.zone.local(2026, 5, 1, 10, 0, 0))
+
+    self_only = StudentCompetencyDashboard.new(student: @student, params: { semester: "Fall 2025", sources: [ "self" ] }).call
+    csv = CSV.parse(self_only[:csv], headers: true)
+
+    assert_equal [ "self" ], self_only[:visible_sources]
+    assert_equal [ "Self" ], self_only[:radar_chart][:datasets].map { |dataset| dataset[:label] }
+    refute_includes csv.headers, "Course Rating"
+    refute_includes csv.headers, "End of Program Target"
+    assert self_only[:summary][:strongest_domains].any?
   end
 
   private

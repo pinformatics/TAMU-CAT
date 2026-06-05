@@ -14,7 +14,7 @@ class Admin::ActivitiesController < Admin::BaseController
 
     @submission_logs = SurveyResponseVersion
       .includes(:survey, student: :user)
-      .where(event: %w[submitted revised edited])
+      .where(event: %w[submitted revised])
       .order(created_at: :desc)
       .limit(150)
 
@@ -58,8 +58,6 @@ class Admin::ActivitiesController < Admin::BaseController
       event_label = case version.event.to_s
       when "revised"
         "Revised"
-      when "edited"
-        "Edited"
       else
         "Submitted"
       end
@@ -71,7 +69,7 @@ class Admin::ActivitiesController < Admin::BaseController
         title: "#{event_label}: #{student_name}",
         subtitle: survey_title,
         actor: student_name,
-        link: student_records_path
+        link: survey_records_path
       }
     end
 
@@ -98,7 +96,7 @@ class Admin::ActivitiesController < Admin::BaseController
     return admin_grade_import_batch_path(log.subject) if log.action == "grade_import_action" && log.subject.is_a?(GradeImportBatch)
     return people_management_path(tab: "students") if log.action == "student_lifecycle_update"
     return people_management_path if log.action.in?(%w[role_update member_removal])
-    return people_management_path(tab: "students") if log.action.in?(%w[advisor_assignment bulk_advisor_assignment track_update])
+    return people_management_path(tab: "students") if log.action.in?(%w[advisor_assignment bulk_advisor_assignment track_update program_year_update])
 
     nil
   end
@@ -123,7 +121,7 @@ class Admin::ActivitiesController < Admin::BaseController
           title: "Feedback submitted: #{student_name}",
           subtitle: "#{advisor_name} on #{survey_title}",
           actor: advisor_name,
-          link: student_records_path
+          link: survey_records_path
         }
       end
 
@@ -138,7 +136,7 @@ class Admin::ActivitiesController < Admin::BaseController
           title: "Feedback changed: #{student_name}",
           subtitle: "#{advisor_name} on #{survey_title}",
           actor: advisor_name,
-          link: student_records_path
+          link: survey_records_path
         }
       end
 

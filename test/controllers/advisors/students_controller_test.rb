@@ -33,7 +33,7 @@ class Advisors::StudentsControllerTest < ActionDispatch::IntegrationTest
     sign_in @advisor_user
 
     patch advisors_student_path(@student), params: { student: { track: "" } }
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_match "We could not change the track", flash[:alert]
   end
 
@@ -41,7 +41,7 @@ class Advisors::StudentsControllerTest < ActionDispatch::IntegrationTest
     sign_in @advisor_user
 
     patch advisors_student_path("missing"), params: { student: { track: "executive" } }
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_equal "Student not found.", flash[:alert]
   end
 
@@ -50,6 +50,6 @@ class Advisors::StudentsControllerTest < ActionDispatch::IntegrationTest
 
     get advisors_student_path(@student)
     assert_redirected_to dashboard_path
-    assert_equal "Advisor access is required to open this page.", flash[:alert]
+    assert_equal ApplicationController::ADVISOR_ONLY_MESSAGE, flash[:alert]
   end
 end

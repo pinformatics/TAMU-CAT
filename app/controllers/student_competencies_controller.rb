@@ -9,11 +9,15 @@ class StudentCompetenciesController < ApplicationController
     respond_to do |format|
       format.html
       format.csv do
+        record_competency_export_audit!("my_competencies_csv")
+
         send_data @payload[:csv],
                   filename: "my-competencies-#{Time.current.strftime('%Y%m%d-%H%M')}.csv",
                   type: "text/csv"
       end
       format.pdf do
+        record_competency_export_audit!("my_competencies_pdf")
+
         send_competency_pdf(
           template: "student_competencies/pdf",
           filename: "my-competencies-#{Time.current.strftime('%Y%m%d-%H%M')}.pdf"
@@ -47,9 +51,24 @@ class StudentCompetenciesController < ApplicationController
               type: "application/pdf"
   end
 
+  def record_competency_export_audit!(export_type)
+    student = current_user.student_profile
+
+    record_export_audit!(
+      export_type: export_type,
+      description: "Exported student competency data.",
+      subject: student,
+      metadata: {
+        student_id: student&.student_id,
+        semester: dashboard_params[:semester],
+        sources: Array(dashboard_params[:sources]).compact
+      }
+    )
+  end
+
   def require_student!
     return if current_user&.role_student? && current_user.student_profile.present?
 
-    redirect_to dashboard_path, alert: "The student competency dashboard is available only to students."
+    redirect_to dashboard_path, alert: STUDENT_ONLY_MESSAGE
   end
 end

@@ -1,5 +1,8 @@
 import "@hotwired/turbo-rails"
-import "controllers"
+
+import("controllers").catch((error) => {
+  console.error("[Application] Stimulus controllers failed to load", error)
+})
 
 // Accessibility helpers for high contrast mode and text-to-speech support.
 
@@ -8,9 +11,12 @@ import "controllers"
 // -----------------------------
 
 let appModalId = 0
+let appModalConfirmInstalled = false
 let turboFalseConfirmFallbackInstalled = false
 let dismissibleFlashesInstalled = false
 let surveyBranchingEventsInstalled = false
+let inlineModalEventsInstalled = false
+let comboboxEventsInstalled = false
 
 function escapeModalText(value) {
   const element = document.createElement("span")
@@ -155,7 +161,7 @@ function alertWithAppModal(message, options = {}) {
 
 function installTurboModalConfirm() {
   if (!window.Turbo || typeof window.Turbo.setConfirmMethod !== "function") return
-  if (window.Turbo.appModalConfirmInstalled) return
+  if (appModalConfirmInstalled) return
 
   window.Turbo.setConfirmMethod((message) => {
     return appModalConfirm({
@@ -165,7 +171,7 @@ function installTurboModalConfirm() {
       cancelLabel: "Cancel"
     })
   })
-  window.Turbo.appModalConfirmInstalled = true
+  appModalConfirmInstalled = true
 }
 
 function initTurboFalseConfirmFallback() {
@@ -190,40 +196,51 @@ function initTurboFalseConfirmFallback() {
 }
 
 function initInlineModals() {
-  document.querySelectorAll("[data-open-modal]").forEach((trigger) => {
-    if (trigger.dataset.inlineModalTriggerInitialized === "true") return
-    trigger.dataset.inlineModalTriggerInitialized = "true"
+  if (!inlineModalEventsInstalled) {
+    inlineModalEventsInstalled = true
 
-    trigger.addEventListener("click", () => {
-      const modal = document.getElementById(trigger.dataset.openModal || "")
+    document.addEventListener("click", (event) => {
+      const trigger = event.target?.closest?.("[data-open-modal]")
+      if (trigger) {
+        const modal = document.getElementById(trigger.dataset.openModal || "")
+        if (!modal) return
+
+        event.preventDefault()
+        modal.classList.remove("hidden")
+        document.body.classList.add("is-modal-open")
+        modal.querySelector("[data-close-modal], button, input, select, textarea, a")?.focus()
+        return
+      }
+
+      const closeButton = event.target?.closest?.("[data-close-modal]")
+      const modal = event.target?.closest?.("[data-inline-modal]")
+      if (closeButton && modal) {
+        event.preventDefault()
+        modal.classList.add("hidden")
+        document.body.classList.remove("is-modal-open")
+        return
+      }
+
+      if (event.target?.matches?.("[data-inline-modal]")) {
+        event.target.classList.add("hidden")
+        document.body.classList.remove("is-modal-open")
+      }
+    })
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return
+
+      const modal = document.querySelector("[data-inline-modal]:not(.hidden)")
       if (!modal) return
 
-      modal.classList.remove("hidden")
-      document.body.classList.add("is-modal-open")
-      modal.querySelector("[data-close-modal], button, input, select, textarea, a")?.focus()
+      modal.classList.add("hidden")
+      document.body.classList.remove("is-modal-open")
     })
-  })
+  }
 
   document.querySelectorAll("[data-inline-modal]").forEach((modal) => {
     if (modal.dataset.inlineModalInitialized === "true") return
     modal.dataset.inlineModalInitialized = "true"
-
-    const close = () => {
-      modal.classList.add("hidden")
-      document.body.classList.remove("is-modal-open")
-    }
-
-    modal.querySelectorAll("[data-close-modal]").forEach((button) => {
-      button.addEventListener("click", close)
-    })
-
-    modal.addEventListener("click", (event) => {
-      if (event.target === modal) close()
-    })
-
-    modal.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") close()
-    })
   })
 }
 
@@ -265,6 +282,23 @@ function applyHighContrast(enabled) {
 }
 
 function initDismissibleFlashes() {
+  const dismissFlash = (flash) => {
+    if (!flash || flash.dataset.dismissibleFlashDismissed === "true") return
+
+    flash.dataset.dismissibleFlashDismissed = "true"
+    flash.classList.add("is-dismissing")
+    window.setTimeout(() => flash.remove(), 340)
+  }
+
+  const scheduleFlashDismissal = (flash) => {
+    if (!flash || flash.dataset.dismissibleFlashAutoDismiss === "true") return
+
+    flash.dataset.dismissibleFlashAutoDismiss = "true"
+    window.setTimeout(() => dismissFlash(flash), 5000)
+  }
+
+  document.querySelectorAll("[data-dismissible-flash]").forEach(scheduleFlashDismissal)
+
   if (dismissibleFlashesInstalled) return
   dismissibleFlashesInstalled = true
 
@@ -274,13 +308,28 @@ function initDismissibleFlashes() {
     const trigger = targetElement?.closest("[data-dismiss-flash]")
     if (!trigger) return
 
+    event.preventDefault()
     const flash = trigger.closest("[data-dismissible-flash]")
-    if (!flash || flash.dataset.dismissibleFlashDismissed === "true") return
-
-    flash.dataset.dismissibleFlashDismissed = "true"
-    flash.classList.add("is-dismissing")
-    window.setTimeout(() => flash.remove(), 170)
+    dismissFlash(flash)
   })
+
+  if ("MutationObserver" in window) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (!(node instanceof Element)) return
+
+          if (node.matches("[data-dismissible-flash]")) {
+            scheduleFlashDismissal(node)
+          }
+
+          node.querySelectorAll?.("[data-dismissible-flash]").forEach(scheduleFlashDismissal)
+        })
+      })
+    })
+
+    observer.observe(document.body, { childList: true, subtree: true })
+  }
 }
 
 function initHighContrastToggle() {
@@ -824,11 +873,15 @@ function syncOtherChoiceInputsForQuestion(form, questionId) {
   })
 }
 
-function showSurveySubmitModal({ canSaveProgress = true } = {}) {
+function showSurveySubmitModal({ canSaveProgress = true, editingSubmittedResponse = false } = {}) {
   const id = `survey-submit-modal-${++appModalId}`
-  const bodyMessage = canSaveProgress
-    ? "Submit only when your answers are final. You can also save progress and come back later."
-    : "Submit only when your answers are final."
+  const title = editingSubmittedResponse ? "Ready to update this submission?" : "Ready to submit?"
+  const bodyMessage = editingSubmittedResponse
+    ? "This will update the submitted survey response. You can still go back and keep editing before saving these changes."
+    : (canSaveProgress
+        ? "Submit only when your answers are final. You can also save progress and come back later."
+        : "Submit only when your answers are final.")
+  const confirmLabel = editingSubmittedResponse ? "Update submission" : "Submit"
 
   return new Promise((resolve) => {
     const backdrop = document.createElement("div")
@@ -839,7 +892,7 @@ function showSurveySubmitModal({ canSaveProgress = true } = {}) {
         <header class="c-modal__header">
           <div>
             <p class="c-eyebrow">Survey submission</p>
-            <h2 id="${id}-title" class="c-modal__title">Ready to submit?</h2>
+            <h2 id="${id}-title" class="c-modal__title">${title}</h2>
           </div>
           <button type="button" class="c-icon-button c-modal__close" data-survey-submit-choice="edit" aria-label="Close">&times;</button>
         </header>
@@ -848,8 +901,8 @@ function showSurveySubmitModal({ canSaveProgress = true } = {}) {
         </div>
         <footer class="c-modal__footer">
           <button type="button" class="btn btn-secondary" data-survey-submit-choice="edit">Go back to editing</button>
-          ${canSaveProgress ? '<button type="button" class="btn btn-secondary" data-survey-submit-choice="save">Save and exit</button>' : ""}
-          <button type="button" class="btn btn-primary" data-survey-submit-choice="submit">Submit</button>
+          ${canSaveProgress ? '<button type="button" class="btn btn-secondary" data-survey-submit-choice="save">Save progress</button>' : ""}
+          <button type="button" class="btn btn-primary" data-survey-submit-choice="submit">${confirmLabel}</button>
         </footer>
       </section>
     `
@@ -942,34 +995,52 @@ function initStudentSurveyFormAutosave() {
     const saveUrl = form.dataset.surveyAutosaveUrl
     const autosaveEnabled = form.dataset.surveyAutosaveEnabled === "true" && !!saveUrl
     const statusTargets = Array.from(form.querySelectorAll("[data-survey-autosave-status]"))
-    const prompt = form.querySelector("[data-survey-autosave-prompt]")
-    const promptTitle = prompt?.querySelector("[data-survey-autosave-prompt-title]")
-    const promptMessage = prompt?.querySelector("[data-survey-autosave-prompt-message]")
     let timer = null
     let inFlight = false
+    let inFlightPromise = null
     let pending = false
+    let dirty = false
     let submitting = false
     let autosaveController = null
     let modalOpen = false
+    let lastAnswerSnapshot = null
+    let lastSavedSnapshot = null
+    let lastSavedAt = null
+    let answerWatchInterval = null
+    let pendingImmediate = false
+    const textAutosaveDelay = 3500
+    const answerWatchDelay = 5000
 
     const autosaveTime = () => {
-      return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })
+    }
+
+    const autosaveImmediatelyForControl = (control) => {
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) return false
+      if (control instanceof HTMLSelectElement) return true
+      if (control instanceof HTMLTextAreaElement) return false
+
+      return ["radio", "checkbox"].includes(control.type)
+    }
+
+    const answerSnapshot = () => {
+      return Array.from(new FormData(form).entries())
+        .filter(([name]) => name.startsWith("answers[") || name.startsWith("other_answers["))
+        .sort(([nameA, valueA], [nameB, valueB]) => `${nameA}:${valueA}`.localeCompare(`${nameB}:${valueB}`))
+        .map(([name, value]) => `${name}=${value}`)
+        .join("&")
     }
 
     const setStatus = (message, options = {}) => {
       const state = options.state || "ready"
       const title = options.title || message
       const detail = options.detail || ""
+      const statusText = options.statusText || (detail ? `${title}: ${detail}` : message)
 
       statusTargets.forEach((target) => {
-        target.textContent = message
+        target.textContent = statusText
+        target.dataset.autosaveState = state
       })
-
-      if (prompt) {
-        prompt.dataset.autosaveState = state
-        if (promptTitle) promptTitle.textContent = title
-        if (promptMessage) promptMessage.textContent = detail
-      }
     }
 
     const clearTimer = () => {
@@ -1004,85 +1075,262 @@ function initStudentSurveyFormAutosave() {
       }
     }
 
-    const performAutosave = async () => {
-      if (!autosaveEnabled || submitting) return
+    const markSnapshotSaved = (snapshot, savedAt) => {
+      lastSavedSnapshot = snapshot
+      lastSavedAt = savedAt
+      lastAnswerSnapshot = snapshot
+    }
+
+    const currentAnswersAlreadySaved = () => {
+      return !!lastSavedAt && answerSnapshot() === lastSavedSnapshot
+    }
+
+    const showAlreadySavedProgress = async () => {
+      dirty = false
+      pending = false
+      pendingImmediate = false
+      clearTimer()
+      await autosaveMessage("Progress saved", `Already saved at ${lastSavedAt}. You can keep working.`, {
+        state: "saved"
+      })
+      return true
+    }
+
+    const performAutosave = async (options = {}) => {
+      clearTimer()
+      if (!autosaveEnabled || submitting) return false
+      if (!dirty && !pending && !options.force) {
+        if (options.successTitle || options.successMessage) {
+          await autosaveMessage(options.successTitle || "Progress saved", options.successMessage || `Saved at ${autosaveTime()}.`, {
+            state: "saved",
+            modal: options.modal
+          })
+        }
+        return true
+      }
       if (inFlight) {
         pending = true
-        return
+        return inFlightPromise || false
       }
 
       inFlight = true
       pending = false
-      setStatus("Autosaving...", {
-        state: "saving",
-        title: "Autosaving",
-        detail: "Saving your latest answers..."
-      })
-      autosaveController = new AbortController()
+      pendingImmediate = false
 
-      const formData = new FormData(form)
-      formData.append("autosave", "1")
-
-      try {
-        const response = await fetch(saveUrl, {
-          method: "POST",
-          body: formData,
-          signal: autosaveController.signal,
-          headers: {
-            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || "",
-            "X-Requested-With": "XMLHttpRequest",
-            Accept: "application/json"
-          },
-          credentials: "same-origin"
+      inFlightPromise = (async () => {
+        const submittedSnapshot = answerSnapshot()
+        setStatus("Autosaving...", {
+          state: "saving",
+          title: "Autosaving",
+          detail: `Saving your latest answers at ${autosaveTime()}.`
         })
+        autosaveController = new AbortController()
 
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok || payload.saved === false) {
-          throw new Error(payload.message || "Autosave failed.")
+        const formData = new FormData(form)
+        formData.append("autosave", "1")
+
+        try {
+          const response = await fetch(saveUrl, {
+            method: "POST",
+            body: formData,
+            signal: autosaveController.signal,
+            headers: {
+              "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || "",
+              "X-Requested-With": "XMLHttpRequest",
+              Accept: "application/json"
+            },
+            credentials: "same-origin"
+          })
+
+          const payload = await response.json().catch(() => ({}))
+          if (!response.ok || payload.saved === false) {
+            throw new Error(payload.message || "Autosave failed.")
+          }
+
+          dirty = pending
+          const savedAt = autosaveTime()
+          markSnapshotSaved(submittedSnapshot, savedAt)
+          const successMessage = typeof options.successMessage === "function" ? options.successMessage(savedAt) : (options.successMessage || `Saved at ${savedAt}.`)
+          await autosaveMessage(options.successTitle || "Progress auto-saved", successMessage, {
+            state: "saved",
+            modal: options.modal
+          })
+          return true
+        } catch (error) {
+          if (error.name === "AbortError") return false
+
+          await autosaveMessage("Autosave failed", error.message || "Your progress could not be auto-saved. Use Save Progress before leaving.", {
+            state: "error",
+            modal: true
+          })
+          return false
+        } finally {
+          inFlight = false
+          autosaveController = null
+          inFlightPromise = null
+
+          if (pending && !submitting) {
+            queueAutosave({ immediate: pendingImmediate })
+          }
         }
+      })()
 
-        await autosaveMessage("Progress auto-saved", `Saved at ${autosaveTime()}.`, { state: "saved" })
-      } catch (error) {
-        if (error.name === "AbortError") return
-
-        await autosaveMessage("Autosave failed", error.message || "Your progress could not be auto-saved. Use Save Progress before leaving.", {
-          state: "error",
-          modal: true
-        })
-      } finally {
-        inFlight = false
-        autosaveController = null
-
-        if (pending && !submitting) {
-          queueAutosave({ immediate: true })
-        }
-      }
+      return inFlightPromise
     }
 
-    const queueAutosave = ({ immediate = false } = {}) => {
+    const queueAutosave = ({ immediate = true } = {}) => {
       if (!autosaveEnabled || submitting) return
       pending = true
+      dirty = true
+      pendingImmediate = pendingImmediate || immediate
+      lastAnswerSnapshot = answerSnapshot()
       setStatus("Unsaved changes", {
         state: "dirty",
         title: "Unsaved changes",
-        detail: immediate ? "Autosaving now..." : "Autosave will run shortly."
+        detail: immediate ? `Saving this answer now at ${autosaveTime()}.` : "Autosave will run shortly."
       })
       clearTimer()
-      timer = window.setTimeout(performAutosave, immediate ? 0 : 12000)
+      if (inFlight) return
+      timer = window.setTimeout(performAutosave, immediate ? 0 : textAutosaveDelay)
     }
 
-    const submitToSaveProgress = () => {
-      submitting = true
-      abortAutosave()
-      form.action = saveUrl
-      form.submit()
+    const flushAutosaveBeforeLeaving = async () => {
+      if (!autosaveEnabled || submitting || (!dirty && !pending)) return true
+      return await performAutosave()
     }
 
-    form.addEventListener("input", () => queueAutosave())
-    form.addEventListener("change", () => queueAutosave())
+    const saveProgressNow = async (options = {}) => {
+      if (inFlight) {
+        setStatus("Saving progress", {
+          state: "saving",
+          title: "Saving progress",
+          detail: "Waiting for the current autosave to finish."
+        })
+        await inFlightPromise
+      }
 
-    form.querySelectorAll("[data-survey-save-exit]").forEach((button) => {
-      button.addEventListener("click", () => submitToSaveProgress())
+      if (currentAnswersAlreadySaved()) {
+        return showAlreadySavedProgress()
+      }
+
+      let saved = await performAutosave({
+        force: true,
+        ...options
+      })
+
+      let attempts = 0
+      while (saved && (dirty || pending) && attempts < 2) {
+        attempts += 1
+        saved = await performAutosave({
+          force: true,
+          ...options
+        })
+      }
+
+      if (saved) {
+        dirty = false
+        pending = false
+        pendingImmediate = false
+        lastAnswerSnapshot = lastSavedSnapshot || answerSnapshot()
+        clearTimer()
+      }
+      return saved
+    }
+
+    const saveProgressInPlace = async () => {
+      return saveProgressNow({
+        successTitle: "Progress saved",
+        successMessage: (savedAt) => `Saved at ${savedAt}. You can keep working.`
+      })
+    }
+
+    const saveProgressAndExit = async (href) => {
+      const saved = await saveProgressNow({
+        successTitle: "Progress saved",
+        successMessage: "Your answers were saved before leaving this survey."
+      })
+
+      if (saved && href) {
+        submitting = true
+        abortAutosave()
+        window.location.assign(href)
+      }
+    }
+
+    const beaconAutosaveBeforeLeaving = () => {
+      if (!autosaveEnabled || submitting || (!dirty && !pending)) return
+      clearTimer()
+
+      const formData = new FormData(form)
+      formData.append("autosave", "1")
+      formData.append("beacon", "1")
+
+      if (navigator.sendBeacon && navigator.sendBeacon(saveUrl, formData)) {
+        dirty = false
+        pending = false
+        return
+      }
+
+      fetch(saveUrl, {
+        method: "POST",
+        body: formData,
+        keepalive: true,
+        headers: {
+          "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')?.content || "",
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "application/json"
+        },
+        credentials: "same-origin"
+      }).catch(() => {})
+    }
+
+    const handleAnswerChange = (event) => {
+      queueAutosave({ immediate: autosaveImmediatelyForControl(event.target) })
+    }
+    form.addEventListener("input", handleAnswerChange, true)
+    form.addEventListener("change", handleAnswerChange, true)
+    lastAnswerSnapshot = answerSnapshot()
+    answerWatchInterval = window.setInterval(() => {
+      if (!autosaveEnabled || submitting || inFlight) return
+
+      const currentSnapshot = answerSnapshot()
+      if (currentSnapshot === lastAnswerSnapshot) return
+
+      queueAutosave({ immediate: false })
+    }, answerWatchDelay)
+
+    window.addEventListener("pagehide", beaconAutosaveBeforeLeaving)
+    window.addEventListener("beforeunload", beaconAutosaveBeforeLeaving)
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") beaconAutosaveBeforeLeaving()
+    })
+    document.addEventListener("turbo:before-cache", beaconAutosaveBeforeLeaving)
+    document.addEventListener("turbo:before-cache", () => {
+      if (answerWatchInterval) {
+        window.clearInterval(answerWatchInterval)
+        answerWatchInterval = null
+      }
+    })
+
+    form.querySelectorAll("[data-survey-save-stay]").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.preventDefault()
+        await saveProgressInPlace()
+      })
+    })
+
+    form.querySelectorAll("[data-survey-save-exit], [data-survey-autosave-cancel]").forEach((control) => {
+      control.addEventListener("click", async (event) => {
+        event.preventDefault()
+        if (!autosaveEnabled) {
+          const fallbackHref = control.href || control.value
+          if (fallbackHref) window.location.assign(fallbackHref)
+          return
+        }
+
+        const href = control.href || control.value
+        await saveProgressAndExit(href)
+      })
     })
 
     if (form.dataset.surveySharedSubmit === "true") return
@@ -1095,12 +1343,20 @@ function initStudentSurveyFormAutosave() {
         return
       }
 
+      const submitter = event.submitter
+      if (submitter?.hasAttribute("data-survey-save-stay") || submitter?.hasAttribute("data-survey-save-exit")) {
+        return
+      }
+
       if (submitting) return
 
       event.preventDefault()
-      const choice = await showSurveySubmitModal({ canSaveProgress: autosaveEnabled })
+      const choice = await showSurveySubmitModal({
+        canSaveProgress: autosaveEnabled,
+        editingSubmittedResponse: form.dataset.surveyEditingSubmittedResponse === "true"
+      })
       if (choice === "save" && autosaveEnabled) {
-        submitToSaveProgress()
+        await saveProgressInPlace()
         return
       }
       if (choice !== "submit") return
@@ -1126,7 +1382,7 @@ function initPreviewSurveyForms() {
       initOtherChoiceInputs()
       syncOtherChoiceInputsForForm(form)
 
-      const validation = validatePreviewSurveyForm(form)
+      const validation = await validatePreviewSurveyForm(form)
       if (!validation.valid) {
         await alertWithAppModal("Review the highlighted required or invalid answers before submitting the preview.", {
           title: "Preview needs attention",
@@ -1148,28 +1404,36 @@ function initPreviewSurveyForms() {
   })
 }
 
-function validatePreviewSurveyForm(form) {
+async function validatePreviewSurveyForm(form) {
   const cards = Array.from(form.querySelectorAll("[data-question-id]"))
   const errorCards = []
+  const checkEvidenceAccess = form.dataset.previewSurveyForm === "true"
 
   cards.forEach((card) => clearPreviewValidationError(card))
 
-  cards.forEach((card) => {
-    if (isPreviewCardHidden(card)) return
+  for (const card of cards) {
+    if (isPreviewCardHidden(card)) continue
 
     const required = card.dataset.previewRequired === "true"
     const missing = required && previewQuestionIsBlank(card)
     if (missing) {
       addPreviewValidationError(card, "This question is required.")
       errorCards.push(card)
-      return
+      continue
+    }
+
+    const evidenceError = await previewEvidenceError(card, { checkAccess: checkEvidenceAccess })
+    if (evidenceError) {
+      addPreviewValidationError(card, evidenceError)
+      errorCards.push(card)
+      continue
     }
 
     const integerError = previewIntegerError(card)
     if (integerError) {
       addPreviewValidationError(card, integerError)
       errorCards.push(card)
-      return
+      continue
     }
 
     const otherError = previewOtherTextError(card)
@@ -1177,7 +1441,7 @@ function validatePreviewSurveyForm(form) {
       addPreviewValidationError(card, otherError)
       errorCards.push(card)
     }
-  })
+  }
 
   return {
     valid: errorCards.length === 0,
@@ -1222,6 +1486,43 @@ function previewIntegerError(card) {
 
   if (min !== null && min !== "" && intValue < Number.parseInt(min, 10)) return `Enter a number of at least ${min}`
   if (max !== null && max !== "" && intValue > Number.parseInt(max, 10)) return `Enter a number no higher than ${max}`
+
+  return null
+}
+
+async function previewEvidenceError(card, { checkAccess = false } = {}) {
+  if (card.dataset.questionType !== "evidence") return null
+
+  const input = previewEditableControls(card).find((control) => {
+    return control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement
+  })
+  if (!input) return null
+
+  const value = (input.value || "").trim()
+  if (value === "") return null
+
+  if (!/^https:\/\/sites\.google\.com(?:\/|$)\S*/i.test(value)) {
+    return "Use a published Google Sites link that starts with https://sites.google.com/."
+  }
+
+  if (!checkAccess) return null
+
+  try {
+    const response = await fetch(`/evidence/check_access?url=${encodeURIComponent(value)}`, {
+      headers: {
+        Accept: "application/json",
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      credentials: "same-origin"
+    })
+    const payload = await response.json().catch(() => ({}))
+
+    if (!response.ok || payload.ok === false || payload.accessible === false) {
+      return 'This evidence link could not be verified. In Google Sites, set sharing to "Anyone with the link can view," publish again, then try again.'
+    }
+  } catch (_error) {
+    return "This evidence link could not be verified. Check the link and try again."
+  }
 
   return null
 }
@@ -1309,74 +1610,115 @@ function initToggleSwitches() {
 
 function initComboboxes() {
   const widgets = document.querySelectorAll('[data-combobox="true"]')
-  if (!widgets.length) return
+  if (!widgets.length && comboboxEventsInstalled) return
 
   widgets.forEach((widget) => {
-    if (widget.dataset.comboboxInitialized === "true") return
-    widget.dataset.comboboxInitialized = "true"
+    const input = comboboxInputFor(widget)
+    if (input) input.setAttribute("aria-expanded", "false")
+    comboboxFilter(widget)
+  })
 
-    const input = widget.querySelector('[data-combobox-input="true"]')
-    const hidden = widget.querySelector('[data-combobox-value="true"]')
-    const menu = widget.querySelector('[data-combobox-menu="true"]')
-    const empty = widget.querySelector('[data-combobox-empty="true"]')
-    if (!input || !hidden || !menu) return
+  if (comboboxEventsInstalled) return
+  comboboxEventsInstalled = true
 
-    const options = Array.from(widget.querySelectorAll('[data-combobox-option="true"]'))
+  document.addEventListener("focusin", (event) => {
+    const input = event.target.closest?.('[data-combobox-input="true"]')
+    const widget = input?.closest?.('[data-combobox="true"]')
+    if (!widget) return
 
-    const setOpen = (open) => {
-      menu.classList.toggle("hidden", !open)
-      menu.classList.toggle("u-hidden", !open)
-      input.setAttribute("aria-expanded", open ? "true" : "false")
+    comboboxFilter(widget)
+    comboboxSetOpen(widget, true)
+  })
+
+  document.addEventListener("input", (event) => {
+    const input = event.target.closest?.('[data-combobox-input="true"]')
+    const widget = input?.closest?.('[data-combobox="true"]')
+    if (!widget) return
+
+    const hidden = comboboxHiddenFor(widget)
+    if (hidden) hidden.value = ""
+    comboboxFilter(widget)
+    comboboxSetOpen(widget, true)
+  })
+
+  document.addEventListener("keydown", (event) => {
+    const input = event.target.closest?.('[data-combobox-input="true"]')
+    const widget = input?.closest?.('[data-combobox="true"]')
+    if (!widget || event.key !== "Escape") return
+
+    comboboxSetOpen(widget, false)
+  })
+
+  document.addEventListener("click", (event) => {
+    const option = event.target.closest?.('[data-combobox-option="true"]')
+    if (option) {
+      const widget = option.closest('[data-combobox="true"]')
+      if (widget) comboboxSelectOption(widget, option)
+      return
     }
 
-    const filter = () => {
-      const q = (input.value || "").trim().toLowerCase()
-      let visible = 0
-
-      options.forEach((btn) => {
-        const haystack = (btn.dataset.comboboxOptionSearch || "").toLowerCase()
-        const match = q === "" || haystack.includes(q)
-        btn.hidden = !match
-        if (match) visible += 1
-      })
-
-      if (empty) empty.hidden = !(q !== "" && visible === 0)
+    const input = event.target.closest?.('[data-combobox-input="true"]')
+    const activeWidget = input?.closest?.('[data-combobox="true"]')
+    if (activeWidget) {
+      comboboxFilter(activeWidget)
+      comboboxSetOpen(activeWidget, true)
+      return
     }
 
-    const selectOption = (btn) => {
-      const value = btn.dataset.comboboxOptionValue || ""
-      const label = btn.dataset.comboboxOptionLabel || ""
-      hidden.value = value
-      input.value = label
-      setOpen(false)
-    }
-
-    input.addEventListener("focus", () => {
-      filter()
-      setOpen(true)
-    })
-
-    input.addEventListener("input", () => {
-      hidden.value = "" // user is typing; clear selection until chosen
-      filter()
-      setOpen(true)
-    })
-
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        setOpen(false)
-        return
-      }
-    })
-
-    options.forEach((btn) => {
-      btn.addEventListener("click", () => selectOption(btn))
-    })
-
-    document.addEventListener("click", (e) => {
-      if (!widget.contains(e.target)) setOpen(false)
+    document.querySelectorAll('[data-combobox="true"]').forEach((widget) => {
+      if (!widget.contains(event.target)) comboboxSetOpen(widget, false)
     })
   })
+}
+
+function comboboxInputFor(widget) {
+  return widget?.querySelector?.('[data-combobox-input="true"]') || null
+}
+
+function comboboxHiddenFor(widget) {
+  return widget?.querySelector?.('[data-combobox-value="true"]') || null
+}
+
+function comboboxMenuFor(widget) {
+  return widget?.querySelector?.('[data-combobox-menu="true"]') || null
+}
+
+function comboboxSetOpen(widget, open) {
+  const input = comboboxInputFor(widget)
+  const menu = comboboxMenuFor(widget)
+  if (!input || !menu) return
+
+  menu.classList.toggle("hidden", !open)
+  menu.classList.toggle("u-hidden", !open)
+  input.setAttribute("aria-expanded", open ? "true" : "false")
+}
+
+function comboboxFilter(widget) {
+  const input = comboboxInputFor(widget)
+  const empty = widget?.querySelector?.('[data-combobox-empty="true"]')
+  if (!input) return
+
+  const q = (input.value || "").trim().toLowerCase()
+  let visible = 0
+
+  widget.querySelectorAll('[data-combobox-option="true"]').forEach((btn) => {
+    const haystack = (btn.dataset.comboboxOptionSearch || "").toLowerCase()
+    const match = q === "" || haystack.includes(q)
+    btn.hidden = !match
+    if (match) visible += 1
+  })
+
+  if (empty) empty.hidden = !(q !== "" && visible === 0)
+}
+
+function comboboxSelectOption(widget, option) {
+  const input = comboboxInputFor(widget)
+  const hidden = comboboxHiddenFor(widget)
+  if (!input || !hidden || !option) return
+
+  hidden.value = option.dataset.comboboxOptionValue || ""
+  input.value = option.dataset.comboboxOptionLabel || ""
+  comboboxSetOpen(widget, false)
 }
 
 // -----------------------------
@@ -1611,6 +1953,134 @@ function initHoverDropdownDetails() {
   })
 }
 
+function initMobileNavigation() {
+  const mobileViewport = () => window.matchMedia("(max-width: 768px)").matches
+
+  const toggleForDrawer = (drawer) => {
+    if (!drawer?.id) return null
+    return Array.from(document.querySelectorAll("[data-mobile-nav-toggle]"))
+      .find((button) => button.getAttribute("aria-controls") === drawer.id)
+  }
+
+  const drawerForToggle = (button) => {
+    const drawerId = button.getAttribute("aria-controls")
+    return drawerId ? document.getElementById(drawerId) : null
+  }
+
+  const updateBodyLock = () => {
+    const anyOpen = !!document.querySelector("[data-mobile-nav-drawer].is-open")
+    document.body?.classList.toggle("is-mobile-nav-open", anyOpen)
+  }
+
+  const setDrawerOpen = (drawer, open, options = {}) => {
+    if (!drawer) return
+
+    const button = toggleForDrawer(drawer)
+    const backdrop = drawer.closest(".c-app-header")?.querySelector("[data-mobile-nav-backdrop]")
+
+    drawer.classList.toggle("is-open", open)
+    if (mobileViewport()) {
+      drawer.setAttribute("aria-hidden", open ? "false" : "true")
+    } else {
+      drawer.removeAttribute("aria-hidden")
+    }
+
+    button?.setAttribute("aria-expanded", open ? "true" : "false")
+    backdrop?.classList.toggle("is-open", open)
+    if (backdrop) backdrop.hidden = !open
+    updateBodyLock()
+
+    if (open && options.focusDrawer) {
+      window.requestAnimationFrame(() => {
+        drawer.querySelector("[data-mobile-nav-close], .c-nav-link, button, a")?.focus()
+      })
+    }
+
+    if (!open && options.focusToggle) {
+      button?.focus()
+    }
+  }
+
+  const closeAllDrawers = (options = {}) => {
+    document.querySelectorAll("[data-mobile-nav-drawer]").forEach((drawer) => {
+      setDrawerOpen(drawer, false, options)
+    })
+  }
+
+  const syncDrawerState = () => {
+    document.querySelectorAll("[data-mobile-nav-drawer]").forEach((drawer) => {
+      const open = drawer.classList.contains("is-open")
+      const button = toggleForDrawer(drawer)
+      const backdrop = drawer.closest(".c-app-header")?.querySelector("[data-mobile-nav-backdrop]")
+
+      if (mobileViewport()) {
+        drawer.setAttribute("aria-hidden", open ? "false" : "true")
+      } else {
+        drawer.classList.remove("is-open")
+        drawer.removeAttribute("aria-hidden")
+      }
+
+      button?.setAttribute("aria-expanded", open && mobileViewport() ? "true" : "false")
+      backdrop?.classList.toggle("is-open", open && mobileViewport())
+      if (backdrop) backdrop.hidden = !(open && mobileViewport())
+    })
+    updateBodyLock()
+  }
+
+  syncDrawerState()
+
+  if (window.__mobileNavigationInitialized === true) return
+  window.__mobileNavigationInitialized = true
+
+  document.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : event.target?.parentElement
+    if (!target) return
+
+    const toggle = target.closest("[data-mobile-nav-toggle]")
+    if (toggle) {
+      event.preventDefault()
+      const drawer = drawerForToggle(toggle)
+      if (!drawer) return
+
+      const open = !drawer.classList.contains("is-open")
+      closeAllDrawers()
+      setDrawerOpen(drawer, open, { focusDrawer: open })
+      return
+    }
+
+    const closeButton = target.closest("[data-mobile-nav-close]")
+    if (closeButton) {
+      event.preventDefault()
+      setDrawerOpen(closeButton.closest("[data-mobile-nav-drawer]"), false, { focusToggle: true })
+      return
+    }
+
+    if (target.closest("[data-mobile-nav-backdrop]")) {
+      event.preventDefault()
+      closeAllDrawers()
+      return
+    }
+
+    const drawerLink = target.closest("[data-mobile-nav-drawer] .c-nav-link, [data-mobile-nav-drawer] .c-profile-action")
+    if (drawerLink) {
+      setDrawerOpen(drawerLink.closest("[data-mobile-nav-drawer]"), false)
+    }
+  })
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return
+
+    const openDrawer = document.querySelector("[data-mobile-nav-drawer].is-open")
+    if (openDrawer) {
+      event.preventDefault()
+      setDrawerOpen(openDrawer, false, { focusToggle: true })
+    }
+  })
+
+  window.addEventListener("resize", syncDrawerState)
+  document.addEventListener("turbo:before-cache", () => closeAllDrawers())
+}
+
 // -----------------------------
 // Server-backed markdown preview
 // -----------------------------
@@ -1704,9 +2174,19 @@ const GOOGLE_TRANSLATE_SCRIPT_URL = "https://translate.google.com/translate_a/el
 let googleTranslateBarObserver = null
 let googleTranslateBarInterval = null
 let googleTranslateRetryCount = 0
+let googleTranslateStateEventsInstalled = false
 
 function googleTranslateContainer() {
   return document.getElementById(GOOGLE_TRANSLATE_ELEMENT_ID)
+}
+
+function googleTranslatePanel() {
+  return document.getElementById("gt-panel")
+}
+
+function googleTranslatePanelVisible() {
+  const panel = googleTranslatePanel()
+  return !!panel && window.getComputedStyle(panel).display !== "none"
 }
 
 function googleTranslateCombo() {
@@ -1714,40 +2194,138 @@ function googleTranslateCombo() {
   return container?.querySelector("select.goog-te-combo") || document.querySelector("select.goog-te-combo")
 }
 
+function googleTranslateStatusElement() {
+  return document.querySelector("[data-gt-visible-status]")
+}
+
+function googleTranslateLanguageSelect() {
+  return document.querySelector("[data-gt-language-select]")
+}
+
 function googleTranslateWidgetReady() {
   const container = googleTranslateContainer()
   if (!container) return false
 
-  return Boolean(
-    container.querySelector("select.goog-te-combo, .goog-te-gadget, .goog-te-gadget-simple")
-  )
+  const interactive = container.querySelector("select.goog-te-combo, .goog-te-gadget, .goog-te-gadget-simple")
+  if (!interactive) return false
+
+  const visibleText = (container.textContent || "").trim().toLowerCase()
+  return !visibleText.includes("loading translation options")
 }
 
 function setGoogleTranslateStatus(message, { retry = false } = {}) {
-  const container = googleTranslateContainer()
-  if (!container || googleTranslateWidgetReady()) return
+  const status = googleTranslateStatusElement()
+  if (!status) return
 
-  container.innerHTML = `
-    <div class="translate-widget__status">
-      <span>${message}</span>
-      ${retry ? '<button type="button" class="btn btn-secondary btn-sm" data-gt-retry>Retry</button>' : ""}
-    </div>
+  const normalizedMessage = message.toString()
+  const retryState = retry ? "true" : "false"
+  if (status.dataset.gtStatusMessage === normalizedMessage && status.dataset.gtStatusRetry === retryState) return
+
+  status.dataset.gtStatusMessage = normalizedMessage
+  status.dataset.gtStatusRetry = retryState
+  status.innerHTML = `
+    <span>${normalizedMessage}</span>
+    ${retry ? '<button type="button" class="btn btn-secondary btn-sm" data-gt-retry>Retry</button>' : ""}
   `
 
   bindGoogleTranslateRetry()
 }
 
 function bindGoogleTranslateRetry() {
-  const retryButton = googleTranslateContainer()?.querySelector("[data-gt-retry]")
+  const retryButton = googleTranslateStatusElement()?.querySelector("[data-gt-retry]")
   if (!retryButton || retryButton.dataset.gtRetryBound === "true") return
   retryButton.dataset.gtRetryBound = "true"
 
   retryButton.addEventListener("click", () => {
     googleTranslateRetryCount = 0
-    setGoogleTranslateStatus("Loading translation options...")
+    const language = googleTranslateLanguageSelect()?.value || selectedGoogleTranslateLanguage()
+    if (language) {
+      applyGoogleTranslateLanguage(language)
+      return
+    }
+
+    setGoogleTranslateStatus("Preparing translation options...")
     ensureGoogleTranslateScript({ force: true })
-    scheduleGoogleTranslateAdoption({ reapply: true, forceRetry: true })
+    scheduleGoogleTranslateAdoption({ reapply: true, maxAttempts: 32 })
   })
+}
+
+function writeGoogleTranslateCookie(language) {
+  const normalizedLanguage = language.toString().trim()
+  const maxAge = normalizedLanguage ? 31_536_000 : 0
+  const value = normalizedLanguage ? `/en/${normalizedLanguage}` : ""
+  const baseCookie = `googtrans=${value};path=/;max-age=${maxAge};SameSite=Lax`
+  document.cookie = baseCookie
+
+  const hostname = window.location.hostname
+  if (hostname && hostname.includes(".") && hostname !== "localhost") {
+    document.cookie = `${baseCookie};domain=.${hostname}`
+  }
+}
+
+function bindGoogleTranslateLanguageSelect() {
+  const select = googleTranslateLanguageSelect()
+  if (!select) return
+
+  syncVisibleGoogleLanguageOptions()
+
+  const selected = selectedGoogleTranslateLanguage()
+  if (selected && Array.from(select.options).some((option) => option.value === selected)) {
+    select.value = selected
+    setGoogleTranslateStatus("Translation active.")
+  }
+
+  if (select.dataset.gtLanguageBound === "true") return
+  select.dataset.gtLanguageBound = "true"
+
+  select.addEventListener("change", () => {
+    const language = select.value.toString()
+    applyGoogleTranslateLanguage(language)
+  })
+}
+
+function syncVisibleGoogleLanguageOptions() {
+  const appSelect = googleTranslateLanguageSelect()
+  const googleSelect = googleTranslateCombo()
+  if (!appSelect || !(googleSelect instanceof HTMLSelectElement)) return false
+
+  const googleOptions = Array.from(googleSelect.options)
+    .map((option) => ({
+      value: option.value.toString().trim(),
+      label: option.textContent.toString().trim()
+    }))
+    .filter((option) => option.value && option.label)
+
+  if (!googleOptions.length) return false
+
+  const signature = googleOptions.map((option) => `${option.value}:${option.label}`).join("|")
+  const selected = appSelect.value || selectedGoogleTranslateLanguage()
+  if (appSelect.dataset.gtOptionsSignature === signature) {
+    if (selected && googleOptions.some((option) => option.value === selected)) appSelect.value = selected
+    return true
+  }
+
+  const englishOption = document.createElement("option")
+  englishOption.value = ""
+  englishOption.textContent = "English"
+
+  appSelect.innerHTML = ""
+  appSelect.appendChild(englishOption)
+
+  googleOptions.forEach((googleOption) => {
+    const option = document.createElement("option")
+    option.value = googleOption.value
+    option.textContent = googleOption.label
+    appSelect.appendChild(option)
+  })
+
+  appSelect.dataset.gtOptionsSignature = signature
+
+  if (selected && googleOptions.some((option) => option.value === selected)) {
+    appSelect.value = selected
+  }
+
+  return true
 }
 
 function readGoogleTranslateCookie() {
@@ -1761,12 +2339,47 @@ function selectedGoogleTranslateLanguage() {
   return cookie.split("/").filter(Boolean).pop() || ""
 }
 
+function pageTranslatedByGoogle() {
+  return document.documentElement.classList.contains("translated-ltr") ||
+    document.documentElement.classList.contains("translated-rtl") ||
+    document.body?.classList.contains("translated-ltr") ||
+    document.body?.classList.contains("translated-rtl")
+}
+
+function syncGoogleTranslateVisibleState() {
+  const appSelect = googleTranslateLanguageSelect()
+  if (!appSelect) return
+
+  const language = selectedGoogleTranslateLanguage()
+  if (!language && !pageTranslatedByGoogle()) {
+    if (appSelect.value !== "") appSelect.value = ""
+    setGoogleTranslateStatus("Select a language.")
+    return
+  }
+
+  if (!language) return
+
+  if (Array.from(appSelect.options).some((option) => option.value === language)) {
+    appSelect.value = language
+  }
+  setGoogleTranslateStatus("Translation active.")
+}
+
 function bindGoogleTranslateToggle() {
   const button = document.getElementById("gt-toggle")
-  const panel = document.getElementById("gt-panel")
+  const panel = googleTranslatePanel()
   if (!button || !panel) return
   if (button.dataset.gtToggleBound === "true") return
   button.dataset.gtToggleBound = "true"
+
+  const mountWhenVisible = () => {
+    window.requestAnimationFrame(() => {
+      if (!googleTranslatePanelVisible()) return
+      ensureGoogleTranslateScript()
+      mountGoogleTranslateWidget()
+      scheduleGoogleTranslateAdoption({ reapply: true, maxAttempts: 32 })
+    })
+  }
 
   button.addEventListener("click", () => {
     const isHidden = panel.style.display === "none" || window.getComputedStyle(panel).display === "none"
@@ -1774,10 +2387,12 @@ function bindGoogleTranslateToggle() {
     panel.setAttribute("aria-hidden", isHidden ? "false" : "true")
     button.setAttribute("aria-expanded", isHidden ? "true" : "false")
 
-    if (isHidden) {
-      initGoogleTranslateWidget()
-    }
+    if (isHidden) mountWhenVisible()
   })
+
+  const wrapper = button.closest(".translate-nav")
+  wrapper?.addEventListener("mouseenter", mountWhenVisible)
+  wrapper?.addEventListener("focusin", mountWhenVisible)
 }
 
 function installGoogleTranslateCallback() {
@@ -1791,7 +2406,7 @@ function ensureGoogleTranslateScript(options = {}) {
   installGoogleTranslateCallback()
 
   if (window.google?.translate?.TranslateElement) {
-    mountGoogleTranslateWidget()
+    mountGoogleTranslateWidget({ force: options.force })
     return
   }
 
@@ -1805,6 +2420,7 @@ function ensureGoogleTranslateScript(options = {}) {
   script.src = options.force ? `${GOOGLE_TRANSLATE_SCRIPT_URL}&retry=${Date.now()}` : GOOGLE_TRANSLATE_SCRIPT_URL
   script.async = true
   script.onload = () => {
+    script.dataset.loaded = "true"
     window.setTimeout(() => {
       mountGoogleTranslateWidget()
       scheduleGoogleTranslateAdoption({ reapply: true })
@@ -1816,16 +2432,16 @@ function ensureGoogleTranslateScript(options = {}) {
   document.head.appendChild(script)
 }
 
-function mountGoogleTranslateWidget() {
+function mountGoogleTranslateWidget(options = {}) {
   const container = googleTranslateContainer()
   if (!container) return
-  if (googleTranslateWidgetReady()) return
+  if (googleTranslateWidgetReady() && !options.force) return
   if (!window.google?.translate?.TranslateElement) return
 
   try {
     container.innerHTML = ""
     new window.google.translate.TranslateElement(
-      { pageLanguage: "en", layout: window.google.translate.TranslateElement.InlineLayout.SIMPLE },
+      { pageLanguage: "en", autoDisplay: false },
       GOOGLE_TRANSLATE_ELEMENT_ID
     )
   } catch (error) {
@@ -1875,6 +2491,8 @@ function adoptGoogleTranslateWidget() {
   }
 
   bindGoogleTranslateCombo(select)
+  syncVisibleGoogleLanguageOptions()
+  syncGoogleTranslateVisibleState()
   return true
 }
 
@@ -1900,30 +2518,29 @@ function scheduleGoogleTranslateAdoption(options = {}) {
 function handleGoogleTranslateTimeout(options = {}) {
   if (googleTranslateWidgetReady()) return
 
-  if (googleTranslateRetryCount < 1 || options.forceRetry) {
+  if (googleTranslateRetryCount < 1) {
     googleTranslateRetryCount += 1
     ensureGoogleTranslateScript({ force: true })
     scheduleGoogleTranslateAdoption({ reapply: options.reapply, maxAttempts: 20 })
     return
   }
 
-  setGoogleTranslateStatus("Translation options are still loading.", { retry: true })
+  setGoogleTranslateStatus("Google Translate is taking longer than expected to load.", { retry: true })
 }
 
-function reapplyGoogleTranslateLanguage() {
-  const language = selectedGoogleTranslateLanguage()
-  if (!language) return
-
+function triggerGoogleTranslateCombo(language) {
   const select = googleTranslateCombo()
-  if (!(select instanceof HTMLSelectElement)) return
-  if (select.value === language) return
+  if (!(select instanceof HTMLSelectElement)) return false
 
   try {
     select.dataset.gtProgrammatic = "true"
     select.value = language
+    if (language && select.value !== language) return false
     select.dispatchEvent(new Event("change", { bubbles: true }))
+    return true
   } catch (error) {
-    console.warn("[Google Translate] language reapply failed", error)
+    console.warn("[Google Translate] language apply failed", error)
+    return false
   } finally {
     window.setTimeout(() => {
       delete select.dataset.gtProgrammatic
@@ -1931,23 +2548,75 @@ function reapplyGoogleTranslateLanguage() {
   }
 }
 
+function applyGoogleTranslateLanguage(language, options = {}) {
+  const normalizedLanguage = language.toString().trim()
+  const attempts = options.attempts || 0
+
+  writeGoogleTranslateCookie(normalizedLanguage)
+
+  if (!normalizedLanguage) {
+    setGoogleTranslateStatus("Returning to English...")
+    window.setTimeout(() => window.location.reload(), 150)
+    return
+  }
+
+  setGoogleTranslateStatus(attempts === 0 ? "Applying translation..." : "Still applying translation...")
+  ensureGoogleTranslateScript()
+  mountGoogleTranslateWidget()
+  adoptGoogleTranslateWidget()
+
+  if (triggerGoogleTranslateCombo(normalizedLanguage)) {
+    const appSelect = googleTranslateLanguageSelect()
+    if (appSelect) appSelect.value = normalizedLanguage
+    setGoogleTranslateStatus("Translation active.")
+    return
+  }
+
+  if (attempts < 32) {
+    window.setTimeout(() => applyGoogleTranslateLanguage(normalizedLanguage, { attempts: attempts + 1 }), 250)
+    return
+  }
+
+  setGoogleTranslateStatus("Google Translate could not apply the selected language. Try again.", { retry: true })
+}
+
+function reapplyGoogleTranslateLanguage() {
+  const language = selectedGoogleTranslateLanguage()
+  if (!language) return
+
+  triggerGoogleTranslateCombo(language)
+}
+
+function restoreGoogleTranslateAfterLoad() {
+  if (!selectedGoogleTranslateLanguage() && !pageTranslatedByGoogle()) return
+
+  const restoreTranslation = () => {
+    ensureGoogleTranslateScript()
+    mountGoogleTranslateWidget()
+    scheduleGoogleTranslateAdoption({ reapply: true })
+  }
+
+  if (document.readyState === "complete") {
+    window.setTimeout(restoreTranslation, 0)
+    return
+  }
+
+  window.addEventListener("load", () => window.setTimeout(restoreTranslation, 0), { once: true })
+}
+
 function initGoogleTranslateWidget() {
   if (!googleTranslateContainer()) return
 
   bindGoogleTranslateToggle()
-  if (!googleTranslateWidgetReady()) {
-    setGoogleTranslateStatus("Loading translation options...")
-  }
-  ensureGoogleTranslateScript()
+  bindGoogleTranslateLanguageSelect()
+  syncGoogleTranslateVisibleState()
 
-  if (window.google?.translate?.TranslateElement) {
-    mountGoogleTranslateWidget()
-  }
-
-  scheduleGoogleTranslateAdoption({ reapply: true })
+  restoreGoogleTranslateAfterLoad()
 }
 
 function adjustForGoogleTranslateBar() {
+  syncGoogleTranslateVisibleState()
+
   try {
     const frame = document.querySelector('iframe[id^="goog-gt-"]') || document.querySelector("iframe.goog-te-banner-frame")
     if (frame && frame.clientHeight) {
@@ -1974,7 +2643,12 @@ function initGoogleTranslateBarOffset() {
 
   if (!googleTranslateBarObserver) {
     googleTranslateBarObserver = new MutationObserver(adjustForGoogleTranslateBar)
-    googleTranslateBarObserver.observe(document.documentElement || document.body, { childList: true, subtree: true })
+    googleTranslateBarObserver.observe(document.documentElement || document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [ "class" ]
+    })
   }
 
   if (googleTranslateBarInterval) window.clearInterval(googleTranslateBarInterval)
@@ -1988,39 +2662,62 @@ function initGoogleTranslateBarOffset() {
       googleTranslateBarInterval = null
     }
   }, 300)
+
+  if (!googleTranslateStateEventsInstalled) {
+    googleTranslateStateEventsInstalled = true
+    window.addEventListener("focus", syncGoogleTranslateVisibleState)
+    document.addEventListener("visibilitychange", syncGoogleTranslateVisibleState)
+  }
 }
 
 // -----------------------------
 // Hook into Turbo / DOM load
 // -----------------------------
 
-function initAccessibilityFeatures() {
-  installSurveyBranchingEventFallback()
-  installTurboModalConfirm()
-  initTurboFalseConfirmFallback()
-  initInlineModals()
-  initDismissibleFlashes()
-  initHighContrastToggle()
-  initTTSToggle()
-  initSurveyBranching()
-  initSurveyReflectionVisibility()
-  initSurveyQuestionKeyboardShortcuts()
-  initOtherChoiceInputs()
-  initStudentSurveyFormAutosave()
-  initPreviewSurveyForms()
-  initToggleSwitches()
-  initComboboxes()
-  initImpersonationReadOnlyUI()
-  initDisableSubmitIfUnchanged()
-  initHoverDropdownDetails()
-  initServerMarkdownPreviews()
-  initGoogleTranslateWidget()
-  initGoogleTranslateBarOffset()
+function runFeatureInitializer(name, initializer) {
+  try {
+    initializer()
+  } catch (error) {
+    console.error(`[Application] ${name} failed`, error)
+  }
 }
 
+function initAccessibilityFeatures() {
+  [
+    ["mobile navigation", initMobileNavigation],
+    ["survey branching fallback", installSurveyBranchingEventFallback],
+    ["modal confirmations", installTurboModalConfirm],
+    ["turbo false confirmations", initTurboFalseConfirmFallback],
+    ["inline modals", initInlineModals],
+    ["dismissible flashes", initDismissibleFlashes],
+    ["high contrast toggle", initHighContrastToggle],
+    ["text-to-speech toggle", initTTSToggle],
+    ["survey branching", initSurveyBranching],
+    ["survey reflection visibility", initSurveyReflectionVisibility],
+    ["survey keyboard shortcuts", initSurveyQuestionKeyboardShortcuts],
+    ["other choice inputs", initOtherChoiceInputs],
+    ["student survey autosave", initStudentSurveyFormAutosave],
+    ["preview survey forms", initPreviewSurveyForms],
+    ["toggle switches", initToggleSwitches],
+    ["comboboxes", initComboboxes],
+    ["impersonation read-only UI", initImpersonationReadOnlyUI],
+    ["disable unchanged submits", initDisableSubmitIfUnchanged],
+    ["hover dropdowns", initHoverDropdownDetails],
+    ["markdown previews", initServerMarkdownPreviews],
+    ["Google Translate widget", initGoogleTranslateWidget],
+    ["Google Translate offset", initGoogleTranslateBarOffset]
+  ].forEach(([name, initializer]) => runFeatureInitializer(name, initializer))
+}
+
+initMobileNavigation()
 installSurveyBranchingEventFallback()
 initDismissibleFlashes()
 document.addEventListener("turbo:load", initAccessibilityFeatures)
-document.addEventListener("DOMContentLoaded", initAccessibilityFeatures)
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initAccessibilityFeatures, { once: true })
+} else {
+  window.queueMicrotask(initAccessibilityFeatures)
+}
 
 console.debug("[Application] JS bootstrap loaded (once)")

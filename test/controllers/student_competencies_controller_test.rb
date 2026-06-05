@@ -1,4 +1,5 @@
 require "test_helper"
+require "uri"
 
 class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
   setup do
@@ -20,6 +21,8 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "What Changed Since Last Semester?"
     assert_includes response.body, "End-of-program target"
     assert_includes response.body, @competency_title
+    assert_select "#competencySnapshotPanel.c-chart-panel--scrollable"
+    assert_select ".c-chart-frame--radar canvas#competencyRadarChart"
   end
 
   test "student dashboard hides advisor column when advisor competencies are empty" do
@@ -100,12 +103,18 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
   test "student can export competencies as csv" do
     sign_in @student_user
 
-    get student_competencies_path(format: :csv)
+    assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+      get student_competencies_path(format: :csv)
+    end
 
     assert_response :success
     assert_includes response.media_type, "text/csv"
     assert_includes response.body, "Competency"
     assert_includes response.body, @competency_title
+
+    activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
+    assert_equal "my_competencies_csv", activity.metadata["export_type"]
+    assert_equal @student, activity.subject
   end
 
   test "student can download competencies as pdf" do
@@ -116,13 +125,19 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
 
     sign_in @student_user
 
-    WickedPdf.stub(:new, fake_pdf) do
-      get student_competencies_path(format: :pdf)
+    assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+      WickedPdf.stub(:new, fake_pdf) do
+        get student_competencies_path(format: :pdf)
+      end
     end
 
     assert_response :success
     assert_includes response.media_type, "application/pdf"
     assert_equal "%PDF-1.4", response.body
+
+    activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
+    assert_equal "my_competencies_pdf", activity.metadata["export_type"]
+    assert_equal @student, activity.subject
   end
 
   test "student dashboard includes all semesters option and honors source filters" do
@@ -137,6 +152,35 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_select "th", text: "Course", count: 0
     assert_select "th", text: "End-of-Program Target", count: 0
     refute_includes response.body, "\"label\":\"Course\""
+  end
+
+  test "student competency exports preserve semester and source filters" do
+    sign_in @student_user
+
+    get student_competencies_path(semester: "all", sources: [ "self" ])
+
+    assert_response :success
+    assert_select ".c-ferpa-export-notice", text: /Student-level competency exports/
+    assert_select "a[data-turbo='false'][data-turbo-confirm*='FERPA reminder']", text: "Export CSV"
+    assert_select "a[data-turbo='false'][data-turbo-confirm*='FERPA reminder']", text: "Download PDF"
+    csv_link = assert_link_path_and_query(
+      "Export CSV",
+      student_competencies_path(format: :csv),
+      "semester" => "all",
+      "sources" => [ "self" ]
+    )
+    pdf_link = assert_link_path_and_query(
+      "Download PDF",
+      student_competencies_path(format: :pdf),
+      "semester" => "all",
+      "sources" => [ "self" ]
+    )
+
+    [ csv_link, pdf_link ].each do |link|
+      assert_includes link["data-turbo-confirm"], "FERPA reminder"
+      assert_includes link["data-turbo-confirm"], "student-level competency data"
+      assert_includes link["data-turbo-confirm"], "legitimate educational interest"
+    end
   end
 
   test "future release date hides course ratings from student dashboard" do
@@ -356,5 +400,22 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     get student_competencies_path
 
     assert_redirected_to dashboard_path
+  end
+
+  private
+
+  def assert_link_path_and_query(label, expected_path, expected_query)
+    link = css_select("a").find { |anchor| anchor.text.squish == label }
+    assert link, "Expected to find #{label.inspect} link"
+
+    uri = URI.parse(link["href"])
+    assert_equal expected_path, uri.path
+
+    query = Rack::Utils.parse_nested_query(uri.query)
+    expected_query.each do |key, value|
+      assert_equal value, query[key], "Expected #{label} query #{key}=#{value.inspect}; found #{query.inspect}"
+    end
+
+    link
   end
 end

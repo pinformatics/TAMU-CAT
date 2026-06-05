@@ -77,6 +77,9 @@ class ConfidentialAdvisorNotesController < ApplicationController
   end
 
   def return_path
+    return_to = params[:return_to].to_s
+    return return_to if return_to.start_with?("/") && !return_to.start_with?("//")
+
     survey_id = params[:survey_id].presence
     student_id = params[:student_id].presence
 

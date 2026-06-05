@@ -5,7 +5,7 @@
 
   <%= form_with url: survey_response_path(@survey_response.id, return_to: return_to), method: :patch, local: true, data: { disable_submit_if_unchanged: true }, html: { class: "survey-form u-stack u-stack--xl" } do %>
     <div class="u-actions u-actions--split">
-      <%= link_to "← Back", (return_to.presence || student_records_path), class: button_classes(:secondary) %>
+      <%= link_to "← Back", (return_to.presence || survey_records_path), class: button_classes(:secondary) %>
 
       <div class="u-actions">
         <%= submit_tag "Save changes",

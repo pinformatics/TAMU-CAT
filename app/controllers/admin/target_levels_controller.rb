@@ -200,7 +200,7 @@ class Admin::TargetLevelsController < Admin::BaseController
   private
 
   def load_selector_options
-    @semesters = ProgramSemester.order(Arel.sql("current DESC"), Arel.sql("LOWER(name) ASC"))
+    @semesters = ProgramSemester.ordered
     @tracks = Student.tracks.values
     @class_of_options = [ [ "Select a cohort", "" ] ] + ProgramYear.options_for_select.map { |label, value| [ label, value.to_s ] }
 

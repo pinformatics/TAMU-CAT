@@ -219,7 +219,7 @@ class SurveyResponsesControllerUnitTest < ActionController::TestCase
       end
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert captured, "Expected SurveyResponseVersion.capture_current! to run"
     assert delivered, "Expected Notification.deliver! to run"
     assert_nil StudentQuestion.find_by(student_id: @student.student_id, question_id: q1.id)
@@ -271,7 +271,7 @@ class SurveyResponsesControllerUnitTest < ActionController::TestCase
       end
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_nil StudentQuestion.find_by(student_id: @student.student_id, question_id: q1.id)
     assert_nil assignment.reload.completed_at
   end
@@ -328,7 +328,7 @@ class SurveyResponsesControllerUnitTest < ActionController::TestCase
       delete :destroy, params: { id: sr.id }
     end
 
-    assert_redirected_to student_records_path
+    assert_redirected_to survey_records_path
     assert_nil SurveyAssignment.find_by(id: assignment.id)
     assert_nil historical_version.reload.survey_assignment_id
 
@@ -362,6 +362,22 @@ class SurveyResponsesControllerUnitTest < ActionController::TestCase
     sr = SurveyResponse.build(student: @student, survey: @survey)
     get :show, params: { id: sr.id }
     assert_response :success
+  end
+
+  test "show PDF download links include FERPA confirmation language" do
+    sign_in @admin
+    sr = SurveyResponse.build(student: @student, survey: @survey)
+
+    get :show, params: { id: sr.id }
+
+    assert_response :success
+    links = css_select("a").select { |link| link.text.squish == "Download as PDF" }
+    assert_equal 2, links.size
+    links.each do |link|
+      assert_includes link["data-turbo-confirm"], "FERPA reminder"
+      assert_includes link["data-turbo-confirm"], "student survey response data"
+      assert_includes link["data-turbo-confirm"], "legitimate educational interest"
+    end
   end
 
   test "show marks unsubmitted advisor feedback as draft for admin viewers" do
@@ -718,11 +734,18 @@ class SurveyResponsesControllerUnitTest < ActionController::TestCase
     end
 
     CompositeReportGenerator.stub(:new, fake_generator.new(fake_result)) do
-      get :download, params: { id: sr.id }
+      assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+        get :download, params: { id: sr.id }
+      end
       assert_response :success
       assert_equal "application/pdf", @response.media_type
       assert_includes @response.headers["Content-Disposition"].to_s, "attachment"
     end
+
+    activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
+    assert_equal "survey_response_pdf", activity.metadata["export_type"]
+    assert_equal @student, activity.subject
+    assert_equal @survey.id, activity.metadata["survey_id"]
   ensure
     tmp&.close
     tmp&.unlink
@@ -1116,6 +1139,175 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Mastery level: 4"
     assert_includes response.body, "PHPM 701-001"
     assert_includes response.body, "Course target: 5"
+  end
+
+  test "completed response shows self target summary to every permitted role" do
+    student = students(:student)
+    student.update!(program_year: 2026)
+    survey = surveys(:fall_2025)
+    titles = Reports::DataAggregator::COMPETENCY_TITLES.first(2)
+
+    category = survey.categories.create!(
+      name: "Target Summary Domain",
+      description: ""
+    )
+    met_question = category.questions.create!(
+      question_text: titles.first,
+      question_order: 10_001,
+      question_type: "dropdown",
+      is_required: true,
+      answer_options: [
+        [ "Beginner (1)", "1" ],
+        [ "Emerging (2)", "2" ],
+        [ "Capable (3)", "3" ],
+        [ "Experienced (4)", "4" ],
+        [ "Mastery (5)", "5" ]
+      ].to_json
+    )
+    below_question = category.questions.create!(
+      question_text: titles.second,
+      question_order: 10_002,
+      question_type: "dropdown",
+      is_required: true,
+      answer_options: [
+        [ "Beginner (1)", "1" ],
+        [ "Emerging (2)", "2" ],
+        [ "Capable (3)", "3" ],
+        [ "Experienced (4)", "4" ],
+        [ "Mastery (5)", "5" ]
+      ].to_json
+    )
+
+    CompetencyTargetLevel.where(
+      program_semester: survey.program_semester,
+      track: student.track_before_type_cast,
+      class_of: student.program_year,
+      competency_title: titles
+    ).delete_all
+    CompetencyTargetLevel.create!(
+      program_semester: survey.program_semester,
+      track: student.track_before_type_cast,
+      class_of: student.program_year,
+      competency_title: titles.first,
+      target_level: 3
+    )
+    CompetencyTargetLevel.create!(
+      program_semester: survey.program_semester,
+      track: student.track_before_type_cast,
+      class_of: student.program_year,
+      competency_title: titles.second,
+      target_level: 4
+    )
+
+    StudentQuestion.create!(
+      student_id: student.student_id,
+      advisor_id: student.advisor_id,
+      question: met_question,
+      answer: "3"
+    )
+    StudentQuestion.create!(
+      student_id: student.student_id,
+      advisor_id: student.advisor_id,
+      question: below_question,
+      answer: "2"
+    )
+
+    SurveyAssignment.find_or_create_by!(survey: survey, student: student) do |assignment|
+      assignment.advisor_id = student.advisor_id
+      assignment.assigned_at = 1.day.ago
+    end.update!(completed_at: Time.current)
+
+    survey_response = SurveyResponse.build(student: student, survey: survey)
+
+    [ users(:student), users(:advisor), users(:admin) ].each do |viewer|
+      sign_in viewer
+      get survey_response_path(survey_response)
+
+      assert_response :success
+      assert_includes response.body, "Self-assessment target summary"
+      assert_includes response.body, titles.first
+      assert_includes response.body, titles.second
+      assert_includes response.body, "1 of 2"
+      assert_includes response.body, "Met 1"
+      assert_includes response.body, "Below 1"
+
+      sign_out viewer
+    end
+  end
+
+  test "draft response does not show self target summary" do
+    sign_in @student_user
+
+    student = students(:student)
+    survey = surveys(:fall_2025)
+    title = Reports::DataAggregator::COMPETENCY_TITLES.first
+    category = survey.categories.create!(name: "Draft Target Summary Domain", description: "")
+    question = category.questions.create!(
+      question_text: title,
+      question_order: 10_003,
+      question_type: "dropdown",
+      is_required: true,
+      answer_options: %w[1 2 3 4 5].to_json,
+      program_target_level: 3
+    )
+
+    StudentQuestion.create!(
+      student_id: student.student_id,
+      advisor_id: student.advisor_id,
+      question: question,
+      answer: "3"
+    )
+    SurveyAssignment.find_or_create_by!(survey: survey, student: student) do |assignment|
+      assignment.advisor_id = student.advisor_id
+      assignment.assigned_at = 1.day.ago
+    end.update!(completed_at: nil)
+
+    get survey_response_path(SurveyResponse.build(student: student, survey: survey))
+
+    assert_response :success
+    assert_not_includes response.body, "Self-assessment target summary"
+  end
+
+  test "past submitted response without completion timestamp shows self target summary" do
+    sign_in @student_user
+
+    student = students(:student)
+    survey = Survey.new(
+      title: "Legacy Past Survey #{SecureRandom.hex(4)}",
+      program_semester: program_semesters(:fall_2025),
+      description: "Old response without completed_at",
+      is_active: false
+    )
+    category = survey.categories.build(name: "Legacy Target Domain", description: "")
+    question = category.questions.build(
+      question_text: Reports::DataAggregator::COMPETENCY_TITLES.first,
+      question_order: 1,
+      question_type: "dropdown",
+      is_required: true,
+      answer_options: [
+        [ "Beginner (1)", "1" ],
+        [ "Emerging (2)", "2" ],
+        [ "Capable (3)", "3" ],
+        [ "Experienced (4)", "4" ],
+        [ "Mastery (5)", "5" ]
+      ].to_json,
+      program_target_level: 4
+    )
+    survey.save!
+
+    StudentQuestion.create!(
+      student_id: student.student_id,
+      advisor_id: student.advisor_id,
+      question: question,
+      answer: "5"
+    )
+
+    get survey_response_path(SurveyResponse.build(student: student, survey: survey))
+
+    assert_response :success
+    assert_includes response.body, "Self-assessment target summary"
+    assert_includes response.body, "1 of 1"
+    assert_includes response.body, "Met 1"
   end
 
   test "student can view their own survey response" do

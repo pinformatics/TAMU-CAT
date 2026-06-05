@@ -26,6 +26,50 @@ class StudentRecordsControllerUnitTest < ActiveSupport::TestCase
     assert_equal [ 2025, 2 ], controller.send(:semester_sort_key, "Summer 2025")
   end
 
+  test "normalizers reject unknown status sort track and year values" do
+    controller = StudentRecordsController.new
+
+    assert_nil controller.send(:normalize_status_filter, "waiting")
+    assert_equal "name_asc", controller.send(:normalize_sort_key, "surprise")
+    assert_nil controller.send(:normalize_program_year_filter, "Class of 2026")
+    assert_equal "2026", controller.send(:normalize_program_year_filter, "2026")
+  end
+
+  test "sort_student_record_rows handles status track year and date sorts" do
+    controller = StudentRecordsController.new
+    student = students(:student)
+    other_student = students(:other_student)
+    student.update!(track: "Residential", program_year: 2027)
+    other_student.update!(track: "Executive", program_year: 2026)
+
+    rows = [
+      { student: student, status: "Assigned", available_until: Time.zone.parse("2026-02-01"), completed_at: nil },
+      { student: other_student, status: "Completed", available_until: Time.zone.parse("2026-01-01"), completed_at: Time.zone.parse("2026-01-05") },
+      { student: nil, status: "Unassigned", available_until: nil, completed_at: nil }
+    ]
+
+    controller.instance_variable_set(:@sort_key, "status")
+    assert_equal [ "Completed", "Assigned", "Unassigned" ], controller.send(:sort_student_record_rows, rows).map { |row| row[:status] }
+
+    controller.instance_variable_set(:@sort_key, "track")
+    assert_equal [ other_student, student, nil ], controller.send(:sort_student_record_rows, rows).map { |row| row[:student] }
+
+    controller.instance_variable_set(:@sort_key, "program_year_asc")
+    assert_equal [ other_student, student, nil ], controller.send(:sort_student_record_rows, rows).map { |row| row[:student] }
+
+    controller.instance_variable_set(:@sort_key, "program_year_desc")
+    assert_equal [ student, other_student, nil ], controller.send(:sort_student_record_rows, rows).map { |row| row[:student] }
+
+    controller.instance_variable_set(:@sort_key, "due_asc")
+    assert_equal [ other_student, student, nil ], controller.send(:sort_student_record_rows, rows).map { |row| row[:student] }
+
+    controller.instance_variable_set(:@sort_key, "due_desc")
+    assert_equal [ student, other_student, nil ], controller.send(:sort_student_record_rows, rows).map { |row| row[:student] }
+
+    controller.instance_variable_set(:@sort_key, "completed_desc")
+    assert_equal [ other_student, student, nil ], controller.send(:sort_student_record_rows, rows).map { |row| row[:student] }
+  end
+
   test "load_employment_export_lookup extracts normalized employment fields" do
     controller = StudentRecordsController.new
     student = students(:student)
@@ -92,6 +136,24 @@ class StudentRecordsControllerUnitTest < ActiveSupport::TestCase
     assert_equal "Graduate Intern", row[:job_title]
     assert_equal "32", row[:hours_per_week]
     assert_equal "Hybrid with occasional weekends", row[:work_schedule_flexibility]
+  end
+
+  test "employment field and answer helpers cover hash array and unknown branches" do
+    controller = StudentRecordsController.new
+    question = Struct.new(:choice_question?, :answer_option_pairs).new(
+      true,
+      [
+        [ "1 - No flexibility", "1" ],
+        [ "Other", "0" ]
+      ]
+    )
+    response = Struct.new(:question, :answer)
+
+    assert_nil controller.send(:employment_field_key_for, "Favorite color?")
+    assert_equal "1 - No flexibility: Tuesdays only", controller.send(:format_employment_answer, response.new(question, { "answer" => "1", "text" => "Tuesdays only" }))
+    assert_equal "1 - No flexibility", controller.send(:format_employment_answer, response.new(question, { "answer" => "1" }))
+    assert_equal "A, B", controller.send(:format_employment_answer, response.new(question, [ "A", "", "B" ]))
+    assert_nil controller.send(:format_employment_answer, response.new(question, ""))
   end
 
   test "build_student_records_workbook includes employment columns and values" do

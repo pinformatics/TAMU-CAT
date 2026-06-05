@@ -31,14 +31,6 @@ const STATUS_COLOR_MAP = {
   not_assessed: COLORS.notAssessed
 }
 
-function confirmWithAppModal(message, options = {}) {
-  if (window.AppModal && typeof window.AppModal.confirm === "function") {
-    return window.AppModal.confirm({ message, ...options })
-  }
-
-  return Promise.resolve(window.confirm(message))
-}
-
 let percentagePluginRegistered = false
 
 const percentageLabelPlugin = {
@@ -82,6 +74,7 @@ const API_ENDPOINTS = {
 
 const DEFAULT_FILTERS = {
   track: "all",
+  program_year: "all",
   semester: "all",
   advisor_id: "all",
   category_id: "all",
@@ -89,16 +82,11 @@ const DEFAULT_FILTERS = {
   student_id: "all",
   competency: "all"
 }
-
-const FALLBACK_EXPORT_URLS = {
-  pdf: "/reports/dashboard/export_pdf",
-  excel: "/reports/export_excel"
-}
-
-const FERPA_EXPORT_CONFIRMATION = "FERPA reminder: This download may include student-level education records. Download only when you have a legitimate educational interest, and store or share the file securely. Continue?"
+const DASHBOARD_FILTER_KEYS = Object.keys(DEFAULT_FILTERS)
 
 const EMPTY_OPTIONS = Object.freeze({
   tracks: [],
+  program_years: [],
   semesters: [],
   advisors: [],
   categories: [],
@@ -190,6 +178,9 @@ const describeActiveFilters = (filters, options) => {
   if (mergedFilters.track !== "all") {
     parts.push(`Track: ${mergedFilters.track}`)
   }
+  if (mergedFilters.program_year !== "all") {
+    parts.push(`Year: ${mergedFilters.program_year}`)
+  }
   if (mergedFilters.semester !== "all") {
     parts.push(`Semester: ${mergedFilters.semester}`)
   }
@@ -229,11 +220,52 @@ const buildQueryString = (filters) => {
   return query ? `?${query}` : ""
 }
 
-const replacePdfSection = (baseUrl, sectionKey) => {
-  if (!sectionKey) return baseUrl
-  const pattern = /(\/reports\/)([^/]+)(\/export_pdf\b)/
-  if (!pattern.test(baseUrl)) return baseUrl
-  return baseUrl.replace(pattern, `$1${sectionKey}$3`)
+const buildUrlWithQuery = (baseUrl, filters) => {
+  if (!baseUrl) return ""
+
+  const query = buildQueryString(filters)
+  if (!query) return baseUrl
+
+  return `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${query.slice(1)}`
+}
+
+const normalizeDashboardFilters = (filters = {}) => {
+  const normalized = { ...DEFAULT_FILTERS }
+
+  DASHBOARD_FILTER_KEYS.forEach((key) => {
+    const value = filters[key]
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      normalized[key] = String(value)
+    }
+  })
+
+  return normalized
+}
+
+const updatePrimaryDashboardDownload = (filters) => {
+  const links = document.querySelectorAll("[data-report-primary-download='true']")
+  if (!links.length) return
+
+  links.forEach((link) => {
+    const baseUrl = link.dataset.reportDownloadBaseUrl || link.href
+    link.href = buildUrlWithQuery(baseUrl, filters)
+  })
+}
+
+const syncDashboardUrl = (filters) => {
+  if (!window.history || !window.location) return
+
+  const url = new URL(window.location.href)
+  url.searchParams.set("report_tab", "dashboard")
+  DASHBOARD_FILTER_KEYS.forEach((key) => url.searchParams.delete(key))
+
+  Object.entries(filters || {}).forEach(([ key, value ]) => {
+    if (value && value !== "all") {
+      url.searchParams.set(key, value)
+    }
+  })
+
+  window.history.replaceState({}, "", url)
 }
 
 const fetchJson = async (url) => {
@@ -296,6 +328,14 @@ const FilterBar = ({ filters, options, onChange, onReset }) => {
       list: mergedOptions.tracks,
       getValue: (value) => value,
       getLabel: (value) => titleize(value)
+    },
+    {
+      name: "program_year",
+      label: "Year",
+      defaultLabel: "All years",
+      list: mergedOptions.program_years,
+      getValue: (value) => value,
+      getLabel: (value) => value
     },
     {
       name: "semester",
@@ -923,8 +963,6 @@ const TrackAchievementChart = ({ tracks }) => {
   )
 }
 
-const INLINE_EXPORT_BUTTON_CLASS = "inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
-
 // ─── Employment charts ───────────────────────────────────────────────────────
 
 const EmploymentStatusChart = ({ statusCounts }) => {
@@ -1080,23 +1118,6 @@ const EmploymentTab = ({ data, onExport }) => {
   ])
 }
 
-const SectionExportButtons = ({ onExport, section }) => {
-  if (!section) return null
-
-  return h("div", { className: "flex flex-wrap items-center gap-2" }, [
-    h("button", {
-      type: "button",
-      className: INLINE_EXPORT_BUTTON_CLASS,
-      onClick: () => onExport("pdf", section)
-    }, "PDF"),
-    h("button", {
-      type: "button",
-      className: INLINE_EXPORT_BUTTON_CLASS,
-      onClick: () => onExport("excel", section)
-    }, "Excel")
-  ])
-}
-
 const VIEW_TOGGLE_BASE = "inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
 
 const YAxisToggle = ({ mode, onChange }) => {
@@ -1118,29 +1139,6 @@ const YAxisToggle = ({ mode, onChange }) => {
       onClick: () => onChange("percent"),
       "aria-pressed": percentActive
     }, "% meeting target")
-  ])
-}
-
-const ViewToggle = ({ mode, onChange, singleStudentDisabled }) => {
-  const cohortActive = mode === "cohort"
-  const studentActive = mode === "student"
-
-  const buttonClass = (active) => `${VIEW_TOGGLE_BASE} ${active ? "border-amber-500 bg-amber-100 text-amber-900" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`
-
-  return h("div", { className: "flex flex-wrap items-center gap-2" }, [
-    h("button", {
-      type: "button",
-      className: buttonClass(cohortActive),
-      onClick: () => onChange("cohort"),
-      "aria-pressed": cohortActive
-    }, "Cohort view"),
-    h("button", {
-      type: "button",
-      className: buttonClass(studentActive),
-      onClick: () => onChange("student"),
-      disabled: singleStudentDisabled,
-      "aria-pressed": studentActive
-    }, "Single student")
   ])
 }
 
@@ -1182,24 +1180,23 @@ const StatusLegend = ({ statuses = [ "exceeds", "achieved", "not_met", "not_asse
   )
 }
 
-const ReportsApp = ({ exportUrls = {} }) => {
+const ReportsApp = ({ initialFilters = {} }) => {
+  const initialDashboardFilters = useMemo(() => normalizeDashboardFilters(initialFilters), [ initialFilters ])
   const [ options, setOptions ] = useState(EMPTY_OPTIONS)
-  const [ filters, setFilters ] = useState(DEFAULT_FILTERS)
+  const [ filters, setFilters ] = useState(initialDashboardFilters)
   const [ benchmark, setBenchmark ] = useState(null)
   const [ competencies, setCompetencies ] = useState([])
   const [ tracks, setTracks ] = useState([])
   const [ competencyDetail, setCompetencyDetail ] = useState(null)
   const [ loading, setLoading ] = useState(true)
   const [ error, setError ] = useState(null)
-  const [ viewMode, setViewMode ] = useState("cohort")
   const [ activeTab, setActiveTab ] = useState("competency")
   const [ yAxisMode, setYAxisMode ] = useState("percent")
   const [ competencyDetailDomain, setCompetencyDetailDomain ] = useState("all")
   const [ competencyDetailSort, setCompetencyDetailSort ] = useState("student")
   const [ employment, setEmployment ] = useState(null)
-  const filtersRef = useRef(DEFAULT_FILTERS)
+  const filtersRef = useRef(initialDashboardFilters)
 
-  const resolvedExportUrls = useMemo(() => ({ ...FALLBACK_EXPORT_URLS, ...(exportUrls || {}) }), [ exportUrls ])
   const filtersDescription = useMemo(() => describeActiveFilters(filters, options), [ filters, options ])
 
   const loadData = useCallback(async (nextFilters) => {
@@ -1239,6 +1236,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
       const data = await fetchJson(API_ENDPOINTS.filters)
       const preparedOptions = {
         tracks: Array.isArray(data.tracks) ? data.tracks : [],
+        program_years: Array.isArray(data.program_years) ? data.program_years : [],
         semesters: Array.isArray(data.semesters) ? data.semesters : [],
         advisors: Array.isArray(data.advisors) ? data.advisors : [],
         categories: Array.isArray(data.categories) ? data.categories : [],
@@ -1247,69 +1245,32 @@ const ReportsApp = ({ exportUrls = {} }) => {
         competencies: Array.isArray(data.competencies) ? data.competencies : []
       }
       setOptions(preparedOptions)
-      await loadData(DEFAULT_FILTERS)
+      await loadData(initialDashboardFilters)
     } catch (err) {
       console.error(err)
       setOptions(EMPTY_OPTIONS)
       setError(err.message || "We could not load the report filters.")
       setLoading(false)
     }
-  }, [ loadData ])
+  }, [ initialDashboardFilters, loadData ])
 
   const handleFilterChange = useCallback((nextFilters) => {
     const merged = { ...DEFAULT_FILTERS, ...(nextFilters || {}) }
-    setViewMode(merged.student_id && merged.student_id !== "all" ? "student" : "cohort")
     loadData(merged)
   }, [ loadData ])
 
   const handleReset = useCallback(() => {
-    setViewMode("cohort")
     loadData(DEFAULT_FILTERS)
   }, [ loadData ])
-
-  const handleExport = useCallback(async (format, sectionKey) => {
-    const confirmed = await confirmWithAppModal(FERPA_EXPORT_CONFIRMATION, {
-      title: "Confirm FERPA export",
-      confirmLabel: "Download"
-    })
-    if (!confirmed) return
-
-    if (format === "pdf") {
-      const base = resolvedExportUrls.pdf
-      if (!base) return
-
-      const targetPath = replacePdfSection(base, sectionKey)
-      const query = buildQueryString({ ...filters, y_axis: yAxisMode })
-      window.location.href = `${targetPath}${query}`
-      return
-    }
-
-    const base = resolvedExportUrls.excel
-    if (!base) return
-
-    const query = buildQueryString(filters)
-    window.location.href = `${base}${query}`
-  }, [ filters, resolvedExportUrls, yAxisMode ])
-
-  const handleViewModeChange = useCallback((nextMode) => {
-    if (nextMode === viewMode) return
-    if (nextMode === "cohort") {
-      setViewMode("cohort")
-      const nextFilters = { ...filtersRef.current, student_id: "all" }
-      loadData(nextFilters)
-      return
-    }
-
-    setViewMode("student")
-    if ((filtersRef.current.student_id || "all") === "all") {
-      return
-    }
-    loadData(filtersRef.current)
-  }, [ loadData, viewMode ])
 
   useEffect(() => {
     loadFilters()
   }, [ loadFilters ])
+
+  useEffect(() => {
+    updatePrimaryDashboardDownload(filters)
+    syncDashboardUrl(filters)
+  }, [ filters ])
 
   useEffect(() => {
     const domainIds = new Set((competencyDetail?.domains || []).map((domain) => String(domain.id)))
@@ -1337,8 +1298,6 @@ const ReportsApp = ({ exportUrls = {} }) => {
 
   const summaryCards = Array.isArray(benchmark?.cards) ? benchmark.cards : []
   const timeline = Array.isArray(benchmark?.timeline) ? benchmark.timeline : []
-  const studentSelectionRequired = viewMode === "student" && (filters.student_id === "all")
-  const singleStudentDisabled = !Array.isArray(options.students) || options.students.length === 0
 
 
   const chartTabs = useMemo(() => {
@@ -1350,7 +1309,6 @@ const ReportsApp = ({ exportUrls = {} }) => {
       title: "Num Achieved by Competency",
       description: "Side-by-side comparison of student self-ratings, advisor ratings, and course-derived ratings averaged per competency.",
       axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "competency" }),
       content: h(CompetencyAchievementChart, { items: competencyAchievementItems, yAxisMode }),
       footnote: h("p", { className: "text-xs text-slate-500 space-y-1" }, [
         "Averages are calculated based on all responses within each competency.",
@@ -1364,7 +1322,6 @@ const ReportsApp = ({ exportUrls = {} }) => {
       title: "Num Achieved by Domain",
       description: "Side-by-side comparison of student self-ratings, advisor ratings, and course-derived ratings averaged per domain.",
       axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "domain" }),
       content: h(DomainAverageChart, { items: competencies, yAxisMode }),
       footnote: h("p", { className: "text-xs text-slate-500 space-y-1" }, [
         "Averages are calculated based on all responses within each domain.",
@@ -1377,7 +1334,6 @@ const ReportsApp = ({ exportUrls = {} }) => {
       label: "Track",
       title: "% All Competency Achieved by Track",
       description: "Horizontal stacked bars highlight attainment percentages alongside missing and unassessed counts.",
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "track" }),
       content: h(React.Fragment, null, [
         h(StatusLegend, { statuses: [ "achieved", "not_met", "not_assessed" ] }),
         h(TrackAchievementChart, { tracks })
@@ -1393,7 +1349,6 @@ const ReportsApp = ({ exportUrls = {} }) => {
       title: "Progress Over Time",
       description: "Monthly average scores for students, advisors, and course ratings so you can spot improvements or regression at a glance.",
       axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "trend" }),
       content: timeline.length > 0
         ? h(TrendChart, { timeline, yAxisMode })
         : h("p", { className: "c-analytics-placeholder" }, "No trend data available."),
@@ -1405,7 +1360,6 @@ const ReportsApp = ({ exportUrls = {} }) => {
       label: "Employment",
       title: "Employment Across Respondents",
       description: "Employment status, hours worked per week, and schedule flexibility across all respondents in the current filter selection.",
-      toolbar: h(SectionExportButtons, { onExport: handleExport, section: "employment" }),
       content: h(EmploymentTab, { data: employment }),
       footnote: (filtersDescription && filtersDescription !== "None")
         ? h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
@@ -1413,7 +1367,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
     })
 
     return tabs
-  }, [ competencies, competencyAchievementItems, employment, filtersDescription, handleExport, handleViewModeChange, singleStudentDisabled, studentSelectionRequired, timeline, tracks, viewMode, yAxisMode ])
+  }, [ competencies, competencyAchievementItems, employment, filtersDescription, timeline, tracks, yAxisMode ])
 
   useEffect(() => {
     if (!Array.isArray(chartTabs) || chartTabs.length === 0) return
@@ -1455,8 +1409,7 @@ const ReportsApp = ({ exportUrls = {} }) => {
                     h("p", null, activeTabConfig.description)
                   ]),
                   activeTabConfig.axisToggle
-                ].filter(Boolean)),
-                activeTabConfig.toolbar
+                ].filter(Boolean))
               ]),
               activeTabConfig.content,
               activeTabConfig.footnote

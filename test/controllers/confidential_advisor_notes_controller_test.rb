@@ -95,6 +95,33 @@ class ConfidentialAdvisorNotesControllerTest < ActionDispatch::IntegrationTest
     assert_match(/cleared/i, flash[:notice].to_s)
   end
 
+  test "blank confidential note without an existing note does not create a record" do
+    sign_in @assigned_advisor_user
+
+    assert_no_difference "ConfidentialAdvisorNote.count" do
+      patch confidential_advisor_note_survey_response_path(@survey_response),
+            params: {
+              return_to: student_records_path,
+              confidential_advisor_note: { body: "   " }
+            }
+    end
+
+    assert_redirected_to student_records_path
+    assert_match(/cleared/i, flash[:notice].to_s)
+  end
+
+  test "unsafe return path falls back to the survey response" do
+    sign_in @assigned_advisor_user
+
+    patch confidential_advisor_note_survey_response_path(@survey_response),
+          params: {
+            return_to: "//example.com/escape",
+            confidential_advisor_note: { body: "Still local" }
+          }
+
+    assert_redirected_to survey_response_path(@survey_response)
+  end
+
   test "admin cannot save confidential note when advisor is missing" do
     orphan_user = User.create!(email: "orphan_student_#{SecureRandom.hex(4)}@example.com", name: "Orphan", role: "student", uid: "uid-#{SecureRandom.hex(4)}")
     orphan_student = orphan_user.student_profile
@@ -133,6 +160,10 @@ class ConfidentialAdvisorNotesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     refute_includes response.body, "Confidential advisor note"
 
+    get survey_response_path(@survey_response)
+    assert_response :success
+    refute_includes response.body, "Confidential advisor notes"
+
     sign_in @admin_user
     get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
     assert_response :success
@@ -141,6 +172,10 @@ class ConfidentialAdvisorNotesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "confidential_advisor_note_body"
     assert_includes response.body, "Older note"
     assert_includes response.body, "Note (read-only)"
+
+    get survey_response_path(@survey_response)
+    assert_response :success
+    refute_includes response.body, "Confidential advisor notes"
 
     sign_in @assigned_advisor_user
     get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
@@ -159,6 +194,10 @@ class ConfidentialAdvisorNotesControllerTest < ActionDispatch::IntegrationTest
     sign_in @assigned_advisor_user
     get survey_response_path(@survey_response)
     assert_response :success
-    refute_includes response.body, "Confidential advisor note"
+    assert_includes response.body, "Confidential advisor notes"
+    assert_includes response.body, "Private note"
+    assert_includes response.body, "Visible only to the assigned advisor"
+    assert_select "form[action=?]", confidential_advisor_note_survey_response_path(@survey_response)
+    assert_select "textarea#confidential_advisor_note_body"
   end
 end

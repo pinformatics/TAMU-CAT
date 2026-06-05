@@ -25,6 +25,15 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_not_nil @response.body
   end
 
+  test "public navbar exposes mobile drawer controls" do
+    get about_path
+
+    assert_response :success
+    assert_select "button.c-mobile-menu-button[aria-controls='public-mobile-nav'][aria-expanded='false']"
+    assert_select "#public-mobile-nav.c-nav-drawer[data-mobile-nav-drawer]"
+    assert_select ".c-nav-drawer-backdrop[data-mobile-nav-backdrop][hidden]"
+  end
+
   test "about page accessible by admin" do
     sign_in @admin
 

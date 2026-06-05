@@ -2,6 +2,9 @@
 
 require "test_helper"
 require "csv"
+require "roo"
+require "tempfile"
+require "uri"
 
 class ReportsControllerTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
@@ -39,6 +42,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Program Dashboard/
+    assert_download_href export_reports_pdf_path(section: "dashboard", y_axis: "percent"), label: "Download PDF"
     assert_download_href export_reports_excel_path(section: "dashboard"), label: "Download Excel"
 
     get reports_path(report_tab: "course_target")
@@ -52,6 +56,9 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Cohort Comparison/
     assert_download_href export_report_tab_path(report_tab: "cohort_comparison", format: :csv), label: "Download CSV"
+    assert_select "select[name='semester']"
+    assert_select "select[name='program_year']"
+    assert_select ".c-table th", text: "Semester"
     assert_select "input[name='course_code']", count: 0
     refute_includes response.body, "Course Contribution Report"
 
@@ -60,7 +67,11 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Heatmaps/
     assert_download_href export_report_tab_path(report_tab: "domain_heatmap", format: :csv), label: "Download CSV"
-    assert_includes response.body, "Student/Course Heatmap"
+    assert_select "select[name='semester']"
+    assert_select "select[name='course_code']"
+    assert_select "select[name='program_year']"
+    assert_select "select[name='student_id']"
+    assert_includes response.body, "Course Heatmap"
     assert_includes response.body, "Student by Domain Heatmap"
     refute_includes response.body, "Course Contribution Report"
 
@@ -74,8 +85,96 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path(report_tab: "dashboard")
 
     assert_response :success
+    assert_download_href export_reports_pdf_path(section: "dashboard", y_axis: "percent"), label: "Download PDF"
     assert_download_href export_reports_excel_path(section: "dashboard"), label: "Download Excel"
     assert_select ".c-analytics-root[data-controller='reports']"
+  end
+
+  test "dashboard tab passes current filters to app and initial export link" do
+    sign_in @admin
+
+    get reports_path(report_tab: "dashboard", track: "Residential", program_year: "2026", semester: "Spring 2026")
+
+    assert_response :success
+    assert_download_href export_reports_excel_path(section: "dashboard", track: "Residential", program_year: "2026", semester: "Spring 2026"),
+                         label: "Download Excel"
+    assert_link_path_and_query(
+      "Download PDF",
+      export_reports_pdf_path(section: "dashboard"),
+      "track" => "Residential",
+      "program_year" => "2026",
+      "semester" => "Spring 2026",
+      "y_axis" => "percent"
+    )
+    assert_select "a[data-report-primary-download='true']", count: 2
+    assert_select "a[data-report-primary-download='true'][data-report-download-base-url='#{export_reports_pdf_path(section: "dashboard", y_axis: "percent")}']"
+    assert_select "a[data-report-primary-download='true'][data-report-download-base-url='#{export_reports_excel_path(section: "dashboard")}']"
+
+    analytics_root = css_select(".c-analytics-root[data-controller='reports']").first
+    assert analytics_root, "Expected dashboard analytics root"
+    initial_filters = JSON.parse(analytics_root["data-reports-initial-filters-value"])
+    assert_equal "Residential", initial_filters["track"]
+    assert_equal "2026", initial_filters["program_year"]
+    assert_equal "Spring 2026", initial_filters["semester"]
+  end
+
+  test "report tab export links preserve current visible filters" do
+    sign_in @admin
+
+    get reports_path(
+      report_tab: "course_target",
+      course_code: "PHPM-601",
+      course_track: "Residential",
+      course_class_of: "2027",
+      release_status: "released"
+    )
+
+    assert_response :success
+    assert_link_path_and_query(
+      "Download CSV",
+      export_course_competency_reports_path,
+      "course_code" => "PHPM-601",
+      "course_track" => "Residential",
+      "course_class_of" => "2027",
+      "release_status" => "released"
+    )
+
+    get reports_path(report_tab: "cohort_comparison", track: "Residential", semester: "Spring 2026", student_id: students(:student).student_id)
+
+    assert_response :success
+    assert_link_path_and_query(
+      "Download CSV",
+      export_report_tab_path(format: :csv),
+      "report_tab" => "cohort_comparison",
+      "track" => "Residential",
+      "semester" => "Spring 2026",
+      "student_id" => students(:student).student_id.to_s
+    )
+
+    get reports_path(report_tab: "portfolio_export", q: users(:student).email, track: "Residential", program_year: "2026")
+
+    assert_response :success
+    assert_link_path_and_query(
+      "Download Excel",
+      export_reports_portfolio_path,
+      "q" => users(:student).email,
+      "track" => "Residential",
+      "program_year" => "2026"
+    )
+
+    get reports_path(report_tab: "domain_heatmap", semester: "Fall 2025", course_code: "PHPM-601", track: "Residential", program_year: "2026", student_id: students(:student).student_id)
+
+    assert_response :success
+    assert_link_path_and_query(
+      "Download CSV",
+      export_report_tab_path(format: :csv),
+      "report_tab" => "domain_heatmap",
+      "semester" => "Fall 2025",
+      "course_code" => "PHPM-601",
+      "track" => "Residential",
+      "program_year" => "2026",
+      "student_id" => students(:student).student_id.to_s
+    )
   end
 
   test "show renders student profile rows in report style" do
@@ -184,10 +283,11 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path(report_tab: "domain_heatmap", course_code: "PHPM-601")
 
     assert_response :success
-    assert_select "details.c-accordion summary", text: /#{Regexp.escape(student.user.name)}/
-    assert_select "details.c-accordion summary", text: /1 course/
+    assert_select "details.c-accordion summary", text: /PHPM-601/
+    assert_select "details.c-accordion summary", text: /1 student/
     assert_select "details.c-accordion summary .c-accordion__action", text: /Show details/
-    assert_select "details.c-accordion table th", text: "Course"
+    assert_select "details.c-accordion table.c-table--sticky-header th", text: "Student"
+    assert_select "details.c-accordion table.c-table--sticky-header td", text: student.user.name
   end
 
   test "export_course_competencies returns csv and records audit" do
@@ -238,7 +338,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "text/csv", response.media_type
-    assert_includes response.body, "Cohort,Students,Self Avg,Advisor Avg,Course Avg,Below Target"
+    assert_includes response.body, "Semester,Cohort,Students,Self Avg,Advisor Avg,Course Avg,Below Target"
     activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
     assert_equal "cohort_comparison_report_csv", activity.metadata["export_type"]
   end
@@ -250,7 +350,8 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "text/csv", response.media_type
-    assert_includes response.body, "Student/Course Heatmap"
+    assert_includes response.body, "Course Heatmap"
+    assert_includes response.body, "Course,Student,Semester,Track,Class,Average,Rows,Below Target,No Target"
     assert_includes response.body, "Student by Domain Heatmap"
   end
 
@@ -276,6 +377,110 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.media_type
     activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
     assert_equal "student_profile_portfolio_excel", activity.metadata["export_type"]
+  end
+
+  test "student profile workbook includes profile google sites and program review fields" do
+    sign_in @admin
+    student = students(:student)
+    question = Question.create!(
+      category: categories(:clinical_skills),
+      question_text: StudentPortfolioExporter::PORTFOLIO_QUESTION_TEXT,
+      question_order: 51,
+      question_type: "evidence",
+      is_required: true
+    )
+    StudentQuestion.create!(
+      student: student,
+      question: question,
+      response_value: "https://sites.google.com/example/program-review-profile"
+    )
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "student-profile-program-review.csv",
+      file_checksum: "student-profile-program-review",
+      status: "processed"
+    )
+    create_profile_evidence(
+      batch: batch,
+      file: file,
+      student: student,
+      course_code: "PHPM-601",
+      competency_title: "Policy Analysis",
+      mapped_level: 4,
+      course_target_level: 3,
+      fingerprint: "student-profile-program-review-met"
+    )
+    create_profile_evidence(
+      batch: batch,
+      file: file,
+      student: student,
+      course_code: "PHPM-602",
+      competency_title: "Communication",
+      mapped_level: 2,
+      course_target_level: 3,
+      fingerprint: "student-profile-program-review-below"
+    )
+    create_profile_evidence(
+      batch: batch,
+      file: file,
+      student: student,
+      course_code: "PHPM-602",
+      competency_title: "Systems Thinking",
+      mapped_level: 5,
+      course_target_level: nil,
+      fingerprint: "student-profile-program-review-no-target"
+    )
+
+    get export_reports_portfolio_path(q: student.user.email)
+
+    assert_response :success
+    open_xlsx_response("student-profile-program-review") do |workbook|
+      assert_includes workbook.sheets, "Student Profile"
+      sheet = workbook.sheet("Student Profile")
+      headers = sheet.row(1)
+
+      expected_headers = [
+        "UIN",
+        "Name",
+        "Email",
+        "Track",
+        "Year",
+        "Advisor",
+        "Google Sites URL",
+        "Submitted At",
+        "Latest Course Semester",
+        "Courses With Evidence",
+        "Course Evidence Rows",
+        "Course Competencies",
+        "Course Targets Met",
+        "Below Course Target",
+        "No Course Target",
+        "Course Target Met Rate"
+      ]
+      assert_equal expected_headers, headers
+
+      row = (2..sheet.last_row).map { |index| sheet.row(index) }.find { |candidate| candidate[2] == student.user.email }
+      assert row, "Expected exported workbook to include #{student.user.email}"
+      assert_equal student.uin, row[0]
+      assert_equal student.user.display_name, row[1]
+      assert_equal student.user.email, row[2]
+      assert_equal student.track, row[3]
+      assert_equal student.program_year.to_s, row[4]
+      assert_equal "https://sites.google.com/example/program-review-profile", row[6]
+      assert_equal "Fall 2025", row[8]
+      assert_equal 2, row[9]
+      assert_equal 3, row[10]
+      assert_equal 3, row[11]
+      assert_equal 1, row[12]
+      assert_equal 1, row[13]
+      assert_equal 1, row[14]
+      assert_equal 50.0, row[15]
+    end
   end
 
   test "show allows advisor access" do
@@ -345,7 +550,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_redirected_to dashboard_path
-    assert_equal "Reports are available only to administrators and advisors.", flash[:alert]
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   # Access Control Tests - export_pdf action
@@ -377,7 +582,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get export_reports_pdf_path(section: "all")
 
     assert_redirected_to dashboard_path
-    assert_equal "Reports are available only to administrators and advisors.", flash[:alert]
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   # Access Control Tests - export_excel action
@@ -411,7 +616,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get export_reports_excel_path
 
     assert_redirected_to dashboard_path
-    assert_equal "Reports are available only to administrators and advisors.", flash[:alert]
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   # PDF Export Tests
@@ -918,5 +1123,41 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
       .map { |link| link["href"] }
 
     assert_includes hrefs, expected_path, "Expected #{label} link to #{expected_path}; found #{hrefs.inspect}"
+  end
+
+  def assert_link_path_and_query(label, expected_path, expected_query)
+    link = css_select("a").find { |anchor| anchor.text.squish == label }
+    assert link, "Expected to find #{label.inspect} link"
+
+    uri = URI.parse(link["href"])
+    assert_equal expected_path, uri.path
+
+    query = Rack::Utils.parse_nested_query(uri.query)
+    expected_query.each do |key, value|
+      assert_equal value, query[key], "Expected #{label} query #{key}=#{value.inspect}; found #{query.inspect}"
+    end
+  end
+
+  def create_profile_evidence(batch:, file:, student:, course_code:, competency_title:, mapped_level:, course_target_level:, fingerprint:)
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: student,
+      assignment_name: "Program Review Evidence",
+      course_code: course_code,
+      competency_title: competency_title,
+      raw_grade: mapped_level,
+      mapped_level: mapped_level,
+      course_target_level: course_target_level,
+      source_key: fingerprint,
+      import_fingerprint: fingerprint
+    )
+  end
+
+  def open_xlsx_response(prefix)
+    Tempfile.create([ prefix, ".xlsx" ], binmode: true) do |file|
+      file.write(response.body)
+      file.flush
+      yield Roo::Excelx.new(file.path)
+    end
   end
 end

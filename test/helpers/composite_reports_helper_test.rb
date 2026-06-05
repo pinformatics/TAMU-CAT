@@ -44,6 +44,7 @@ class CompositeReportsHelperTest < ActionView::TestCase
     assert_equal "Some details", composite_display_answer({ "answer" => "Other", "text" => "Some details" })
     assert_equal "Yes", composite_display_answer("Yes")
     assert_equal "A, B", composite_display_answer([ "A", "B" ])
+    assert_equal "One, Two", composite_display_answer({ value: [ "One", "Two" ], text: "" })
   end
 
   test "proficiency_option_pairs_for keeps 0 values and falls back to defaults" do
@@ -54,6 +55,16 @@ class CompositeReportsHelperTest < ActionView::TestCase
 
     pairs = proficiency_option_pairs_for(nil)
     assert_equal DEFAULT_PROFICIENCY_OPTION_PAIRS, pairs
+  end
+
+  test "proficiency options insert or append zero when missing" do
+    question_with_one = Struct.new(:answer_option_pairs).new([ [ "One", "1" ], [ "Two", "2" ] ])
+    inserted = proficiency_option_pairs_for(question_with_one)
+    assert_equal [ "Not able to assess (0)", "0" ], inserted.second
+
+    question_without_one = Struct.new(:answer_option_pairs).new([ [ "Two", "2" ], [ "Three", "3" ] ])
+    appended = proficiency_option_pairs_for(question_without_one)
+    assert_equal [ "Not able to assess (0)", "0" ], appended.last
   end
 
   test "normalize_proficiency_value normalizes numeric inputs" do

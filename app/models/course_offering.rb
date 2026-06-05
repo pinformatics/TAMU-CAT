@@ -14,6 +14,7 @@ class CourseOffering < ApplicationRecord
   has_many :grade_import_files, dependent: :nullify
   has_many :grade_competency_evidences, dependent: :nullify
   has_many :grade_import_pending_rows, dependent: :nullify
+  has_many :course_competency_targets, dependent: :destroy
 
   before_validation :normalize_section_number
   before_validation :derive_source_code
@@ -94,6 +95,10 @@ class CourseOffering < ApplicationRecord
 
   def display_code
     source_code.presence || [ course&.catalog_code, section_number ].compact_blank.join("-")
+  end
+
+  def course_code
+    display_code
   end
 
   def display_name

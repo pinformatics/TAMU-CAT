@@ -192,7 +192,7 @@ Invoke-Checked docker @("compose", "exec", "-T", $DbService, "rm", "-f", "/tmp/p
 
 if (-not $SkipMigrate) {
   Write-Host "Running local Rails migrations on '$LocalDatabase'..."
-  Invoke-Checked docker @("compose", "run", "--rm", "-e", "DATABASE=$LocalDatabase", $AppService, "bin/rails", "db:migrate")
+  Invoke-Checked docker @("compose", "run", "--rm", "-e", "RAILS_ENV=development", "-e", "DATABASE=$LocalDatabase", $AppService, "bin/rails", "db:migrate")
 }
 
 Write-Host ""

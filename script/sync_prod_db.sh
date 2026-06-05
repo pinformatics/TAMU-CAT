@@ -236,7 +236,7 @@ docker compose exec -T "$DB_SERVICE" rm -f /tmp/prod.dump
 
 if [[ "$SKIP_MIGRATE" -ne 1 ]]; then
   echo "Running local Rails migrations on '$LOCAL_DATABASE'..."
-  docker compose run --rm -e "DATABASE=$LOCAL_DATABASE" "$APP_SERVICE" bin/rails db:migrate
+  docker compose run --rm -e "RAILS_ENV=development" -e "DATABASE=$LOCAL_DATABASE" "$APP_SERVICE" bin/rails db:migrate
 fi
 
 echo

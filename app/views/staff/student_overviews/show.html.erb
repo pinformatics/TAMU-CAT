@@ -13,10 +13,15 @@
 
           <div class="u-actions">
             <%= link_to "Export history CSV", competency_history_student_overview_path(@student), class: button_classes(:secondary), data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student-level competency data") } %>
-            <%= link_to "Detailed competencies", admin_competency_path(@student), class: button_classes(:secondary), data: { turbo: false } %>
+            <% detailed_competency_path = current_user&.role_advisor? ? competency_path(@student) : admin_competency_path(@student) %>
+            <%= link_to "Detailed competencies", detailed_competency_path, class: button_classes(:secondary), data: { turbo: false } %>
             <%= link_to "Back to overviews", student_overviews_path, class: button_classes(:secondary), data: { turbo: false } %>
           </div>
         </header>
+
+        <div class="c-callout c-callout--warning c-ferpa-export-notice">
+          <p><%= ferpa_export_notice("Student-level competency history exports") %></p>
+        </div>
       </section>
 
       <div class="c-student-overview-layout">
@@ -153,7 +158,8 @@
                             download_survey_response_path(row[:survey_response], token: row[:download_token]),
                             class: button_classes(:secondary),
                             target: "_blank",
-                            rel: "noopener noreferrer" %>
+                            rel: "noopener noreferrer",
+                            data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student survey response data") } %>
                     </div>
                   </article>
                 <% end %>
@@ -174,34 +180,57 @@
               <%= link_to "Download CSV", competency_history_student_overview_path(@student), class: button_classes(:secondary), data: { turbo: false, turbo_confirm: ferpa_export_confirmation("student-level competency data") } %>
             </header>
 
-            <% if @course_history_rows.present? %>
-              <div class="c-table-wrapper">
-                <table class="c-table">
-                  <thead>
-                    <tr>
-                      <th>Semester</th>
-                      <th>Course</th>
-                      <th>Competency</th>
-                      <th>Assessed</th>
-                      <th>Course Target</th>
-                      <th>Status</th>
-                      <th>Source</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <% @course_history_rows.each do |row| %>
-                      <tr>
-                        <td><%= row[:semester] %></td>
-                        <td><%= row[:course_code].presence || "-" %></td>
-                        <td><%= row[:competency_title] %></td>
-                        <td><%= row[:assessed_level] %></td>
-                        <td><%= row[:target_level].presence || "-" %></td>
-                        <td><%= row[:target_status] %></td>
-                        <td><%= row[:source_file].presence || "Import" %></td>
-                      </tr>
-                    <% end %>
-                  </tbody>
-                </table>
+            <% if @course_history_groups.present? %>
+              <div class="u-stack u-stack--sm">
+                <% @course_history_groups.each do |group| %>
+                  <details class="c-accordion">
+                    <summary class="c-accordion__summary c-accordion__summary--wrap">
+                      <div class="u-stack u-stack--xs">
+                        <span class="c-accordion__title"><%= group[:course_code] %></span>
+                        <span class="c-muted-meta"><%= group[:semester] %> &middot; <%= group[:source_file] %></span>
+                      </div>
+                      <span class="c-accordion__meta c-accordion__meta--wrap">
+                        <%= pluralize(group[:competency_count], "competency") %>
+                        <% if group[:met_count].positive? %>
+                          <span class="c-score-pill c-score-pill--met"><%= group[:met_count] %> met</span>
+                        <% end %>
+                        <% if group[:below_target_count].positive? %>
+                          <span class="c-score-pill c-score-pill--below"><%= group[:below_target_count] %> below</span>
+                        <% end %>
+                        <% if group[:no_target_count].positive? %>
+                          <span class="c-score-pill c-score-pill--no-target"><%= group[:no_target_count] %> no target</span>
+                        <% end %>
+                        <span class="c-accordion__action">
+                          <span class="c-accordion__action-closed">Show details</span>
+                          <span class="c-accordion__action-open">Hide details</span>
+                        </span>
+                      </span>
+                    </summary>
+
+                    <div class="c-table-wrapper">
+                      <table class="c-table c-table--sm">
+                        <thead>
+                          <tr>
+                            <th>Competency</th>
+                            <th>Assessed</th>
+                            <th>Course Target</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% group[:rows].each do |row| %>
+                            <tr>
+                              <td><%= row[:competency_title] %></td>
+                              <td><%= row[:assessed_level] %></td>
+                              <td><%= row[:target_level].presence || "-" %></td>
+                              <td><%= row[:target_status] %></td>
+                            </tr>
+                          <% end %>
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                <% end %>
               </div>
             <% else %>
               <div class="c-empty-state c-empty-state--compact">

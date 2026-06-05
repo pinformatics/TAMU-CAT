@@ -16,7 +16,7 @@ class StudentPortfolioExportsController < ApplicationController
   def require_export_access!
     return if current_user&.role_admin? || current_user&.role_advisor?
 
-    redirect_to dashboard_path, alert: "Portfolio exports are available only to administrators and advisors."
+    redirect_to dashboard_path, alert: STAFF_ONLY_MESSAGE
   end
 
   def filter_params

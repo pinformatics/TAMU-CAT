@@ -39,6 +39,35 @@ class CompositeReportCacheTest < ActiveSupport::TestCase
     assert_equal "value", File.binread(fresh.path)
   end
 
+  test "nonexistent generated paths are not cached" do
+    result = CompositeReportCache.fetch("missing", "fingerprint") { Rails.root.join("tmp", "does-not-exist.pdf").to_s }
+
+    assert_nil result
+  end
+
+  test "ttl can be omitted and malformed metadata is cleaned up" do
+    result = CompositeReportCache.fetch("no ttl", "fingerprint", ttl: nil) { build_pdf("value") }
+    assert result.path
+
+    cache = CompositeReportCache.send(:instance)
+    safe_key = cache.send(:safe_name, "no ttl")
+    File.write(cache.send(:metadata_path, safe_key), "{bad json")
+
+    assert_nil cache.send(:read_entry, safe_key)
+    refute File.exist?(cache.send(:metadata_path, safe_key))
+    refute File.exist?(cache.send(:pdf_path, safe_key))
+  end
+
+  test "safe names handle blank and symbol-heavy keys" do
+    cache = CompositeReportCache.send(:instance)
+
+    blank_name = cache.send(:safe_name, "")
+    symbolic_name = cache.send(:safe_name, "student/123 report!")
+
+    assert_match(/\A[a-f0-9]{24}\z/, blank_name)
+    assert_match(/\Astudent-123-report-+-[a-f0-9]{24}\z/, symbolic_name)
+  end
+
   test "evicts least recently used entries" do
     original_max = CompositeReportCache::MAX_ENTRIES
     CompositeReportCache.send(:remove_const, :MAX_ENTRIES)
@@ -65,6 +94,23 @@ class CompositeReportCacheTest < ActiveSupport::TestCase
   ensure
     CompositeReportCache.send(:remove_const, :MAX_ENTRIES)
     CompositeReportCache.const_set(:MAX_ENTRIES, original_max)
+    CompositeReportCache.reset!
+  end
+
+  test "evicts entries when byte limit is exceeded" do
+    original_max_bytes = CompositeReportCache::MAX_BYTES
+    CompositeReportCache.send(:remove_const, :MAX_BYTES)
+    CompositeReportCache.const_set(:MAX_BYTES, 8)
+    CompositeReportCache.reset!
+
+    CompositeReportCache.fetch("small-1", "fingerprint") { build_pdf("12345") }
+    CompositeReportCache.fetch("small-2", "fingerprint") { build_pdf("67890") }
+
+    regenerated = CompositeReportCache.fetch("small-1", "fingerprint") { build_pdf("abcde") }
+    assert_equal "abcde", File.binread(regenerated.path)
+  ensure
+    CompositeReportCache.send(:remove_const, :MAX_BYTES)
+    CompositeReportCache.const_set(:MAX_BYTES, original_max_bytes)
     CompositeReportCache.reset!
   end
 

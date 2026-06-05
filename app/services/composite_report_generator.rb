@@ -10,7 +10,7 @@ class CompositeReportGenerator
 
   CACHE_TTL = 6.hours
   MAX_EVIDENCE_HISTORY = Integer(ENV.fetch("COMPOSITE_REPORT_MAX_EVIDENCE_HISTORY", 5))
-  PDF_RENDER_VERSION = 2
+  PDF_RENDER_VERSION = 3
   # Lightweight value object so callers can ensure temporary files are cleaned up.
   class Result
     attr_reader :path, :size_bytes

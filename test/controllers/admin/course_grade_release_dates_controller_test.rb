@@ -39,6 +39,23 @@ class Admin::CourseGradeReleaseDatesControllerTest < ActionDispatch::Integration
     assert_nil @semester.reload.course_grade_release_date
   end
 
+  test "duplicate release date create renders the new form" do
+    sign_in @admin
+    @semester.create_course_grade_release_date!(release_date: 2.days.from_now)
+
+    assert_no_difference "CourseGradeReleaseDate.count" do
+      post admin_course_grade_release_dates_path, params: {
+        course_grade_release_date: {
+          program_semester_id: @semester.id,
+          release_date: 1.day.from_now.strftime("%Y-%m-%dT%H:%M")
+        }
+      }
+    end
+
+    assert_response :success
+    assert_includes response.body, "Set Release Date"
+  end
+
   test "clearing an embargoed release date enqueues course result notifications" do
     sign_in @admin
     release = @semester.course_grade_release_date || @semester.build_course_grade_release_date
@@ -65,6 +82,38 @@ class Admin::CourseGradeReleaseDatesControllerTest < ActionDispatch::Integration
     end
 
     assert_redirected_to admin_course_grade_release_dates_path
+  end
+
+  test "bulk update reports no changes when dates already match" do
+    sign_in @admin
+    release_at = 4.days.from_now.change(sec: 0)
+    @semester.create_course_grade_release_date!(release_date: release_at)
+
+    assert_no_difference -> { AdminActivityLog.where(action: "course_release_date_update").count } do
+      assert_no_enqueued_jobs only: CourseCompetencyReleaseNotificationJob do
+        patch bulk_update_admin_course_grade_release_dates_path, params: {
+          release_dates: {
+            @semester.id => release_at.strftime("%Y-%m-%dT%H:%M")
+          }
+        }
+      end
+    end
+
+    assert_redirected_to admin_course_grade_release_dates_path
+    assert_match(/No release date changes/i, flash[:notice].to_s)
+  end
+
+  test "bulk update ignores unexpected release date payloads" do
+    sign_in @admin
+
+    assert_no_difference "CourseGradeReleaseDate.count" do
+      patch bulk_update_admin_course_grade_release_dates_path, params: {
+        release_dates: "not a permitted parameter hash"
+      }
+    end
+
+    assert_redirected_to admin_course_grade_release_dates_path
+    assert_match(/No release date changes/i, flash[:notice].to_s)
   end
 
   test "admin can bulk update release dates and audit changes" do

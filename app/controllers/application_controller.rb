@@ -3,9 +3,14 @@
 # accessors for views.
 class ApplicationController < ActionController::Base
   NAV_NOTIFICATION_LIMIT = 5
+  ADMIN_ONLY_MESSAGE = "This page is available only to administrators."
+  STAFF_ONLY_MESSAGE = "This page is available only to administrators and advisors."
+  ADVISOR_ONLY_MESSAGE = "This page is available only to advisors."
+  STUDENT_ONLY_MESSAGE = "This page is available only to students."
 
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   around_action :use_app_time_zone
+  before_action :set_ferpa_cache_headers
   before_action :redirect_for_maintenance_mode
   before_action :authenticate_user!
   before_action :enforce_read_only_when_impersonating
@@ -38,6 +43,12 @@ class ApplicationController < ActionController::Base
 
   def app_time_zone_name
     ENV.fetch("APP_TIME_ZONE", "Central Time (US & Canada)")
+  end
+
+  def set_ferpa_cache_headers
+    response.headers["Cache-Control"] = "no-store, private, max-age=0, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
   end
 
   # Safely extracts a return_to path for back/cancel links.
@@ -87,10 +98,23 @@ class ApplicationController < ActionController::Base
   #
   # @return [void]
   def load_notification_state
+    @notification_menu_limit = NAV_NOTIFICATION_LIMIT
+    unless in_app_notifications_enabled_for?(current_user)
+      @unread_notification_count = 0
+      @recent_notifications = Notification.none
+      return
+    end
+
     notifications_scope = current_user.notifications
     @unread_notification_count = notifications_scope.unread.count
-    @notification_menu_limit = NAV_NOTIFICATION_LIMIT
     @recent_notifications = notifications_scope.unread.recent.limit(NAV_NOTIFICATION_LIMIT)
+  end
+
+  def in_app_notifications_enabled_for?(user)
+    return true unless user
+    return true unless user.respond_to?(:in_app_notifications_enabled?)
+
+    user.in_app_notifications_enabled?
   end
 
   # When enabled, redirects non-admin users to the maintenance page.
@@ -207,10 +231,25 @@ class ApplicationController < ActionController::Base
         action: action_name,
         format: request.format.symbol,
         path: request.fullpath,
-        filters: params.to_unsafe_h.except("controller", "action", "format")
+        filters: export_audit_filters
       }.merge(metadata || {})
     )
   rescue StandardError => e
     Rails.logger.warn("[ExportAudit] Failed to record export audit: #{e.class}: #{e.message}")
+  end
+
+  def export_audit_filters
+    raw_filters = params.to_unsafe_h.except(
+      "controller",
+      "action",
+      "format",
+      "authenticity_token",
+      "commit",
+      "utf8"
+    )
+
+    ActiveSupport::ParameterFilter
+      .new(Rails.application.config.filter_parameters)
+      .filter(raw_filters)
   end
 end
