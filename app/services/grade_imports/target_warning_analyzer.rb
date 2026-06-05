@@ -101,6 +101,8 @@ module GradeImports
     end
 
     def configured_course_target_lookup(rows)
+      return {} unless configured_course_targets_ready?
+
       pairs = rows.filter_map do |row|
         course_offering_id = row[:course_offering_id]
         competency_id = row[:competency_id]
@@ -117,6 +119,13 @@ module GradeImports
         .each_with_object({}) do |(course_offering_id, competency_id, target_level), lookup|
           lookup[[ course_offering_id, competency_id ]] = target_level
         end
+    end
+
+    def configured_course_targets_ready?
+      %i[
+        course_competency_targets
+        course_offerings
+      ].all? { |table_name| ActiveRecord::Base.connection.data_source_exists?(table_name) }
     end
 
     def examples_for(rows)

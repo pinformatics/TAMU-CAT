@@ -87,6 +87,33 @@ class GradeImports::TargetWarningAnalyzerTest < ActiveSupport::TestCase
     assert_equal 2, mismatch[:configured_course_target]
   end
 
+  test "missing configured target table does not crash warning analysis" do
+    competency = create_competency!("Configured Target Missing Table")
+    batch = create_batch
+    file = create_file(batch)
+    create_evidence!(
+      batch: batch,
+      file: file,
+      course_code: "PHPM-643-700",
+      competency_title: competency.title,
+      course_target_level: 4,
+      fingerprint: "fingerprint-configured-target-table-missing"
+    )
+
+    connection = ActiveRecord::Base.connection
+    original_data_source_exists = connection.method(:data_source_exists?)
+
+    connection.stub(:data_source_exists?, ->(table_name) {
+      table_name.to_s == "course_competency_targets" ? false : original_data_source_exists.call(table_name)
+    }) do
+      summary = GradeImports::TargetWarningAnalyzer.call(batch: batch)
+
+      refute summary[:requires_review]
+      assert_equal 0, summary.dig(:counts, :mismatched_configured_course_targets)
+      assert_empty summary[:mismatched_configured_course_targets]
+    end
+  end
+
   private
 
   def create_batch

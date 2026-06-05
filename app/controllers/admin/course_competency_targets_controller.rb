@@ -1,4 +1,5 @@
 class Admin::CourseCompetencyTargetsController < Admin::BaseController
+  before_action :ensure_course_targets_ready
   before_action :set_course_competency_target, only: %i[update destroy]
 
   def create
@@ -30,6 +31,18 @@ class Admin::CourseCompetencyTargetsController < Admin::BaseController
   end
 
   private
+
+  def ensure_course_targets_ready
+    return if %i[
+      departments
+      courses
+      course_offerings
+      course_competency_targets
+    ].all? { |table_name| ActiveRecord::Base.connection.data_source_exists?(table_name) }
+
+    redirect_to course_targets_tab_path(params.dig(:course_competency_target, :program_semester_id).presence),
+                alert: "Course target setup is waiting on the V6 database migration. Run the latest migrations, then try again."
+  end
 
   def set_course_competency_target
     @course_competency_target = CourseCompetencyTarget.find(params[:id])

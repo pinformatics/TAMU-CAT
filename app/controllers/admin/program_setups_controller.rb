@@ -32,6 +32,14 @@ class Admin::ProgramSetupsController < Admin::BaseController
     @course_target_semesters = ProgramSemester.ordered
     @selected_course_target_semester_id = params[:course_target_program_semester_id].presence&.to_i || ProgramSemester.current&.id
     @course_target_competencies = Competency.ordered
+    @course_targets_ready = course_targets_data_source_ready?
+
+    unless @course_targets_ready
+      @course_competency_targets = []
+      @course_target_coverage = course_target_coverage(@course_competency_targets)
+      return
+    end
+
     @new_course_competency_target = CourseCompetencyTarget.new
 
     scope = CourseCompetencyTarget
@@ -56,6 +64,15 @@ class Admin::ProgramSetupsController < Admin::BaseController
       course_count: course_count,
       competency_count: competency_count
     }
+  end
+
+  def course_targets_data_source_ready?
+    %i[
+      departments
+      courses
+      course_offerings
+      course_competency_targets
+    ].all? { |table_name| ActiveRecord::Base.connection.data_source_exists?(table_name) }
   end
 
   def load_target_levels_state

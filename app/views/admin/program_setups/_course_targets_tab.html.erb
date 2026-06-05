@@ -6,6 +6,11 @@
     </div>
   </header>
 
+  <% unless @course_targets_ready %>
+    <div class="c-callout c-callout--warning">
+      Course target setup is waiting on the V6 database migration. Run the latest migrations, then reload this tab.
+    </div>
+  <% else %>
   <%= form_with url: admin_program_setup_path, method: :get, local: true, data: { turbo: false } do %>
     <%= hidden_field_tag :tab, "course_targets" %>
     <div class="c-card c-card--tight u-stack u-stack--md">
@@ -188,4 +193,5 @@
       <% end %>
     </aside>
   </div>
+  <% end %>
 </section>

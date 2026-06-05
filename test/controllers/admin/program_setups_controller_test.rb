@@ -107,6 +107,21 @@ class Admin::ProgramSetupsControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name='course_competency_target[target_level]']"
   end
 
+  test "course target tab shows migration warning instead of crashing when table is missing" do
+    connection = ActiveRecord::Base.connection
+    original_data_source_exists = connection.method(:data_source_exists?)
+
+    connection.stub(:data_source_exists?, ->(table_name) {
+      table_name.to_s == "course_competency_targets" ? false : original_data_source_exists.call(table_name)
+    }) do
+      get admin_program_setup_path(tab: "course_targets")
+    end
+
+    assert_response :success
+    assert_includes response.body, "Course target setup is waiting on the V6 database migration"
+    refute_includes response.body, "Save course target"
+  end
+
   test "admin can create and update course competency targets" do
     semester = program_semesters(:fall_2025)
     competency = create_test_competency!("Course Target CRUD")
