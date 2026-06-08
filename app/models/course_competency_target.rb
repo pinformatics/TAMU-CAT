@@ -1,4 +1,11 @@
 class CourseCompetencyTarget < ApplicationRecord
+  REQUIRED_DATA_SOURCES = %i[
+    departments
+    courses
+    course_offerings
+    course_competency_targets
+  ].freeze
+
   belongs_to :course_offering
   belongs_to :competency
 
@@ -20,6 +27,10 @@ class CourseCompetencyTarget < ApplicationRecord
         "competencies.title ASC"
       )
   }
+
+  def self.data_source_ready?
+    REQUIRED_DATA_SOURCES.all? { |table_name| ActiveRecord::Base.connection.data_source_exists?(table_name) }
+  end
 
   def course_code
     course_offering&.display_code

@@ -109,6 +109,8 @@ class GradeImports::TargetWarningAnalyzerTest < ActiveSupport::TestCase
       summary = GradeImports::TargetWarningAnalyzer.call(batch: batch)
 
       refute summary[:requires_review]
+      refute summary[:configured_course_targets_available]
+      assert_includes summary[:configured_course_targets_note], "Configured course target comparison is unavailable"
       assert_equal 0, summary.dig(:counts, :mismatched_configured_course_targets)
       assert_empty summary[:mismatched_configured_course_targets]
     end

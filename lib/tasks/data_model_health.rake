@@ -11,7 +11,11 @@ namespace :data_model do
       puts section.label
       section.checks.each do |check|
         status = check.ok? ? "OK" : check.severity.to_s.upcase
-        puts "  [#{status}] #{check.label}: #{check.count}"
+        if check.ok? && check.key.to_s.start_with?("missing_")
+          puts "  [#{status}] #{check.label.delete_prefix('Missing ')} present"
+        else
+          puts "  [#{status}] #{check.label}: #{check.count}"
+        end
       end
       puts
     end

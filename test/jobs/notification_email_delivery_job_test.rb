@@ -29,6 +29,24 @@ class NotificationEmailDeliveryJobTest < ActiveJob::TestCase
     end
   end
 
+  test "notification email uses an absolute app link when the notification has a target" do
+    assignment = survey_assignments(:residential_assignment)
+    notification = Notification.deliver!(
+      user: @user,
+      title: "Survey Link Test",
+      message: "A survey is ready.",
+      notifiable: assignment
+    )
+
+    with_email_notifications_enabled do
+      NotificationEmailDeliveryJob.perform_now(notification_id: notification.id)
+    end
+
+    email = ActionMailer::Base.deliveries.last
+    assert_match %r{https?://example\.com/surveys/#{assignment.survey_id}}, email.text_part.body.to_s
+    assert_match %r{https?://example\.com/surveys/#{assignment.survey_id}}, email.html_part.body.to_s
+  end
+
   test "skips email when app email notification flag is disabled" do
     ENV.delete("EMAIL_NOTIFICATIONS_ENABLED")
 

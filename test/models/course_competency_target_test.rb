@@ -60,6 +60,19 @@ class CourseCompetencyTargetTest < ActiveSupport::TestCase
     assert_includes migration, "create_table :course_competency_targets"
   end
 
+  test "data source readiness reports missing v6 course target tables" do
+    connection = ActiveRecord::Base.connection
+    original_data_source_exists = connection.method(:data_source_exists?)
+
+    assert CourseCompetencyTarget.data_source_ready?
+
+    connection.stub(:data_source_exists?, ->(table_name) {
+      table_name.to_s == "course_competency_targets" ? false : original_data_source_exists.call(table_name)
+    }) do
+      refute CourseCompetencyTarget.data_source_ready?
+    end
+  end
+
   private
 
   def create_competency!(title)

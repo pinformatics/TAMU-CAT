@@ -444,6 +444,17 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, students(:student).user.email
   end
 
+  test "people management student search supports UIN" do
+    sign_in @admin
+    student = students(:student)
+
+    get people_management_path, params: { tab: "students", q: student.uin }
+
+    assert_response :success
+    assert_includes response.body, "Search by name, email, UIN, student ID, or class year"
+    assert_includes response.body, student.user.email
+  end
+
   test "advisor dashboard recreates missing advisor profile" do
     advisor_user = users(:advisor)
     Advisor.where(advisor_id: advisor_user.id).delete_all

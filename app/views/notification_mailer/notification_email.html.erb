@@ -2,6 +2,6 @@
 
 <p><%= simple_format(@notification.display_message) %></p>
 
-<% if @target_path.present? %>
-  <p><%= link_to "View in TAMU Competency Assessment Tracking", @target_path %></p>
+<% if @target_url.present? %>
+  <p><%= link_to "View in TAMU Competency Assessment Tracking", @target_url %></p>
 <% end %>

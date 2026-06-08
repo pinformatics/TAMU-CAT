@@ -689,7 +689,7 @@ class DashboardsController < ApplicationController
     if params[:q].present?
       q = params[:q].strip
       @students = @students.where(
-        "users.name ILIKE :q OR users.email ILIKE :q OR users.uid::text ILIKE :q OR students.student_id::text ILIKE :q OR students.program_year::text ILIKE :q",
+        "users.name ILIKE :q OR users.email ILIKE :q OR users.uid::text ILIKE :q OR students.uin ILIKE :q OR students.student_id::text ILIKE :q OR students.program_year::text ILIKE :q",
         q: "%#{q}%"
       )
     end

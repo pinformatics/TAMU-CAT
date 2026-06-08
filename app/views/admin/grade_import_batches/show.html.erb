@@ -265,6 +265,12 @@
         </div>
       </section>
 
+      <% if @target_warning_summary[:configured_course_targets_note].present? && @target_warning_summary.dig(:counts, :rows_checked).to_i.positive? %>
+        <div class="c-callout c-callout--warning">
+          <%= @target_warning_summary[:configured_course_targets_note] %>
+        </div>
+      <% end %>
+
       <% if target_review_required %>
         <details class="c-card c-card--flush c-section-group" open>
           <summary class="c-section-group__header">

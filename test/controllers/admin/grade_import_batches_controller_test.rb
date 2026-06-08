@@ -1242,6 +1242,49 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_match "target-warning", flash[:alert]
   end
 
+  test "show explains when configured course target comparison is unavailable" do
+    semester = program_semesters(:fall_2025)
+    competency = create_test_competency!("Configured Target Unavailable")
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: semester,
+      status: "completed",
+      summary: { "dry_run" => true }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "configured-target-unavailable.csv",
+      file_checksum: "checksum-configured-target-unavailable",
+      status: "processed",
+      imported_rows: 1
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Final Project",
+      course_code: "PHPM-631-600",
+      competency_title: competency.title,
+      raw_grade: 91,
+      mapped_level: 4,
+      course_target_level: 5,
+      row_number: 2,
+      source_key: "source-configured-target-unavailable",
+      import_fingerprint: "fingerprint-configured-target-unavailable"
+    )
+
+    connection = ActiveRecord::Base.connection
+    original_data_source_exists = connection.method(:data_source_exists?)
+
+    connection.stub(:data_source_exists?, ->(table_name) {
+      table_name.to_s == "course_competency_targets" ? false : original_data_source_exists.call(table_name)
+    }) do
+      get admin_grade_import_batch_path(batch)
+    end
+
+    assert_response :success
+    assert_includes response.body, "Configured course target comparison is unavailable"
+    refute_includes response.body, "Configured Course Target Mismatches"
+  end
+
   test "show renders pending student matches with manual correction controls" do
     batch = GradeImportBatch.create!(
       uploaded_by: @admin,

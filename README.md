@@ -46,7 +46,10 @@ Need deeper walkthroughs for environment variables, setup screenshots, or deploy
 | `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` | Override local Postgres settings. |
 | `DATABASE_URL` | Full connection string (CI/production). |
 | `RAILS_MASTER_KEY` | Unlocks encrypted credentials files. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OAUTH_REDIRECT_URI` | Google OAuth client settings. |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `OAUTH_REDIRECT_URI` | Google OAuth client settings. |
+| `EMAIL_NOTIFICATIONS_ENABLED` | Enables outbound notification emails when set to `true`. |
+| `APP_HOST`, `APP_PROTOCOL` | Host and protocol used in generated email links. `APP_HOST` is required when email notifications are enabled. |
+| `MAILER_FROM`, `SMTP_ADDRESS`, `SMTP_PORT`, `SMTP_DOMAIN`, `SMTP_USER_NAME`, `SMTP_PASSWORD` | SMTP sender and delivery settings for production email. |
 | `ENABLE_ROLE_SWITCH` | QA-only impersonation toggle. |
 | `PORT` | Custom dev server port (defaults to `3000`). |
 
@@ -142,7 +145,7 @@ docker compose up --build
 
 ### Optional: sync local DB from Heroku production
 
-Use this when you need production-like student/import data locally instead of seeded demo data. The script downloads a Heroku Postgres backup from app `mha501`, drops only the local Docker development database, and restores the backup into local Postgres.
+Use this when you need production-like student/import data locally instead of seeded demo data. The script downloads a Heroku Postgres backup from app `mha501`, drops only the local Docker development database, restores the backup into local Postgres, runs migrations, and checks V6 course schema readiness.
 
 Windows PowerShell:
 
@@ -175,6 +178,7 @@ Important:
 
 - production DB data is not modified
 - the local `tamu_cat_development` database is dropped and recreated
+- V6 course tables are checked after migrations with `bin/rails v6:readiness`
 - use `-UseLatestBackup` / `--use-latest-backup` to skip capturing a fresh Heroku backup and download the latest existing backup
 - use `-SkipConfirm` / `--skip-confirm` only for trusted local automation
 
