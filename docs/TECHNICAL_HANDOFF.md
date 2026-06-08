@@ -49,7 +49,7 @@ This document summarizes the current operating state of TAMU Competency Assessme
 - Production SMTP is configured through environment variables. Confirm `APP_HOST`, `APP_PROTOCOL`, `MAILER_FROM`, and the `SMTP_*` settings before relying on email delivery.
 - `config.active_storage.service = :local` in production. On Heroku this is not persistent across dyno restarts, so uploads should be moved to S3/GCS/Azure or another durable service before relying on long-term uploaded file retention.
 - `config/deploy.yml` is still a Kamal template with placeholder values such as `your-user`, `192.168.0.1`, and `app.example.com`. Do not treat it as production-ready without replacing those values.
-- Development Google OAuth credentials are hard-coded in `config/environments/development.rb`. Rotate them if they are real credentials, and prefer local credentials or environment variables going forward.
+- Development Google OAuth credentials are not committed. Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in a local `.env` file or shell environment when local Google sign-in testing is needed.
 - Seeded development data is useful but not representative enough for all import behavior. Import validation is most reliable against a sanitized production-like database clone.
 - Repository cleanup before handoff removed redirect-only dashboard templates, a duplicate static PDF layout, dated generated import sample outputs, local generated artifacts, and the tracked `config/master.key`. Transfer the Rails master key separately through a secure channel.
 
@@ -268,7 +268,7 @@ After rotating Google OAuth credentials:
 - Production background jobs need a deliberate decision: keep inline for simplicity or restore Solid Queue with worker capacity.
 - Production Active Storage needs durable object storage or explicit persistent volume management.
 - Mailer host and SMTP settings should be confirmed in production before depending on email delivery.
-- Development OAuth credentials should be removed from committed config and moved to environment/local credentials.
+- Keep development OAuth credentials out of committed config; use local environment variables for developer-only sign-in testing.
 - Admin UI remains the densest surface and needs continued smoke coverage.
 - Documentation is split between repo docs and the GitHub wiki; keep both updated when workflows change.
 

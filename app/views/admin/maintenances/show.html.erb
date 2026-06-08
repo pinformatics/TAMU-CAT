@@ -96,12 +96,13 @@
       <% if @data_model_health.present? %>
         <% issue_count = @data_model_health[:issue_count].to_i %>
         <% health_checks = @data_model_health[:sections].flat_map(&:checks).select { |check| check.count.to_i.positive? } %>
+        <% v6_schema_issue = @data_model_health[:sections].any? { |section| section.key == :v6_schema && !section.ok? } %>
         <section class="c-card c-card--spacious u-stack u-stack--md">
           <header class="u-responsive-split">
             <div>
               <p class="c-eyebrow">Guardrails</p>
               <h2 class="c-section-title c-heading-inline">Data Health</h2>
-              <p class="c-page-subtitle">Quick checks for lifecycle, advisor history, competency links, and course references.</p>
+              <p class="c-page-subtitle">Quick checks for V6 schema readiness, lifecycle, advisor history, competency links, and course references.</p>
             </div>
             <span class="c-status-badge <%= issue_count.zero? ? 'c-status-badge--success' : 'c-status-badge--info' %>">
               <%= issue_count.zero? ? "Clean" : pluralize(issue_count, "issue") %>
@@ -114,6 +115,16 @@
               <p class="c-lede">The current schema links and lifecycle defaults look consistent.</p>
             </div>
           <% else %>
+            <% if v6_schema_issue %>
+              <div class="c-callout c-callout--warning">
+                <div class="c-callout__title">V6 schema migration is incomplete</div>
+                <p>
+                  Course target setup, grade import target checks, and reports need the V6 course catalog tables.
+                  Reset or copy the dev database, then run migrations before testing these workflows.
+                </p>
+              </div>
+            <% end %>
+
             <div class="c-card c-card--flush c-table-wrapper">
               <table class="c-table">
                 <thead>

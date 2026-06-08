@@ -63,6 +63,11 @@ Rails.application.configure do
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.
   # config.action_mailer.raise_delivery_errors = false
 
+  email_notifications_enabled = ActiveModel::Type::Boolean.new.cast(ENV.fetch("EMAIL_NOTIFICATIONS_ENABLED", "false"))
+  if email_notifications_enabled && ENV["APP_HOST"].blank?
+    raise "APP_HOST is required when EMAIL_NOTIFICATIONS_ENABLED=true so email links point to the correct app."
+  end
+
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = {
     host: ENV.fetch("APP_HOST", "localhost:3000"),

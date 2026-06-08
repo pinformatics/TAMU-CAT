@@ -14,7 +14,8 @@ module GradeImports
 
     def call
       rows = warning_rows
-      apply_configured_course_targets!(rows)
+      configured_targets_available = CourseCompetencyTarget.data_source_ready?
+      apply_configured_course_targets!(rows) if configured_targets_available
       missing_course_targets = rows.select { |row| row[:course_target_level].blank? }
       mismatched_configured_course_targets = rows.select do |row|
         row[:course_target_level].present? &&
@@ -26,6 +27,8 @@ module GradeImports
         requires_review: missing_course_targets.any? || mismatched_configured_course_targets.any?,
         missing_course_targets: examples_for(missing_course_targets),
         mismatched_configured_course_targets: examples_for(mismatched_configured_course_targets),
+        configured_course_targets_available: configured_targets_available,
+        configured_course_targets_note: configured_course_targets_note(configured_targets_available),
         target_coverage: coverage_for(rows),
         counts: {
           rows_checked: rows.size,
@@ -101,8 +104,6 @@ module GradeImports
     end
 
     def configured_course_target_lookup(rows)
-      return {} unless configured_course_targets_ready?
-
       pairs = rows.filter_map do |row|
         course_offering_id = row[:course_offering_id]
         competency_id = row[:competency_id]
@@ -121,11 +122,10 @@ module GradeImports
         end
     end
 
-    def configured_course_targets_ready?
-      %i[
-        course_competency_targets
-        course_offerings
-      ].all? { |table_name| ActiveRecord::Base.connection.data_source_exists?(table_name) }
+    def configured_course_targets_note(available)
+      return if available
+
+      "Configured course target comparison is unavailable until the V6 course target tables are present. Uploaded target checks still run."
     end
 
     def examples_for(rows)

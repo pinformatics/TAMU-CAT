@@ -10,7 +10,25 @@ class DataModelHealthCheckTest < ActiveSupport::TestCase
     assert report[:sections].any? { |section| section.key == :competency_references }
     assert report[:sections].any? { |section| section.key == :target_level_consistency }
     assert report[:sections].any? { |section| section.key == :course_references }
+    assert report[:sections].any? { |section| section.key == :v6_schema }
     assert_operator report[:issue_count], :>=, 0
+  end
+
+  test "flags missing v6 course target schema tables as critical" do
+    connection = ActiveRecord::Base.connection
+    original_data_source_exists = connection.method(:data_source_exists?)
+
+    connection.stub(:data_source_exists?, ->(table_name) {
+      table_name.to_s == "course_competency_targets" ? false : original_data_source_exists.call(table_name)
+    }) do
+      report = DataModelHealthCheck.new.call
+      check = find_check(report, :missing_course_competency_targets)
+
+      assert_equal 1, check.count
+      assert_equal :critical, check.severity
+      assert_operator report[:critical_count], :>=, 1
+      assert_equal [ :v6_schema ], report[:sections].map(&:key)
+    end
   end
 
   test "flags current students without advisors" do

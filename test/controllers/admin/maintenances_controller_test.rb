@@ -19,6 +19,23 @@ class Admin::MaintenancesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Data Health"
   end
 
+  test "admin maintenance shows missing v6 schema readiness checks" do
+    sign_in @admin
+    connection = ActiveRecord::Base.connection
+    original_data_source_exists = connection.method(:data_source_exists?)
+
+    connection.stub(:data_source_exists?, ->(table_name) {
+      table_name.to_s == "course_competency_targets" ? false : original_data_source_exists.call(table_name)
+    }) do
+      get admin_maintenance_path
+    end
+
+    assert_response :success
+    assert_includes response.body, "V6 schema readiness"
+    assert_includes response.body, "V6 schema migration is incomplete"
+    assert_includes response.body, "Missing course_competency_targets table"
+  end
+
   test "admin can enable and disable maintenance" do
     sign_in @admin
 

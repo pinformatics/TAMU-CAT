@@ -16,7 +16,11 @@ class DataModelHealthCheck
   end
 
   def call
+    schema_section = v6_schema_section
+    return report_for([ schema_section ]) unless schema_section.ok?
+
     sections = [
+      schema_section,
       student_section,
       advisor_assignment_section,
       competency_reference_section,
@@ -24,6 +28,12 @@ class DataModelHealthCheck
       course_reference_section
     ]
 
+    report_for(sections)
+  end
+
+  private
+
+  def report_for(sections)
     {
       generated_at: Time.current,
       sections: sections,
@@ -33,7 +43,15 @@ class DataModelHealthCheck
     }
   end
 
-  private
+  def v6_schema_section
+    Section.new(
+      key: :v6_schema,
+      label: "V6 schema readiness",
+      checks: CourseCompetencyTarget::REQUIRED_DATA_SOURCES.map do |table_name|
+        check(:"missing_#{table_name}", "Missing #{table_name} table", missing_table_count(table_name), :critical)
+      end
+    )
+  end
 
   def student_section
     Section.new(
@@ -98,6 +116,10 @@ class DataModelHealthCheck
 
   def check(key, label, count, severity)
     Check.new(key: key, label: label, count: count.to_i, severity: severity)
+  end
+
+  def missing_table_count(table_name)
+    ActiveRecord::Base.connection.data_source_exists?(table_name) ? 0 : 1
   end
 
   def students_without_user_count
