@@ -1,4 +1,12 @@
 <% student_name = @student.user&.display_name || @student.full_name || @student.student_id %>
+<%
+  missing_profile_fields = [
+    ("track" if @student.track_key.blank?),
+    ("class year" if @student.program_year.blank?),
+    ("advisor" if @student.advisor_id.blank?),
+    ("UIN" if @student.uin.blank?)
+  ].compact
+%>
 
 <main class="c-main c-main--dashboard">
   <div class="c-container c-container--wide">
@@ -22,6 +30,13 @@
         <div class="c-callout c-callout--warning c-ferpa-export-notice">
           <p><%= ferpa_export_notice("Student-level competency history exports") %></p>
         </div>
+
+        <% if missing_profile_fields.present? %>
+          <div class="c-callout c-callout--warning" role="alert">
+            <div class="c-callout__title">Profile data needs attention</div>
+            <p class="c-help">This student is missing <%= missing_profile_fields.to_sentence %>, which is used for advisor assignment, reports, grade imports, and notifications.</p>
+          </div>
+        <% end %>
       </section>
 
       <div class="c-student-overview-layout">

@@ -62,6 +62,27 @@
         <% end %>
       </section>
 
+      <% if @student_profile_warnings.present? %>
+        <div class="c-callout c-callout--warning u-stack u-stack--sm" role="alert">
+          <div>
+            <div class="c-callout__title">Student profile data needs attention</div>
+            <p class="c-help">These current students are missing fields used for advisor assignment, reports, grade imports, and notifications.</p>
+          </div>
+
+          <div class="u-grid u-grid--dense" style="--u-grid-min: 220px">
+            <% @student_profile_warnings.each do |warning| %>
+              <div class="u-stack u-stack--xs">
+                <div class="u-actions u-actions--start u-gap-xs">
+                  <span class="c-pill c-pill--muted"><%= pluralize(warning[:count], "student") %></span>
+                  <span class="c-strong"><%= warning[:label] %></span>
+                </div>
+                <p class="c-help"><%= warning[:students].join(", ") %><%= warning[:count] > warning[:students].size ? ", and #{warning[:count] - warning[:students].size} more" : "" %></p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
       <section class="c-card c-card--spacious u-stack u-stack--lg" data-controller="tabs" data-tabs-default-id-value="student-overview-students">
         <header class="c-panel-header">
           <div>

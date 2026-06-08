@@ -3,6 +3,8 @@ require "set"
 # Presents role-aware dashboards and administrative utilities for students,
 # advisors, and administrators within the main application.
 class DashboardsController < ApplicationController
+  include StudentProfileWarnings
+
   skip_before_action :check_student_profile_complete, only: :switch_role
   before_action :ensure_profile_present, only: %i[student advisor]
   before_action :ensure_role_switch_allowed, only: :switch_role
@@ -711,27 +713,6 @@ class DashboardsController < ApplicationController
       archived: Student.archived_records.count
     }
     @can_manage = current_user.role_admin?
-  end
-
-  def build_student_profile_warnings(students)
-    warning_definitions = [
-      [ :missing_track, "Missing track", ->(student) { student.track_key.blank? } ],
-      [ :missing_class_year, "Missing class year", ->(student) { student.program_year.blank? } ],
-      [ :missing_advisor, "Unassigned advisor", ->(student) { student.advisor_id.blank? } ],
-      [ :missing_uin, "Missing UIN", ->(student) { student.uin.blank? } ]
-    ]
-
-    warning_definitions.filter_map do |key, label, predicate|
-      affected_students = Array(students).select { |student| predicate.call(student) }
-      next if affected_students.blank?
-
-      {
-        key: key,
-        label: label,
-        count: affected_students.size,
-        students: affected_students.first(4).map { |student| student_display_label(student) }
-      }
-    end
   end
 
   # Ensures the current user has the necessary profile record for their role.

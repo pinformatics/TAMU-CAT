@@ -5,6 +5,8 @@ require "caxlsx"
 # Staff-facing student overview hub. Admins see all students; advisors see only
 # assigned advisees.
 class StudentOverviewsController < ApplicationController
+  include StudentProfileWarnings
+
   before_action :require_staff_access!
 
   def index
@@ -80,6 +82,7 @@ class StudentOverviewsController < ApplicationController
     @student_lifecycle_filter_options = Student.lifecycle_filter_options
     @program_year_options = available_program_years
     @students = filtered_students.to_a
+    @student_profile_warnings = build_student_profile_warnings(@students.select(&:current_record?))
     insights = Reports::CompetencyInsights.new(user: current_user, params: heatmap_params).call
     @student_rows = overview_rows_for(@students, competency_attainment_lookup(insights[:target_attainment]))
     @heatmap_rows = insights[:heatmap]
