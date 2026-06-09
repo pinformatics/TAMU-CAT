@@ -2604,12 +2604,38 @@ function restoreGoogleTranslateAfterLoad() {
   window.addEventListener("load", () => window.setTimeout(restoreTranslation, 0), { once: true })
 }
 
+// When the user clicks "Show original" in Google's bar, Google removes the
+// translated-ltr/rtl class but leaves the googtrans cookie intact. Without this
+// watcher, opening the panel again would read the stale cookie and re-translate.
+function watchForGoogleTranslateShowOriginal() {
+  const target = document.documentElement
+  if (target.dataset.gtShowOriginalWatcher === "true") return
+  target.dataset.gtShowOriginalWatcher = "true"
+
+  new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type !== "attributes" || mutation.attributeName !== "class") continue
+      const wasTranslated =
+        mutation.oldValue?.includes("translated-ltr") || mutation.oldValue?.includes("translated-rtl")
+      const isNowEnglish =
+        !target.classList.contains("translated-ltr") && !target.classList.contains("translated-rtl")
+      if (wasTranslated && isNowEnglish) {
+        writeGoogleTranslateCookie("")
+        const appSelect = googleTranslateLanguageSelect()
+        if (appSelect) appSelect.value = ""
+        setGoogleTranslateStatus("Select a language.")
+      }
+    }
+  }).observe(target, { attributes: true, attributeOldValue: true, attributeFilter: ["class"] })
+}
+
 function initGoogleTranslateWidget() {
   if (!googleTranslateContainer()) return
 
   bindGoogleTranslateToggle()
   bindGoogleTranslateLanguageSelect()
   syncGoogleTranslateVisibleState()
+  watchForGoogleTranslateShowOriginal()
 
   restoreGoogleTranslateAfterLoad()
 }
