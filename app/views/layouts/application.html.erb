@@ -299,7 +299,7 @@
           }
 
           function mobileViewport() {
-            return window.matchMedia("(max-width: 768px)").matches;
+            return window.matchMedia("(max-width: 1024px)").matches;
           }
 
           function setOpen(drawer, open) {
@@ -328,18 +328,62 @@
             });
           }
 
+          var wasMobile = mobileViewport();
+
+          function setDrawerAnimated(drawer, animated) {
+            drawer.classList.toggle("is-animated", animated);
+          }
+
           function syncState() {
+            var isMobile = mobileViewport();
+            var crossingIntoMobile = isMobile && !wasMobile;
+            var crossingToDesktop = !isMobile && wasMobile;
+            wasMobile = isMobile;
+
+            // Strip animation on any viewport boundary crossing so the drawer
+            // snaps instantly rather than sliding in from a visible position.
+            // The CSS transition lives only on .is-animated, so removing it
+            // here wins the race against the media query — no JS timing needed.
+            if (crossingIntoMobile || crossingToDesktop) {
+              document.querySelectorAll("[data-mobile-nav-drawer]").forEach(function (drawer) {
+                setDrawerAnimated(drawer, false);
+              });
+            }
+
             document.querySelectorAll("[data-mobile-nav-drawer]").forEach(function (drawer) {
-              if (mobileViewport()) {
+              if (isMobile) {
                 drawer.setAttribute("aria-hidden", drawer.classList.contains("is-open") ? "false" : "true");
               } else {
                 setOpen(drawer, false);
                 drawer.removeAttribute("aria-hidden");
               }
             });
+
+            // Re-enable animation after the drawer has settled into position.
+            if (crossingIntoMobile) {
+              window.requestAnimationFrame(function () {
+                window.requestAnimationFrame(function () {
+                  document.querySelectorAll("[data-mobile-nav-drawer]").forEach(function (drawer) {
+                    setDrawerAnimated(drawer, true);
+                  });
+                });
+              });
+            }
           }
 
           syncState();
+
+          // Enable drawer animation after initial render — the drawer has now
+          // snapped to its correct off-screen position without any transition.
+          window.requestAnimationFrame(function () {
+            window.requestAnimationFrame(function () {
+              if (mobileViewport()) {
+                document.querySelectorAll("[data-mobile-nav-drawer]").forEach(function (drawer) {
+                  setDrawerAnimated(drawer, true);
+                });
+              }
+            });
+          });
 
           document.addEventListener("click", function (event) {
             var target = event.target && event.target.closest ? event.target : event.target.parentElement;
