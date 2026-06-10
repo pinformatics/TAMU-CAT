@@ -47,23 +47,15 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Install packages
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y build-essential git libpq-dev libyaml-dev pkg-config google-chrome-stable
+
+      - name: Start PostgreSQL
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql --command "ALTER USER postgres PASSWORD 'postgres';"
+          pg_isready -h localhost -p 5432 -U postgres
 
       - name: Checkout code
         uses: actions/checkout@v5
