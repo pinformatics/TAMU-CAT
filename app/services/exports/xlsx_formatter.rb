@@ -131,7 +131,7 @@ module Exports
 
       values_by_column.map do |values|
         longest = values.map { |value| value.length }.max.to_i
-        [[ longest + 2, DEFAULT_MIN_WIDTH ].max, DEFAULT_MAX_WIDTH ].min
+        [ [ longest + 2, DEFAULT_MIN_WIDTH ].max, DEFAULT_MAX_WIDTH ].min
       end
     end
 

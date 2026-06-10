@@ -628,7 +628,7 @@ class FeedbacksController < ApplicationController
           id: @saved_confidential_advisor_note.id,
           lock_version: @saved_confidential_advisor_note.lock_version
         }
-      end
+                                 end
     }
   end
 
