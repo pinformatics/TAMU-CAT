@@ -102,5 +102,56 @@ module SurveyAssignments
 
       assert_equal version.created_at.to_i, assignment.reload.completed_at.to_i
     end
+
+    test "backfills from submitted version when current required answers are incomplete" do
+      assignment = SurveyAssignment.create!(
+        survey: @survey,
+        student: @student,
+        advisor: @advisor,
+        assigned_at: 2.days.ago,
+        completed_at: nil
+      )
+      submitted_at = Time.zone.local(2026, 6, 2, 9, 15)
+      SurveyResponseVersion.create!(
+        student_id: @student.student_id,
+        survey_id: @survey.id,
+        survey_assignment: assignment,
+        event: "submitted",
+        answers: { "legacy_question" => "Complete before rules changed" },
+        created_at: submitted_at,
+        updated_at: submitted_at
+      )
+
+      backfill = CompletionBackfill.new(scope: SurveyAssignment.where(id: assignment.id))
+      assert_equal 1, backfill.call
+
+      assert_equal submitted_at.to_i, assignment.reload.completed_at.to_i
+      assert_equal 1, backfill.stats[:from_versions]
+      assert_equal 0, backfill.stats[:from_answer_sets]
+    end
+
+    test "does not backfill from autosave draft version alone" do
+      assignment = SurveyAssignment.create!(
+        survey: @survey,
+        student: @student,
+        advisor: @advisor,
+        assigned_at: 2.days.ago,
+        completed_at: nil
+      )
+      SurveyResponseVersion.create!(
+        student_id: @student.student_id,
+        survey_id: @survey.id,
+        survey_assignment: assignment,
+        event: "edited",
+        answers: { @required_question.id.to_s => "Draft only" }
+      )
+
+      backfill = CompletionBackfill.new(scope: SurveyAssignment.where(id: assignment.id))
+      assert_equal 0, backfill.call
+
+      assert_nil assignment.reload.completed_at
+      assert_equal 0, backfill.stats[:from_versions]
+      assert_equal 1, backfill.stats[:skipped]
+    end
   end
 end

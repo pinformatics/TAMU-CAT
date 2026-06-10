@@ -16,11 +16,7 @@ namespace :v6 do
     completion_mismatch_count = SurveyAssignment
       .where(completed_at: nil)
       .includes(:student, :survey)
-      .count do |assignment|
-        assignment.student &&
-          assignment.survey &&
-          SurveyResponse.build(student: assignment.student, survey: assignment.survey).status == :submitted
-      end
+      .count { |assignment| SurveyAssignments::CompletionBackfill.backfillable?(assignment) }
 
     puts "V6 course schema readiness"
     CourseCompetencyTarget::REQUIRED_DATA_SOURCES.each do |source|
