@@ -82,6 +82,21 @@ class StudentOverviewsControllerTest < ActionDispatch::IntegrationTest
     )
   end
 
+  test "student list shows uin on a new line and missing profile fields as red status badges" do
+    @other_student.update_columns(track: nil, program_year: nil, advisor_id: nil, uin: nil)
+    sign_in @admin
+
+    get student_overviews_path
+
+    assert_response :success
+    assert_select ".c-table__meta", text: @student.user.email
+    assert_select ".c-table__meta", text: "UIN: #{@student.uin}"
+    assert_select ".c-status-badge.c-status-badge--danger", text: "Missing UIN"
+    assert_select ".c-status-badge.c-status-badge--danger", text: "Missing track"
+    assert_select ".c-status-badge.c-status-badge--danger", text: "Missing year"
+    assert_select ".c-status-badge.c-status-badge--danger", text: "Unassigned advisor"
+  end
+
   test "advisor only sees assigned advisees" do
     sign_in @advisor
 

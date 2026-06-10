@@ -22,9 +22,12 @@ For command-line checks, run `bin/rails v6:readiness`. On Heroku, use `heroku ru
 
 ```bash
 heroku pg:copy mha501::DATABASE_URL DATABASE_URL --app mha-dev-eaa62d47718a --confirm mha-dev-eaa62d47718a
-heroku run rails db:migrate -a mha-dev-eaa62d47718a
-heroku run rails v6:readiness -a mha-dev-eaa62d47718a
+heroku run rails db:migrate --app mha-dev-eaa62d47718a
+heroku run rails survey_assignments:backfill_completed --app mha-dev-eaa62d47718a
+heroku run rails v6:readiness --app mha-dev-eaa62d47718a
 ```
+
+The `pg:copy` command above overwrites only the `mha-dev-eaa62d47718a` database. The `mha501` production app is used as the source and is not modified. The completion backfill is required after a prod-to-dev copy because some older survey records can have complete answer sets while `survey_assignments.completed_at` is blank; without the backfill, assignment rosters can show those students as still assigned.
 
 ## Program Configuration
 

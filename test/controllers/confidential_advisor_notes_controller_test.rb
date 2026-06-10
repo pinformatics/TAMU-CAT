@@ -157,8 +157,8 @@ class ConfidentialAdvisorNotesControllerTest < ActionDispatch::IntegrationTest
 
     sign_in @student_user
     get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
-    assert_response :success
-    refute_includes response.body, "Confidential advisor note"
+    assert_redirected_to dashboard_path
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
 
     get survey_response_path(@survey_response)
     assert_response :success
@@ -188,8 +188,8 @@ class ConfidentialAdvisorNotesControllerTest < ActionDispatch::IntegrationTest
 
     sign_in @other_advisor_user
     get new_feedback_path, params: { survey_id: @survey.id, student_id: @student.student_id }
-    assert_response :success
-    refute_includes response.body, "Confidential advisor note"
+    assert_redirected_to survey_records_path
+    assert_match "not assigned", flash[:alert]
 
     sign_in @assigned_advisor_user
     get survey_response_path(@survey_response)

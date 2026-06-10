@@ -574,6 +574,11 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_select "button[data-survey-save-exit][formaction='#{save_progress_survey_path(@survey)}']", text: "Cancel"
     assert_select "button[data-survey-save-stay][type='button']", text: "Save Progress"
     assert_select "button[data-survey-save-stay][formaction]", false
+    cancel_index = response.body.index('data-survey-save-exit="true"')
+    save_index = response.body.index('data-survey-save-stay="true"')
+    submit_index = response.body.index('value="Submit Survey"')
+    assert_operator cancel_index, :<, save_index
+    assert_operator save_index, :<, submit_index
     assert_select "[data-survey-autosave-status]", text: /Autosave/
     assert_select "[data-survey-autosave-prompt]", false
     assert_includes response.body, "installSurveySubmissionForms"

@@ -1,4 +1,5 @@
 import "@hotwired/turbo-rails"
+import Sortable from "sortablejs"
 
 import("controllers").catch((error) => {
   console.error("[Application] Stimulus controllers failed to load", error)
@@ -241,6 +242,75 @@ function initInlineModals() {
   document.querySelectorAll("[data-inline-modal]").forEach((modal) => {
     if (modal.dataset.inlineModalInitialized === "true") return
     modal.dataset.inlineModalInitialized = "true"
+  })
+}
+
+function initProgramSetupSortables() {
+  document.querySelectorAll("[data-program-setup-sortable='true']").forEach((list) => {
+    if (list.dataset.sortableInitialized === "true") return
+
+    const reorderUrl = list.dataset.reorderUrl
+    if (!reorderUrl) return
+
+    list.dataset.sortableInitialized = "true"
+    const statusTargetId = list.dataset.reorderStatusTarget
+    const statusTarget = statusTargetId ? document.getElementById(statusTargetId) : null
+    const defaultStatus = statusTarget?.textContent || ""
+    const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.content || ""
+
+    const setStatus = (message, state = "idle") => {
+      if (!statusTarget) return
+      statusTarget.textContent = message
+      statusTarget.dataset.reorderState = state
+    }
+
+    const syncPositionInputs = () => {
+      Array.from(list.querySelectorAll("[data-sortable-item]")).forEach((item, index) => {
+        const positionInput = item.querySelector("input[name$='[position]']")
+        if (!positionInput) return
+
+        positionInput.value = String((index + 1) * 10)
+      })
+    }
+
+    new Sortable(list, {
+      animation: 150,
+      draggable: "[data-sortable-item]",
+      handle: "[data-drag-handle]",
+      ghostClass: "is-dragging",
+      onEnd: async () => {
+        const orderedIds = Array.from(list.querySelectorAll("[data-sortable-item]"))
+          .map((item) => item.dataset.sortableId)
+          .filter(Boolean)
+
+        if (orderedIds.length === 0) return
+
+        setStatus("Saving order...", "saving")
+
+        try {
+          const response = await fetch(reorderUrl, {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: {
+              "Accept": "application/json",
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken(),
+              "X-Requested-With": "XMLHttpRequest"
+            },
+            body: JSON.stringify({ ordered_ids: orderedIds })
+          })
+
+          if (!response.ok) throw new Error(`Reorder failed with ${response.status}`)
+
+          syncPositionInputs()
+          setStatus("Order saved.", "saved")
+          window.setTimeout(() => setStatus(defaultStatus, "idle"), 2500)
+        } catch (error) {
+          console.error("[Program setup] reorder failed", error)
+          setStatus("Order could not be saved. Refresh and try again.", "error")
+        }
+      }
+    })
   })
 }
 
@@ -2715,6 +2785,7 @@ function initAccessibilityFeatures() {
     ["modal confirmations", installTurboModalConfirm],
     ["turbo false confirmations", initTurboFalseConfirmFallback],
     ["inline modals", initInlineModals],
+    ["program setup sortables", initProgramSetupSortables],
     ["dismissible flashes", initDismissibleFlashes],
     ["high contrast toggle", initHighContrastToggle],
     ["text-to-speech toggle", initTTSToggle],

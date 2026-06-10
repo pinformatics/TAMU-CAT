@@ -40,12 +40,6 @@
       <div class="c-stat__subtext">needs review</div>
     </div>
 
-    <div class="c-stat c-stat--muted" aria-label="Not rated <%= summary[:missing_self_count] %>">
-      <div class="c-stat__label">Not rated</div>
-      <div class="c-stat__value"><%= summary[:missing_self_count] %></div>
-      <div class="c-stat__subtext">blank</div>
-    </div>
-
     <% if summary[:missing_target_count].to_i.positive? %>
       <div class="c-stat c-stat--muted" aria-label="No target <%= summary[:missing_target_count] %>">
         <div class="c-stat__label">No target</div>

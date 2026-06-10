@@ -546,8 +546,26 @@ class StudentRecordsController < ApplicationController
   def build_student_records_workbook(student_records)
     package = Axlsx::Package.new
     workbook = package.workbook
+    formatter = Exports::XlsxFormatter.new(workbook)
     used_sheet_names = {}
     worksheet_count = 0
+    headers = [
+      "Student",
+      "Student Email",
+      "UIN",
+      "Advisor",
+      "Track",
+      "Program Year",
+      "Employment Status",
+      "Employer (Name and Address)",
+      "Job Title",
+      "Avg Hours/Week",
+      "Work Schedule Flexibility",
+      "Survey Status",
+      "Completed At",
+      "Feedback Status",
+      "Feedback Updated At"
+    ]
 
     Array(student_records).each do |semester_block|
       semester_name = semester_block[:semester]
@@ -555,38 +573,22 @@ class StudentRecordsController < ApplicationController
       Array(semester_block[:surveys]).each do |survey_block|
         survey = survey_block[:survey]
         rows = Array(survey_block[:rows])
-        base_name = survey.title.to_s.strip.presence || "Survey #{survey.id}"
+        base_name = survey_records_worksheet_base_name(survey:, semester_name:)
         sheet_name = unique_worksheet_name(base_name, used_sheet_names)
         worksheet_count += 1
 
         workbook.add_worksheet(name: sheet_name) do |sheet|
-          sheet.add_row [ "Survey", survey.title ]
-          sheet.add_row [ "Semester", semester_name ]
+          formatter.add_meta_row(sheet, "Survey", survey.title)
+          formatter.add_meta_row(sheet, "Semester", semester_name)
           sheet.add_row []
-          sheet.add_row [
-            "Student",
-            "Student Email",
-            "UIN",
-            "Advisor",
-            "Track",
-            "Program Year",
-            "Employment Status",
-            "Employer (Name and Address)",
-            "Job Title",
-            "Avg Hours/Week",
-            "Work Schedule Flexibility",
-            "Survey Status",
-            "Completed At",
-            "Feedback Status",
-            "Feedback Updated At"
-          ]
+          header_row = formatter.add_header_row(sheet, headers)
 
           rows.each do |row|
             student = row[:student]
             advisor = row[:advisor]
             employment_data = row[:employment_data] || {}
 
-            sheet.add_row [
+            formatter.add_data_row(sheet, [
               student&.user&.name,
               student&.user&.email,
               student&.uin,
@@ -602,27 +604,35 @@ class StudentRecordsController < ApplicationController
               row[:completed_at]&.iso8601,
               row[:feedback_status_label],
               row[:feedback_status_timestamp]&.iso8601
-            ]
+            ])
           end
+
+          formatter.finish_table(
+            sheet,
+            header_row: header_row,
+            column_count: headers.size,
+            widths: [ 24, 30, 14, 24, 18, 12, 18, 36, 24, 14, 28, 16, 22, 18, 22 ]
+          )
         end
       end
     end
 
-    add_empty_student_records_sheet(workbook) if worksheet_count.zero?
+    add_empty_student_records_sheet(workbook, formatter) if worksheet_count.zero?
 
     package
   end
 
-  def add_empty_student_records_sheet(workbook)
+  def add_empty_student_records_sheet(workbook, formatter)
     workbook.add_worksheet(name: "Survey Records") do |sheet|
-      sheet.add_row [ "Survey Records Export" ]
-      sheet.add_row [ "Generated At", Time.current.iso8601 ]
-      sheet.add_row [ "Result", "No survey records matched the current filters." ]
+      formatter.add_title_row(sheet, [ "Survey Records Export" ])
+      formatter.add_meta_row(sheet, "Generated At", Time.current.iso8601)
+      formatter.add_meta_row(sheet, "Result", "No survey records matched the current filters.")
       sheet.add_row []
-      sheet.add_row [ "Filter", "Value" ]
+      header_row = formatter.add_header_row(sheet, [ "Filter", "Value" ])
       student_records_export_filters.each do |label, value|
-        sheet.add_row [ label, value ]
+        formatter.add_data_row(sheet, [ label, value ])
       end
+      formatter.finish_table(sheet, header_row: header_row, column_count: 2, widths: [ 24, 32 ])
     end
   end
 
@@ -657,6 +667,13 @@ class StudentRecordsController < ApplicationController
       end
       suffix += 1
     end
+  end
+
+  def survey_records_worksheet_base_name(survey:, semester_name:)
+    survey_name = survey&.title.to_s.strip.presence || "Survey #{survey&.id}"
+    semester_label = semester_name.to_s.strip.presence || survey&.program_semester&.name.to_s.strip.presence
+
+    [ semester_label, survey_name ].compact.join(" ")
   end
 
   def default_employment_export_data

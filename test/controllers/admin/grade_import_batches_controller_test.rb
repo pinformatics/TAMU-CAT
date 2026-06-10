@@ -304,6 +304,11 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal batch, notification.notifiable
     assert_match "published", notification.message
     assert_match "1 advisee", notification.message
+    assert_equal "advisee.course_data.updated", notification.event_key
+    assert_equal "advisee.course_data.updated:batch:#{batch.id}:advisor:#{@advisor.id}:action:published", notification.dedupe_key
+    assert_equal batch.id, notification.metadata["batch_id"]
+    assert_equal @advisor.id, notification.metadata["advisor_id"]
+    assert_equal 1, notification.metadata["advisee_count"]
   end
 
   test "preview with failed or pending rows must be approved before commit" do

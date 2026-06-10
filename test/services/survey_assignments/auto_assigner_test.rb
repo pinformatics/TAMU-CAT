@@ -267,6 +267,18 @@ module SurveyAssignments
       end
     end
 
+    test "fallback survey lookup can use custom ordered semester relation" do
+      SurveyOffering.delete_all
+      ProgramSemester.update_all(current: false)
+      assigner = AutoAssigner.new(student: @student, track: "Executive", class_of: 2026)
+
+      ProgramSemester.stub(:current, nil) do
+        assert_nothing_raised do
+          assigner.send(:surveys_for_track).to_a
+        end
+      end
+    end
+
     test "offering lookup supports student objects without assignment groups" do
       student_without_group = Struct.new(:track_key, :program_year).new("Residential", 2026)
       assigner = AutoAssigner.new(student: student_without_group, track: "Residential", class_of: 2026)

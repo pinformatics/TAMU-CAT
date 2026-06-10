@@ -53,7 +53,7 @@ class StudentCompetencyHistoryExporter
         "Evidence Count" => 1,
         "Source File" => evidence.grade_import_file&.file_name,
         "Assignment" => evidence.assignment_name,
-        "Updated At" => evidence.updated_at
+        "Updated At" => evidence.updated_at&.iso8601
       }
     end
   end
@@ -71,7 +71,7 @@ class StudentCompetencyHistoryExporter
         "Evidence Count" => rating.evidence_count,
         "Source File" => nil,
         "Assignment" => "Aggregated #{rating.aggregation_rule}",
-        "Updated At" => rating.updated_at
+        "Updated At" => rating.updated_at&.iso8601
       }
     end
   end

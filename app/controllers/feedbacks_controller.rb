@@ -1,15 +1,18 @@
 # CRUD endpoints for advisor feedback records associated with survey
 # responses.
 class FeedbacksController < ApplicationController
+  before_action :require_staff_access!
   before_action :set_feedback, only: %i[ show edit update destroy ]
   before_action :set_survey_and_student, only: %i[new create]
+  before_action :ensure_feedback_student_access!, only: %i[new create]
+  before_action :ensure_feedback_record_access!, only: %i[show edit update destroy]
   before_action :ensure_survey_active_for_feedback!, only: %i[new create edit update destroy]
 
   # Lists all feedback entries.
   #
   # @return [void]
   def index
-    @feedbacks = Feedback.all
+    @feedbacks = accessible_feedback_scope.includes(:advisor, :student, :survey, :category, :question)
   end
 
   # Displays a single feedback entry.
@@ -37,6 +40,7 @@ class FeedbacksController < ApplicationController
   # @return [void]
   def create
     @submission_intent = normalize_submission_intent(params[:submission_intent])
+    @feedback_autosave_request = feedback_autosave_request?
     Rails.logger.debug "[FeedbacksController#create] params_keys=#{params.keys.inspect} ratings_present=#{params[:ratings].present?} feedback_present=#{params[:feedback].present?}"
     @advisor = current_advisor_profile
     resolved_advisor_id = @advisor&.advisor_id || @student&.advisor_id
@@ -44,6 +48,7 @@ class FeedbacksController < ApplicationController
       admin_advisor = Advisor.find_or_create_by!(advisor_id: current_user.id)
       resolved_advisor_id = admin_advisor.advisor_id
     end
+    notification_context = feedback_notification_context(resolved_advisor_id)
     # Support two modes:
     # 1) batch per-category ratings via params[:ratings]
     # 2) per-category single feedback via nested feedback params
@@ -79,6 +84,7 @@ class FeedbacksController < ApplicationController
 
       batch_errors = {}
       saved_feedbacks = []
+      deleted_feedbacks = []
 
       Feedback.transaction do
         ratings.each do |qid_str, data|
@@ -87,18 +93,37 @@ class FeedbacksController < ApplicationController
           attrs = data.to_h
 
           # Skip empty inputs
-          next if attrs["average_score"].blank? && attrs["comments"].blank?
+          if attrs["average_score"].blank? && attrs["comments"].blank?
+            if attrs["id"].present?
+              begin
+                if (blank_fb = Feedback.find_by(id: attrs["id"], student_id: @student.student_id, survey_id: @survey.id, advisor_id: resolved_advisor_id))
+                  blank_fb.lock_version = attrs["lock_version"].to_i if attrs["lock_version"].present?
+                  deleted_feedbacks << { id: blank_fb.id, question_id: qid }
+                  blank_fb.destroy!
+                end
+              rescue ActiveRecord::StaleObjectError
+                batch_errors[qid] = [ "This feedback was updated by someone else. Refresh and try again." ]
+              end
+            end
+            next
+          end
 
           question = Question.find_by(id: qid)
 
           fb = if attrs["id"].present?
             Feedback.find_by(id: attrs["id"], student_id: @student.student_id, survey_id: @survey.id, advisor_id: resolved_advisor_id)
           else
-            Feedback.new(student_id: @student.student_id,
-              survey_id: @survey.id,
-              question_id: qid,
-              category_id: question&.category_id,
-              advisor_id: resolved_advisor_id)
+            Feedback
+              .where(student_id: @student.student_id,
+                     survey_id: @survey.id,
+                     advisor_id: resolved_advisor_id,
+                     question_id: qid)
+              .order(updated_at: :desc, id: :desc)
+              .first || Feedback.new(student_id: @student.student_id,
+                                      survey_id: @survey.id,
+                                      question_id: qid,
+                                      category_id: question&.category_id,
+                                      advisor_id: resolved_advisor_id)
           end
 
           Rails.logger.debug "[FeedbacksController#create] found fb=#{fb.inspect} attrs=#{attrs.inspect}"
@@ -162,23 +187,27 @@ class FeedbacksController < ApplicationController
       if saved_feedbacks.empty?
         # Allow note-only saves so the single Save action persists all page content.
         if params[:confidential_advisor_note].present?
-          begin
-            save_confidential_advisor_note_from_params!
-          rescue ActiveRecord::StaleObjectError
-            @feedback = Feedback.new
-            load_feedback_new_context
-            flash.now[:alert] = "This note was updated by someone else. Refresh and try again."
-            respond_to do |format|
-              format.html { render :new, status: :conflict }
-              format.json { render json: { error: "conflict" }, status: :conflict }
-            end
-            return
-          end
           respond_to do |format|
             sync_feedback_submission_state!(resolved_advisor_id)
+            enqueue_feedback_received_notification!(
+              representative_feedback_for_notification(resolved_advisor_id),
+              kind: feedback_notification_event_for(resolved_advisor_id, notification_context)
+            )
             format.html { redirect_to feedback_success_redirect_path, notice: feedback_saved_notice, status: :see_other }
-            format.json { render json: { ok: true }, status: :created }
+            format.json do
+              if feedback_autosave_request?
+                render json: feedback_autosave_payload(saved_feedbacks:, deleted_feedbacks:), status: :ok
+              else
+                render json: { ok: true }, status: :created
+              end
+            end
           end
+          return
+        end
+
+        if feedback_autosave_request?
+          sync_feedback_submission_state!(resolved_advisor_id)
+          render json: feedback_autosave_payload(saved_feedbacks:, deleted_feedbacks:, message: "Advisor feedback is already saved."), status: :ok
           return
         end
 
@@ -195,11 +224,20 @@ class FeedbacksController < ApplicationController
 
       @feedback = saved_feedbacks.first
       sync_feedback_submission_state!(resolved_advisor_id)
-      enqueue_feedback_received_notification!(@feedback)
+      enqueue_feedback_received_notification!(
+        @feedback,
+        kind: feedback_notification_event_for(resolved_advisor_id, notification_context)
+      )
 
       respond_to do |format|
         format.html { redirect_to feedback_success_redirect_path, notice: feedback_saved_notice, status: :see_other }
-        format.json { render json: saved_feedbacks, status: :created }
+        format.json do
+          if feedback_autosave_request?
+            render json: feedback_autosave_payload(saved_feedbacks:, deleted_feedbacks:), status: :ok
+          else
+            render json: saved_feedbacks, status: :created
+          end
+        end
       end
       return
     elsif params[:feedback].present? && params.dig(:feedback, :question_id).present?
@@ -218,12 +256,44 @@ class FeedbacksController < ApplicationController
     else
       # Support note-only submissions even when the feedback UI posts no ratings.
       if params[:confidential_advisor_note].present?
-        save_confidential_advisor_note_from_params!
+        begin
+          save_confidential_advisor_note_from_params!
+        rescue ActiveRecord::StaleObjectError
+          @feedback = Feedback.new
+          load_feedback_new_context
+          flash.now[:alert] = "This note was updated by someone else. Refresh and try again."
+          respond_to do |format|
+            format.html { render :new, status: :conflict }
+            format.json do
+              render json: {
+                errors: {
+                  confidential_advisor_note: [ "This note was updated by someone else. Refresh and try again." ]
+                }
+              }, status: :unprocessable_entity
+            end
+          end
+          return
+        end
         sync_feedback_submission_state!(resolved_advisor_id)
+        enqueue_feedback_received_notification!(
+          representative_feedback_for_notification(resolved_advisor_id),
+          kind: feedback_notification_event_for(resolved_advisor_id, notification_context)
+        )
         respond_to do |format|
           format.html { redirect_to feedback_success_redirect_path, notice: feedback_saved_notice, status: :see_other }
-          format.json { render json: { ok: true }, status: :created }
+          format.json do
+            if feedback_autosave_request?
+              render json: feedback_autosave_payload(saved_feedbacks: []), status: :ok
+            else
+              render json: { ok: true }, status: :created
+            end
+          end
         end
+        return
+      end
+
+      if feedback_autosave_request?
+        render json: feedback_autosave_payload(saved_feedbacks: [], message: "Advisor feedback is already saved."), status: :ok
         return
       end
 
@@ -241,7 +311,10 @@ class FeedbacksController < ApplicationController
         begin
           save_confidential_advisor_note_from_params!
           sync_feedback_submission_state!(@feedback.advisor_id)
-          enqueue_feedback_received_notification!(@feedback)
+          enqueue_feedback_received_notification!(
+            @feedback,
+            kind: feedback_notification_event_for(@feedback.advisor_id, notification_context)
+          )
         rescue ActiveRecord::StaleObjectError
           load_feedback_new_context
           flash.now[:alert] = "This note was updated by someone else. Refresh and try again."
@@ -299,6 +372,39 @@ class FeedbacksController < ApplicationController
     @feedback = Feedback.find(params[:id])
   end
 
+  def require_staff_access!
+    return if current_user&.role_admin? || current_user&.role_advisor?
+
+    redirect_to dashboard_path, alert: STAFF_ONLY_MESSAGE
+  end
+
+  def accessible_feedback_scope
+    return Feedback.all if current_user&.role_admin?
+
+    advisor_id = current_advisor_profile&.advisor_id
+    return Feedback.none unless advisor_id
+
+    Feedback.joins(:student).where(advisor_id:, students: { advisor_id: })
+  end
+
+  def ensure_feedback_student_access!
+    return if current_user&.role_admin?
+
+    advisor_id = current_advisor_profile&.advisor_id
+    return if advisor_id.present? && @student&.advisor_id == advisor_id
+
+    redirect_to survey_records_path, alert: "This student is not assigned to you."
+  end
+
+  def ensure_feedback_record_access!
+    return if current_user&.role_admin?
+
+    advisor_id = current_advisor_profile&.advisor_id
+    return if advisor_id.present? && @feedback&.advisor_id == advisor_id && @feedback&.student&.advisor_id == advisor_id
+
+    redirect_to survey_records_path, alert: "This feedback record is not available for your advisees."
+  end
+
   # Strong parameters for feedback creation/update.
   #
   # @return [ActionController::Parameters]
@@ -335,8 +441,6 @@ class FeedbacksController < ApplicationController
       .group_by(&:question_id)
       .transform_values { |items| pick_latest.call(items) }
 
-    apply_feedback_prefill! if params[:prefill].to_s == "true"
-
     load_self_target_summary!(version)
     load_confidential_note_context
   end
@@ -372,9 +476,7 @@ class FeedbacksController < ApplicationController
 
       @confidential_note_owner_advisor_id = advisor_profile.advisor_id
     elsif current.role_admin?
-      return unless @student&.advisor_id.present?
-
-      @confidential_note_owner_advisor_id = @student.advisor_id
+      @confidential_note_owner_advisor_id = @student&.advisor_id.presence || admin_confidential_note_owner_advisor_id(current)
     else
       return
     end
@@ -423,6 +525,7 @@ class FeedbacksController < ApplicationController
   end
 
   def save_confidential_advisor_note_from_params!
+    @saved_confidential_advisor_note = nil
     return unless params[:confidential_advisor_note].present?
 
     advisor_id = confidential_note_owner_advisor_id_for_current_user
@@ -447,6 +550,7 @@ class FeedbacksController < ApplicationController
       note.lock_version = submitted_lock_version.to_i
     end
     note.save!
+    @saved_confidential_advisor_note = note
   end
 
   def confidential_note_owner_advisor_id_for_current_user
@@ -462,12 +566,16 @@ class FeedbacksController < ApplicationController
     end
 
     if current.role_admin?
-      return nil unless @student&.advisor_id.present?
-
-      return @student.advisor_id
+      return @student&.advisor_id.presence || admin_confidential_note_owner_advisor_id(current)
     end
 
     nil
+  end
+
+  def admin_confidential_note_owner_advisor_id(current)
+    return nil unless current&.role_admin?
+
+    Advisor.find_or_create_by!(advisor_id: current.id).advisor_id
   end
 
   def feedback_saved_notice
@@ -494,6 +602,34 @@ class FeedbacksController < ApplicationController
 
   def submit_intent?
     @submission_intent == "submit"
+  end
+
+  def feedback_autosave_request?
+    params[:autosave].present?
+  end
+
+  def feedback_autosave_payload(saved_feedbacks:, deleted_feedbacks: [], message: nil)
+    {
+      saved: true,
+      message: message.presence || feedback_saved_notice,
+      saved_count: Array(saved_feedbacks).size,
+      feedbacks: Array(saved_feedbacks).compact.filter_map do |feedback|
+        next unless feedback.respond_to?(:id) && feedback.id.present?
+
+        {
+          id: feedback.id,
+          question_id: feedback.question_id,
+          lock_version: feedback.lock_version
+        }
+      end,
+      deleted_feedbacks: Array(deleted_feedbacks).compact,
+      confidential_advisor_note: if @saved_confidential_advisor_note&.persisted?
+        {
+          id: @saved_confidential_advisor_note.id,
+          lock_version: @saved_confidential_advisor_note.lock_version
+        }
+      end
+    }
   end
 
   def required_feedback_question_ids
@@ -552,8 +688,89 @@ class FeedbacksController < ApplicationController
 
     now = Time.current
     submission.last_saved_at = now
-    submission.submitted_at = now if submit_intent?
+    if submit_intent?
+      submission.submitted_at = now
+      submission.submitted_feedback_signature = visible_feedback_signature_for(advisor_id).to_json if submission.respond_to?(:submitted_feedback_signature=)
+    end
     submission.save!
+  end
+
+  def feedback_notification_context(advisor_id)
+    submission = AdvisorFeedbackSubmission.find_by(
+      student_id: @student.student_id,
+      survey_id: @survey.id,
+      advisor_id: advisor_id
+    )
+
+    {
+      previously_submitted: submission&.submitted_at.present?,
+      draft_changed_after_submit: feedback_draft_changed_after_submit?(submission),
+      submitted_signature: parsed_submitted_feedback_signature(submission),
+      visible_signature: visible_feedback_signature_for(advisor_id)
+    }
+  end
+
+  def feedback_notification_event_for(advisor_id, before_context)
+    return nil unless submit_intent?
+
+    before_context ||= {}
+    after_signature = visible_feedback_signature_for(advisor_id)
+    return nil if after_signature.blank?
+    return :submitted unless before_context[:previously_submitted]
+
+    submitted_signature = before_context[:submitted_signature]
+    return :revised if submitted_signature.present? && after_signature != submitted_signature
+
+    if submitted_signature.blank? && (before_context[:draft_changed_after_submit] || after_signature != before_context[:visible_signature])
+      :revised
+    end
+  end
+
+  def parsed_submitted_feedback_signature(submission)
+    return nil unless submission&.respond_to?(:submitted_feedback_signature)
+
+    raw_signature = submission.submitted_feedback_signature
+    return nil if raw_signature.blank?
+
+    JSON.parse(raw_signature)
+  rescue JSON::ParserError, TypeError
+    nil
+  end
+
+  def feedback_draft_changed_after_submit?(submission)
+    return false unless submission&.last_saved_at.present? && submission&.submitted_at.present?
+
+    submission.last_saved_at > submission.submitted_at
+  end
+
+  def visible_feedback_signature_for(advisor_id)
+    visible_feedback_scope(advisor_id)
+      .order(:question_id, :category_id, :id)
+      .pluck(:question_id, :category_id, :average_score, :comments)
+      .map do |question_id, category_id, score, comments|
+        [ question_id, category_id, normalized_feedback_score(score), comments.to_s ]
+      end
+  end
+
+  def representative_feedback_for_notification(advisor_id)
+    visible_feedback_scope(advisor_id).order(updated_at: :desc, id: :desc).first
+  end
+
+  def visible_feedback_scope(advisor_id)
+    return Feedback.none if advisor_id.blank? || @student.blank? || @survey.blank?
+
+    Feedback
+      .where(student_id: @student.student_id, survey_id: @survey.id, advisor_id: advisor_id)
+      .where("average_score IS NOT NULL OR (comments IS NOT NULL AND comments <> '')")
+  end
+
+  def normalized_feedback_score(score)
+    return nil if score.nil?
+
+    text = BigDecimal(score.to_s).to_s("F")
+    text.include?(".") ? text.sub(/0+\z/, "").sub(/\.\z/, "") : text
+  rescue ArgumentError
+    score.to_s
   end
 
   def latest_survey_response_version
@@ -587,26 +804,6 @@ class FeedbacksController < ApplicationController
       &.first || 0
   end
 
-  def apply_feedback_prefill!
-    survey_answers = @survey_response.answers
-
-    feedback_questions.each do |question|
-      next if @existing_feedbacks_by_question[question.id].present?
-
-      score = normalize_feedback_prefill_score(survey_answers[question.id] || survey_answers[question.id.to_s])
-      next if score.blank?
-
-      @existing_feedbacks_by_question[question.id] = Feedback.new(
-        student_id: @student.student_id,
-        survey_id: @survey.id,
-        advisor_id: confidential_note_owner_advisor_id_for_current_user || @student.advisor_id,
-        question_id: question.id,
-        category_id: question.category_id,
-        average_score: score
-      )
-    end
-  end
-
   def feedback_questions
     @feedback_questions ||= @survey
       .questions
@@ -623,25 +820,6 @@ class FeedbacksController < ApplicationController
     @survey&.advisor_numeric_feedback_enabled?
   end
 
-  def normalize_feedback_prefill_score(value)
-    raw = case value
-    when Hash
-      value["answer"] || value[:answer] || value["value"] || value[:value] || value["rating"] || value[:rating]
-    else
-      value
-    end
-
-    numeric = begin
-      Float(raw)
-    rescue ArgumentError, TypeError
-      raw.to_s[/([0-5])(?:\D*)\z/, 1]&.to_f
-    end
-
-    return nil unless numeric&.between?(0, 5)
-
-    numeric.round.to_s
-  end
-
   def safe_return_to_param
     return_to = params[:return_to].to_s
     return survey_records_path if return_to.blank?
@@ -650,11 +828,16 @@ class FeedbacksController < ApplicationController
     return_to.start_with?("/") && !return_to.start_with?("//") ? return_to : survey_records_path
   end
 
-  def enqueue_feedback_received_notification!(feedback)
+  def enqueue_feedback_received_notification!(feedback, kind: nil)
     return unless submit_intent?
+    return unless kind
     return unless feedback&.id
 
-    SurveyNotificationJob.perform_later(event: :feedback_received, feedback_id: feedback.id)
+    SurveyNotificationJob.perform_later(
+      event: :feedback_received,
+      feedback_id: feedback.id,
+      metadata: { kind: kind }
+    )
   rescue StandardError => e
     Rails.logger.warn("Feedback notification enqueue failed for Feedback #{feedback&.id}: #{e.class} - #{e.message}")
   end

@@ -46,6 +46,62 @@ class NotificationTest < ActiveSupport::TestCase
     assert_equal "Updated content", user.notifications.find_by(title: "System").message
   end
 
+  test "deliver! deduplicates by stable dedupe key when present" do
+    user = users(:student)
+    assignment = survey_assignments(:residential_assignment)
+
+    first = Notification.deliver!(
+      user: user,
+      event_key: "feedback.submitted",
+      dedupe_key: "feedback:student:#{assignment.student_id}:survey:#{assignment.survey_id}",
+      title: "Advisor Feedback Submitted",
+      message: "Original",
+      notifiable: assignment,
+      metadata: { kind: "submitted", survey_id: assignment.survey_id }
+    )
+
+    second = Notification.deliver!(
+      user: user,
+      event_key: "feedback.revised",
+      dedupe_key: "feedback:student:#{assignment.student_id}:survey:#{assignment.survey_id}",
+      title: "Advisor Feedback Revised",
+      message: "Updated",
+      notifiable: assignment,
+      metadata: { kind: "revised", survey_id: assignment.survey_id }
+    )
+
+    assert_equal first.id, second.id
+    second.reload
+    assert_equal "Advisor Feedback Revised", second.title
+    assert_equal "feedback.revised", second.event_key
+    assert_equal "Updated", second.message
+    assert_equal "revised", second.metadata["kind"]
+  end
+
+  test "deliver! allows same title and notifiable when dedupe keys differ" do
+    user = users(:student)
+    assignment = survey_assignments(:residential_assignment)
+
+    assert_difference -> { Notification.count }, 2 do
+      Notification.deliver!(
+        user: user,
+        event_key: "qa.one",
+        dedupe_key: "qa:one",
+        title: "Shared Title",
+        message: "First",
+        notifiable: assignment
+      )
+      Notification.deliver!(
+        user: user,
+        event_key: "qa.two",
+        dedupe_key: "qa:two",
+        title: "Shared Title",
+        message: "Second",
+        notifiable: assignment
+      )
+    end
+  end
+
   test "deliver! refreshes reused read notifications as unread and recent" do
     user = users(:student)
     survey = surveys(:fall_2025)

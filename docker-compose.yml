@@ -21,6 +21,8 @@ services:
         RUBY_VERSION: 3.4.6
       target: dev
     container_name: tamu-cat-web
+    env_file:
+      - .env
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -45,6 +47,8 @@ services:
         RUBY_VERSION: 3.4.6
       target: dev
     container_name: tamu-cat-css
+    env_file:
+      - .env
     environment:
       PGHOST: db
       PGPORT: 5432

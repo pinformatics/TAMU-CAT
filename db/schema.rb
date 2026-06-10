@@ -41,6 +41,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_20_160000) do
     t.datetime "submitted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "submitted_feedback_signature"
     t.index ["student_id", "survey_id", "advisor_id"], name: "index_feedback_submissions_on_student_survey_advisor", unique: true
     t.index ["submitted_at"], name: "index_advisor_feedback_submissions_on_submitted_at"
   end
@@ -326,9 +327,14 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_20_160000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.string "event_key"
+    t.string "dedupe_key"
+    t.jsonb "metadata", default: {}, null: false
+    t.index ["event_key"], name: "index_notifications_on_event_key"
     t.index ["notifiable_type", "notifiable_id"], name: "index_notifications_on_notifiable"
+    t.index ["user_id", "dedupe_key"], name: "index_notifications_unique_user_dedupe_key", unique: true, where: "(dedupe_key IS NOT NULL)"
     t.index ["user_id", "read_at"], name: "index_notifications_on_user_and_read_at"
-    t.index ["user_id", "title", "notifiable_type", "notifiable_id"], name: "index_notifications_unique_per_user", unique: true
+    t.index ["user_id", "title", "notifiable_type", "notifiable_id"], name: "index_notifications_on_user_title_notifiable"
     t.index ["user_id"], name: "index_notifications_on_user_id"
   end
 

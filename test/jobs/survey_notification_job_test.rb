@@ -26,6 +26,9 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     assert_equal @assignment.student.user, notification.user
     assert_equal "New Competency Survey Assigned", notification.title
     assert_equal "You were assigned the competency survey '#{@assignment.survey.title}'.", notification.message
+    assert_equal "survey.assigned", notification.event_key
+    assert_equal "survey.assigned:survey_assignment:#{@assignment.id}", notification.dedupe_key
+    assert_equal @assignment.survey_id, notification.metadata["survey_id"]
   end
 
   test "assigned event does not include advisor name in message" do
@@ -60,10 +63,12 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
 
     student_notification = Notification.find_by!(user: @assignment.student.user, title: "Competency Survey Submitted", notifiable: @assignment)
     assert_match @assignment.survey.title, student_notification.message
+    assert_equal "survey.response.submitted", student_notification.event_key
 
     advisor_notification = Notification.find_by!(user: @assignment.advisor.user, title: "Advisee Survey Submitted", notifiable: @assignment)
     assert_match @assignment.student.full_name, advisor_notification.message
     assert_match @assignment.survey.title, advisor_notification.message
+    assert_equal "advisee.response.submitted", advisor_notification.event_key
   end
 
   test "response submitted event labels advisor notification as edited for revisions" do
@@ -105,14 +110,40 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
     feedback = feedbacks(:advisor_feedback)
 
     assert_difference -> { Notification.count }, 1 do
-      SurveyNotificationJob.perform_now(event: :feedback_received, feedback_id: feedback.id)
+      SurveyNotificationJob.perform_now(
+        event: :feedback_received,
+        feedback_id: feedback.id,
+        metadata: { kind: "submitted" }
+      )
     end
 
     notification = Notification.last
     assert_equal @assignment.student.user, notification.user
-    assert_equal "Advisor Feedback Received", notification.title
+    assert_equal "Advisor Feedback Submitted", notification.title
     assert_match @assignment.survey.title, notification.message
-    assert_match @assignment.advisor.user.display_name, notification.message
+    assert_match "Review it in your survey record", notification.message
+    assert_equal "feedback.submitted", notification.event_key
+    assert_equal "submitted", notification.metadata["kind"]
+  end
+
+  test "feedback received event can notify student of revised feedback" do
+    feedback = feedbacks(:advisor_feedback)
+
+    assert_difference -> { Notification.count }, 1 do
+      SurveyNotificationJob.perform_now(
+        event: :feedback_received,
+        feedback_id: feedback.id,
+        metadata: { kind: "revised" }
+      )
+    end
+
+    notification = Notification.last
+    assert_equal @assignment.student.user, notification.user
+    assert_equal "Advisor Feedback Revised", notification.title
+    assert_match @assignment.survey.title, notification.message
+    assert_match "updated feedback", notification.message
+    assert_equal "feedback.revised", notification.event_key
+    assert_equal "revised", notification.metadata["kind"]
   end
 
   test "feedback received event skips when assignment missing" do

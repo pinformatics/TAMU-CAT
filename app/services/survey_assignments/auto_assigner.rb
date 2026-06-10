@@ -82,7 +82,7 @@ module SurveyAssignments
     def surveys_for_track
       current_semester = ProgramSemester.current&.name.to_s.strip
       if current_semester.blank?
-        current_semester = ProgramSemester.ordered.last&.name.to_s.strip
+        current_semester = ProgramSemester.ordered.to_a.last&.name.to_s.strip
       end
 
       return Survey.none if current_semester.blank?

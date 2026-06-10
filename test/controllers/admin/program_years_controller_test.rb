@@ -79,4 +79,30 @@ class Admin::ProgramYearsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to admin_program_setup_path(tab: "years")
     assert_match(/deleted/i, flash[:notice].to_s)
   end
+
+  test "admin can reorder program years" do
+    sign_in @admin
+
+    first = ProgramYear.create!(value: 2033, position: 10, active: true)
+    second = ProgramYear.create!(value: 2034, position: 20, active: true)
+    third = ProgramYear.create!(value: 2035, position: 30, active: true)
+
+    patch reorder_admin_program_years_path,
+          params: { ordered_ids: [ third.id, first.id, second.id ] },
+          as: :json
+
+    assert_response :success
+    assert_equal [ third.id, first.id, second.id ], ProgramYear.where(id: [ first.id, second.id, third.id ]).ordered.pluck(:id)
+    assert_equal 10, third.reload.position
+    assert_equal 20, first.reload.position
+    assert_equal 30, second.reload.position
+  end
+
+  test "non-admin cannot reorder program years" do
+    sign_in @student
+
+    patch reorder_admin_program_years_path, params: { ordered_ids: [] }, as: :json
+
+    assert_redirected_to dashboard_path
+  end
 end

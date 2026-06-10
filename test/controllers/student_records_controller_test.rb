@@ -55,8 +55,9 @@ class StudentRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.headers["Content-Disposition"], ".xlsx"
 
     open_xlsx_response do |workbook|
-      assert_includes workbook.sheets, surveys(:fall_2025).title.first(31)
-      workbook.default_sheet = surveys(:fall_2025).title.first(31)
+      expected_sheet_name = "#{surveys(:fall_2025).program_semester.name} #{surveys(:fall_2025).title}".first(31)
+      assert_includes workbook.sheets, expected_sheet_name
+      workbook.default_sheet = expected_sheet_name
       assert_equal "Student", workbook.cell(4, 1)
       assert_equal users(:student).name, workbook.cell(5, 1)
     end

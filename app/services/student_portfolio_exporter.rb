@@ -71,10 +71,12 @@ class StudentPortfolioExporter
 
   def workbook
     package = Axlsx::Package.new
+    formatter = Exports::XlsxFormatter.new(package.workbook)
+
     package.workbook.add_worksheet(name: "Student Profile") do |sheet|
-      sheet.add_row workbook_headers
+      header_row = formatter.add_header_row(sheet, workbook_headers)
       rows.each do |row|
-        sheet.add_row [
+        formatter.add_data_row(sheet, [
           row[:uin].to_s,
           row[:name],
           row[:email],
@@ -91,8 +93,15 @@ class StudentPortfolioExporter
           row[:below_target_count],
           row[:no_target_count],
           row[:target_met_rate]
-        ], types: workbook_types
+        ], types: workbook_types)
       end
+
+      formatter.finish_table(
+        sheet,
+        header_row: header_row,
+        column_count: workbook_headers.size,
+        widths: [ 14, 24, 30, 18, 10, 24, 42, 22, 22, 16, 18, 18, 18, 18, 16, 18 ]
+      )
     end
     package
   end

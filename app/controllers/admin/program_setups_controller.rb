@@ -9,7 +9,7 @@ class Admin::ProgramSetupsController < Admin::BaseController
     @majors = Major.order(Arel.sql("LOWER(name) ASC"))
     @new_major = Major.new
 
-    @program_years = ProgramYear.data_source_ready? ? ProgramYear.active.ordered : []
+    @program_years = ProgramYear.data_source_ready? ? ProgramYear.ordered : []
     @new_program_year = ProgramYear.new(active: true)
 
     @program_semesters = ProgramSemester.ordered

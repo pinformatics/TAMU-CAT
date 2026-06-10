@@ -126,9 +126,17 @@ Rails.application.routes.draw do
         patch "evidence/:evidence_id", to: "grade_import_batches#update_evidence", as: :evidence
       end
     end
-    resources :program_tracks, only: %i[create update destroy]
+    resources :program_tracks, only: %i[create update destroy] do
+      collection do
+        patch :reorder
+      end
+    end
     resources :majors, only: %i[create update destroy]
-    resources :program_years, only: %i[create update destroy]
+    resources :program_years, only: %i[create update destroy] do
+      collection do
+        patch :reorder
+      end
+    end
     resources :surveys do
       member do
         get :preview

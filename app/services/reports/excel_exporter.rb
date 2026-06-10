@@ -24,6 +24,7 @@ module Reports
     def generate
       package = Axlsx::Package.new
       workbook = package.workbook
+      @formatter = Exports::XlsxFormatter.new(workbook)
 
       WORKBOOK_SHEETS.each do |method_name|
         send(method_name, workbook)
@@ -34,7 +35,7 @@ module Reports
 
     private
 
-    attr_reader :payload
+    attr_reader :payload, :formatter
 
     def add_trend_sheet(workbook)
       benchmark = payload[:benchmark] || {}
@@ -43,38 +44,41 @@ module Reports
       timeline = Array(benchmark[:timeline])
 
       workbook.add_worksheet(name: "Trend") do |sheet|
-        sheet.add_row [ "Generated At", format_timestamp(payload[:generated_at]) ]
+        formatter.add_meta_row(sheet, "Generated At", format_timestamp(payload[:generated_at]))
         sheet.add_row []
-        sheet.add_row [ "Active Filters" ]
+        formatter.add_title_row(sheet, [ "Active Filters" ])
         filters.each do |label, value|
-          sheet.add_row [ label.to_s.titleize, value ]
+          formatter.add_data_row(sheet, [ label.to_s.titleize, value ])
         end
 
         sheet.add_row []
-        sheet.add_row [ "Metric", "Value", "Change", "Description", "Sample Size" ]
+        metric_header_row = formatter.add_header_row(sheet, [ "Metric", "Value", "Change", "Description", "Sample Size" ])
         cards.each do |card|
-          sheet.add_row [
+          formatter.add_data_row(sheet, [
             card[:title],
             formatted_value(card[:value], card[:unit], card[:precision]),
             formatted_change(card[:change], card[:unit]),
             card[:description],
             card[:sample_size]
-          ]
+          ])
         end
+
+        formatter.finish_table(sheet, header_row: metric_header_row, column_count: 5, widths: [ 28, 14, 14, 42, 16 ])
 
         next if timeline.blank?
 
         sheet.add_row []
-        sheet.add_row [ "Timeline" ]
-        sheet.add_row [ "Month", "Student % Meeting Target", "Advisor % Meeting Target", "Course % Meeting Target" ]
+        formatter.add_title_row(sheet, [ "Timeline" ])
+        timeline_header_row = formatter.add_header_row(sheet, [ "Month", "Student % Meeting Target", "Advisor % Meeting Target", "Course % Meeting Target" ])
         timeline.each do |point|
-          sheet.add_row [
+          formatter.add_data_row(sheet, [
             point[:label],
             format_number(point[:student_target_percent], 1, suffix: "%"),
             format_number(point[:advisor_target_percent], 1, suffix: "%"),
             format_number(point[:course_target_percent], 1, suffix: "%")
-          ]
+          ])
         end
+        formatter.finish_table(sheet, header_row: timeline_header_row, column_count: 4, widths: [ 18, 24, 24, 24 ], freeze: false, auto_filter: false)
       end
     end
 
@@ -82,7 +86,7 @@ module Reports
       summary = Array(payload[:competency_summary])
 
       workbook.add_worksheet(name: "Domain") do |sheet|
-        sheet.add_row [
+        headers = [
           "Domain",
           "Program Target Level",
           "Student Avg",
@@ -102,13 +106,14 @@ module Reports
           "Not Met %",
           "Not Assessed %"
         ]
+        header_row = formatter.add_header_row(sheet, headers)
 
         if summary.blank?
-          sheet.add_row [ "No domain data available" ]
+          formatter.add_note_row(sheet, [ "No domain data available" ])
         end
 
         summary.each do |entry|
-          sheet.add_row [
+          formatter.add_data_row(sheet, [
             entry[:name],
             format_number(entry[:program_target_level], 2),
             format_number(entry[:student_average], 2),
@@ -127,8 +132,10 @@ module Reports
             format_number(entry[:achieved_percent], 1, suffix: "%"),
             format_number(entry[:not_met_percent], 1, suffix: "%"),
             format_number(entry[:not_assessed_percent], 1, suffix: "%")
-          ]
+          ])
         end
+
+        formatter.finish_table(sheet, header_row: header_row, column_count: headers.size)
       end
     end
 
@@ -136,7 +143,7 @@ module Reports
       detail = Array(payload.dig(:competency_detail, :items))
 
       workbook.add_worksheet(name: "Competency") do |sheet|
-        sheet.add_row [
+        headers = [
           "Competency",
           "Domain",
           "Program Target Level",
@@ -153,13 +160,14 @@ module Reports
           "Not Met %",
           "Not Assessed %"
         ]
+        header_row = formatter.add_header_row(sheet, headers)
 
         if detail.blank?
-          sheet.add_row [ "No competency data available" ]
+          formatter.add_note_row(sheet, [ "No competency data available" ])
         end
 
         detail.each do |item|
-          sheet.add_row [
+          formatter.add_data_row(sheet, [
             item[:name],
             item[:domain_name],
             format_number(item[:program_target_level], 2),
@@ -175,8 +183,10 @@ module Reports
             format_number(item[:achieved_percent], 1, suffix: "%"),
             format_number(item[:not_met_percent], 1, suffix: "%"),
             format_number(item[:not_assessed_percent], 1, suffix: "%")
-          ]
+          ])
         end
+
+        formatter.finish_table(sheet, header_row: header_row, column_count: headers.size)
       end
     end
 
@@ -184,7 +194,7 @@ module Reports
       tracks = Array(payload[:track_summary])
 
       workbook.add_worksheet(name: "Track") do |sheet|
-        sheet.add_row [
+        headers = [
           "Track",
           "On Track %",
           "Submissions",
@@ -195,13 +205,14 @@ module Reports
           "Not Met %",
           "Not Assessed %"
         ]
+        header_row = formatter.add_header_row(sheet, headers)
 
         if tracks.blank?
-          sheet.add_row [ "No track data available" ]
+          formatter.add_note_row(sheet, [ "No track data available" ])
         end
 
         tracks.each do |entry|
-          sheet.add_row [
+          formatter.add_data_row(sheet, [
             entry[:track],
             format_number(entry[:achieved_percent], 1, suffix: "%"),
             entry[:submissions],
@@ -211,8 +222,10 @@ module Reports
             format_number(entry[:achieved_percent], 1, suffix: "%"),
             format_number(entry[:not_met_percent], 1, suffix: "%"),
             format_number(entry[:not_assessed_percent], 1, suffix: "%")
-          ]
+          ])
         end
+
+        formatter.finish_table(sheet, header_row: header_row, column_count: headers.size)
       end
     end
 
@@ -223,33 +236,35 @@ module Reports
       flexibility = employment[:flexibility_distribution] || {}
 
       workbook.add_worksheet(name: "Employment") do |sheet|
-        sheet.add_row [ "Generated At", format_timestamp(payload[:generated_at]) ]
-        sheet.add_row [ "Total Respondents", employment[:total_respondents] ]
-        sheet.add_row [ "Employment Rate", format_number(employment[:employment_rate], 1, suffix: "%") ]
+        formatter.add_meta_row(sheet, "Generated At", format_timestamp(payload[:generated_at]))
+        formatter.add_meta_row(sheet, "Total Respondents", employment[:total_respondents])
+        formatter.add_meta_row(sheet, "Employment Rate", format_number(employment[:employment_rate], 1, suffix: "%"))
 
         sheet.add_row []
-        sheet.add_row [ "Status Breakdown" ]
-        sheet.add_row [ "Status", "Count" ]
-        sheet.add_row [ "No employment status data available", nil ] if status_counts.blank?
+        formatter.add_title_row(sheet, [ "Status Breakdown" ])
+        status_header_row = formatter.add_header_row(sheet, [ "Status", "Count" ])
+        formatter.add_note_row(sheet, [ "No employment status data available", nil ]) if status_counts.blank?
         status_counts.each do |entry|
-          sheet.add_row [ entry[:label], entry[:count] ]
+          formatter.add_data_row(sheet, [ entry[:label], entry[:count] ])
         end
 
         sheet.add_row []
-        sheet.add_row [ "Hours Per Week" ]
-        sheet.add_row [ "Bucket", "Count" ]
-        sheet.add_row [ "No hours data available", nil ] if Array(hours[:labels]).blank?
+        formatter.add_title_row(sheet, [ "Hours Per Week" ])
+        formatter.add_header_row(sheet, [ "Bucket", "Count" ])
+        formatter.add_note_row(sheet, [ "No hours data available", nil ]) if Array(hours[:labels]).blank?
         Array(hours[:labels]).zip(Array(hours[:data])).each do |label, count|
-          sheet.add_row [ label, count ]
+          formatter.add_data_row(sheet, [ label, count ])
         end
 
         sheet.add_row []
-        sheet.add_row [ "Work Schedule Flexibility" ]
-        sheet.add_row [ "Label", "Count" ]
-        sheet.add_row [ "No flexibility data available", nil ] if Array(flexibility[:labels]).blank?
+        formatter.add_title_row(sheet, [ "Work Schedule Flexibility" ])
+        formatter.add_header_row(sheet, [ "Label", "Count" ])
+        formatter.add_note_row(sheet, [ "No flexibility data available", nil ]) if Array(flexibility[:labels]).blank?
         Array(flexibility[:labels]).zip(Array(flexibility[:data])).each do |label, count|
-          sheet.add_row [ label, count ]
+          formatter.add_data_row(sheet, [ label, count ])
         end
+
+        formatter.finish_table(sheet, header_row: status_header_row, column_count: 2, widths: [ 32, 14 ], auto_filter: false)
       end
     end
 
@@ -356,16 +371,17 @@ module Reports
 
     def add_raw_sheet(workbook, name, columns, rows)
       workbook.add_worksheet(name: name) do |sheet|
-        sheet.add_row columns.map(&:first)
+        header_row = formatter.add_header_row(sheet, columns.map(&:first))
 
         if rows.blank?
-          sheet.add_row [ "No raw data available" ]
-          next
+          formatter.add_note_row(sheet, [ "No raw data available" ])
+        else
+          rows.each do |row|
+            formatter.add_data_row(sheet, columns.map { |_label, key| format_raw_value(row[key]) })
+          end
         end
 
-        rows.each do |row|
-          sheet.add_row columns.map { |_label, key| format_raw_value(row[key]) }
-        end
+        formatter.finish_table(sheet, header_row: header_row, column_count: columns.size)
       end
     end
 

@@ -6,25 +6,59 @@
   Generated: <%= generated_at.strftime("%Y-%m-%d %H:%M") %>
 <% end %>
 
-<h1 class="c-item-title"><%= survey.title %></h1>
-
 <% latest_student = Array(question_responses).filter_map { |entry| entry.updated_at || entry.created_at }.max %>
 <% latest_advisor = feedback_summary[:latest_feedback_at] %>
+<% status_label = survey_response.status.to_s.presence&.titleize || "In Progress" %>
 
-<div class="user-info">
-  <div class="col">
-    <div class="label">Student</div>
-    <div class="value"><%= student.full_name %></div>
-    <div class="c-muted"><%= student.email %></div>
-    <div class="c-muted">Latest student update: <%= latest_student ? latest_student.strftime("%Y-%m-%d") : "—" %></div>
+<section class="pdf-title-card">
+  <div class="pdf-title-kicker">Survey Response Report</div>
+  <h1 class="c-item-title"><%= survey.title %></h1>
+  <p class="pdf-title-subtext">
+    Student-level competency record. Handle and distribute according to FERPA and program review access rules.
+  </p>
+</section>
+
+<table class="report-facts" aria-label="Survey response report details">
+  <tbody>
+    <tr>
+      <th>Student</th>
+      <td>
+        <strong><%= student.full_name %></strong>
+        <span class="report-fact-muted"><%= student.email %></span>
+      </td>
+      <th>Advisor</th>
+      <td>
+        <strong><%= advisor&.display_name || "Unassigned" %></strong>
+        <% if advisor&.email.present? %>
+          <span class="report-fact-muted"><%= advisor.email %></span>
+        <% end %>
+      </td>
+    </tr>
+    <tr>
+      <th>Status</th>
+      <td><span class="badge badge-primary"><%= status_label %></span></td>
+      <th>Completed</th>
+      <td><%= survey_response.completion_date ? survey_response.completion_date.strftime("%Y-%m-%d") : "—" %></td>
+    </tr>
+    <tr>
+      <th>Student Update</th>
+      <td><%= latest_student ? latest_student.strftime("%Y-%m-%d") : "—" %></td>
+      <th>Advisor Update</th>
+      <td><%= latest_advisor ? latest_advisor.strftime("%Y-%m-%d") : "—" %></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="pdf-stat-row" aria-label="Survey response progress">
+  <div class="pdf-stat">
+    <div class="pdf-stat-label">Required</div>
+    <div class="pdf-stat-value"><%= required_answered_count %>/<%= required_total_questions %></div>
+    <div class="pdf-stat-subtext">required responses</div>
   </div>
-  <div class="col">
-    <div class="label">Advisor</div>
-    <div class="value"><%= advisor&.display_name || "Unassigned" %></div>
-    <% if advisor&.email.present? %>
-      <div class="c-muted"><%= advisor.email %></div>
-    <% end %>
-    <div class="c-muted">Latest advisor update: <%= latest_advisor ? latest_advisor.strftime("%Y-%m-%d") : "—" %></div>
+  <div class="pdf-stat">
+    <div class="pdf-stat-label">Generated</div>
+    <div class="pdf-stat-value pdf-stat-value--date"><%= generated_at.strftime("%Y-%m-%d") %></div>
+    <div class="pdf-stat-subtext"><%= generated_at.strftime("%H:%M") %></div>
   </div>
 </div>
 
@@ -130,7 +164,7 @@
           <% end %>
         <% end %>
 
-        <tr>
+        <tr class="competency-average-row">
           <td><strong>Average</strong></td>
           <td class="numeric"><%= avg_target ? format("%.2f", avg_target) : "—" %></td>
           <td class="numeric"><%= avg_student ? format("%.2f", avg_student) : "—" %></td>

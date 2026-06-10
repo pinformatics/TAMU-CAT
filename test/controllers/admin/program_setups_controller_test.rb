@@ -30,9 +30,10 @@ class Admin::ProgramSetupsControllerTest < ActionDispatch::IntegrationTest
     get admin_program_setup_path(tab: "track")
 
     assert_response :success
-    assert_select ".c-compact-list .c-status-badge", count: 0
     assert_select ".c-pill", text: /Key/, count: 0
     assert_select ".c-pill", text: /Position/, count: 0
+    assert_select ".c-setup-list__body", text: /Key/, count: 0
+    assert_select ".c-setup-list__body", text: /Position/, count: 0
     assert_select "input[name='program_track[position]']"
   end
 
@@ -44,14 +45,37 @@ class Admin::ProgramSetupsControllerTest < ActionDispatch::IntegrationTest
       get admin_program_setup_path(tab: tab)
 
       assert_response :success
-      assert_select ".c-compact-list .c-status-badge", count: 0
-      assert_select ".c-compact-list .c-pill", count: 0
+      assert_select ".c-setup-list .c-pill", count: 0
+      assert_select ".c-setup-list__body", text: /Position/, count: 0
+      assert_select ".c-setup-list__body", text: /Key/, count: 0
       if tab == "years"
-        assert_select ".c-management-layout"
-        assert_select ".c-management-item__summary", text: /Class of 2090/
+        assert_select ".c-setup-list[data-program-setup-sortable='true']"
+        assert_select ".c-setup-list__body", text: /Class of 2090/
         assert_select "input[name='program_year[position]']"
       end
     end
+  end
+
+  test "structure modals use formatted form layout" do
+    ProgramTrack.create!(key: "modal-test", name: "Modal Test", position: 30, active: true)
+
+    get admin_program_setup_path(tab: "tracks")
+
+    assert_response :success
+    assert_select ".c-modal.c-modal--form"
+    assert_select ".c-modal__subtitle", text: /Update the display name/
+    assert_select ".c-modal-form__grid"
+    assert_select ".c-modal-actions"
+    assert_select ".c-modal-danger-zone", text: /Delete track/
+
+    ProgramSemester.find_or_create_by!(name: "Spring 2028") { |semester| semester.current = false }
+
+    get admin_program_setup_path(tab: "semesters")
+
+    assert_response :success
+    assert_select ".c-modal-action-zone", count: 0
+    assert_select "input[name='program_semester[current]']"
+    assert_select ".c-table__title", text: "Set as current semester"
   end
 
   test "target tab uses target-context language and omits noisy commit parameter" do
@@ -199,7 +223,7 @@ class Admin::ProgramSetupsControllerTest < ActionDispatch::IntegrationTest
     get admin_program_setup_path(tab: "semesters")
 
     assert_response :success
-    assert_select ".c-compact-list .c-table__title" do |elements|
+    assert_select ".c-setup-list .c-table__title" do |elements|
       names = elements.map { |element| element.text.strip }
       expected = [ "Spring 2025", "Fall 2025", "Spring 2026", "Fall 2026" ]
       assert_equal expected, names.select { |name| expected.include?(name) }

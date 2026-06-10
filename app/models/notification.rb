@@ -10,31 +10,57 @@ class Notification < ApplicationRecord
 
   validates :title, presence: true
   validates :message, presence: true
-  validates :user_id, uniqueness: { scope: %i[title notifiable_type notifiable_id] }
+  validates :dedupe_key, uniqueness: { scope: :user_id }, allow_blank: true
+  validates :user_id, uniqueness: { scope: %i[title notifiable_type notifiable_id] }, unless: -> { dedupe_key.present? }
 
-  # Creates or reuses an existing notification matching the uniqueness scope.
+  # Creates or reuses an existing notification matching the stable dedupe key
+  # when provided. Older/simple callers fall back to title + notifiable dedupe.
   #
   # @param user [User]
   # @param title [String]
   # @param message [String]
   # @param notifiable [ApplicationRecord, nil]
+  # @param event_key [String, Symbol, nil]
+  # @param dedupe_key [String, nil]
+  # @param metadata [Hash]
   # @return [Notification]
-  def self.deliver!(user:, title:, message:, notifiable: nil)
-    relation = where(user: user, title: title)
-    relation = if notifiable
-      relation.where(notifiable: notifiable)
+  def self.deliver!(user:, title:, message:, notifiable: nil, event_key: nil, dedupe_key: nil, metadata: {})
+    normalized_dedupe_key = dedupe_key.presence
+    relation = if normalized_dedupe_key
+      where(user: user, dedupe_key: normalized_dedupe_key)
     else
-      relation.where(notifiable_type: nil, notifiable_id: nil)
+      fallback_dedupe_relation(user:, title:, notifiable:)
     end
 
     record = relation.first_or_initialize
+    record.title = title
     record.message = message
     record.notifiable = notifiable
+    record.event_key = event_key.to_s if record.respond_to?(:event_key=) && event_key.present?
+    record.dedupe_key = normalized_dedupe_key if record.respond_to?(:dedupe_key=)
+    record.metadata = normalized_metadata(metadata) if record.respond_to?(:metadata=)
     record.read_at = user_in_app_notifications_enabled?(user) ? nil : Time.current
     record.created_at = Time.current if record.persisted?
     record.save!
     record
   end
+
+  def self.fallback_dedupe_relation(user:, title:, notifiable:)
+    relation = where(user: user, title: title)
+    if notifiable
+      relation.where(notifiable: notifiable)
+    else
+      relation.where(notifiable_type: nil, notifiable_id: nil)
+    end
+  end
+  private_class_method :fallback_dedupe_relation
+
+  def self.normalized_metadata(metadata)
+    return {} if metadata.blank?
+
+    metadata.respond_to?(:to_h) ? metadata.to_h : {}
+  end
+  private_class_method :normalized_metadata
 
   # Marks the notification as read by setting the timestamp.
   #

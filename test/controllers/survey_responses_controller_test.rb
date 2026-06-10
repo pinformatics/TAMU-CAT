@@ -211,17 +211,22 @@ class SurveyResponsesControllerUnitTest < ActionController::TestCase
     sr = SurveyResponse.build(student: @student, survey: survey)
 
     captured = false
-    delivered = false
+    delivered_payload = nil
 
     SurveyResponseVersion.stub(:capture_current!, ->(**_) { captured = true }) do
-      Notification.stub(:deliver!, ->(**_) { delivered = true }) do
+      Notification.stub(:deliver!, ->(**kwargs) { delivered_payload = kwargs }) do
         delete :destroy, params: { id: sr.id }
       end
     end
 
     assert_redirected_to survey_records_path
     assert captured, "Expected SurveyResponseVersion.capture_current! to run"
-    assert delivered, "Expected Notification.deliver! to run"
+    assert delivered_payload, "Expected Notification.deliver! to run"
+    assert_equal "survey.response.deleted", delivered_payload[:event_key]
+    assert_equal "survey.response.deleted:survey:#{survey.id}:student:#{@student.student_id}", delivered_payload[:dedupe_key]
+    assert_equal survey.id, delivered_payload[:metadata][:survey_id]
+    assert_equal @student.student_id, delivered_payload[:metadata][:student_id]
+    assert_equal true, delivered_payload[:metadata][:removed_assignment]
     assert_nil StudentQuestion.find_by(student_id: @student.student_id, question_id: q1.id)
     assert_equal 0, Feedback.where(student_id: @student.student_id, survey_id: survey.id).count
     assert_equal 0, AdvisorFeedbackSubmission.where(student_id: @student.student_id, survey_id: survey.id).count

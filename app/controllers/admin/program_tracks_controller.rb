@@ -46,6 +46,24 @@ class Admin::ProgramTracksController < Admin::BaseController
     end
   end
 
+  def reorder
+    ordered_ids = normalized_ordered_ids
+
+    ProgramTrack.transaction do
+      ordered_ids.each_with_index do |id, index|
+        ProgramTrack.where(id: id).update_all(position: (index + 1) * 10, updated_at: Time.current)
+      end
+    end
+
+    respond_to do |format|
+      format.json { render json: { status: "ok" } }
+      format.html do
+        redirect_back fallback_location: admin_program_setup_path(tab: "tracks"),
+                      notice: "Track order updated."
+      end
+    end
+  end
+
   private
 
   def program_track_params
@@ -54,5 +72,11 @@ class Admin::ProgramTracksController < Admin::BaseController
 
   def set_program_track
     @program_track = ProgramTrack.find(params[:id])
+  end
+
+  def normalized_ordered_ids
+    Array(params[:ordered_ids]).flat_map { |value| value.to_s.split(",") }.filter_map do |value|
+      Integer(value, exception: false)
+    end
   end
 end

@@ -20,6 +20,19 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     assert_includes html, ">4<"
   end
 
+  test "composite report renders polished report shell and handling language" do
+    html = render_competency_report_html
+
+    assert_includes html, "Survey Response Report"
+    assert_includes html, "Student-level competency record"
+    assert_includes html, "FERPA"
+    assert_includes html, "class=\"report-facts\""
+    assert_includes html, "class=\"pdf-stat-row\""
+    assert_no_match(/pdf-stat-label\">\s*Answered\s*</, html)
+    assert_no_match(/\d+%\s+complete/, html)
+    assert_includes html, "Required"
+  end
+
   test "result cleanup runs once" do
     calls = 0
     result = CompositeReportGenerator::Result.new(path: "file.pdf", cached: true, size_bytes: 10, cleanup: -> { calls += 1 })

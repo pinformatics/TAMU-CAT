@@ -395,39 +395,42 @@ class StudentOverviewsController < ApplicationController
   def build_student_overviews_workbook
     package = Axlsx::Package.new
     workbook = package.workbook
+    formatter = Exports::XlsxFormatter.new(workbook)
 
-    add_student_overview_students_sheet(workbook)
-    add_student_overview_heatmap_sheet(workbook)
-    add_student_overview_filters_sheet(workbook)
+    add_student_overview_students_sheet(workbook, formatter)
+    add_student_overview_heatmap_sheet(workbook, formatter)
+    add_student_overview_filters_sheet(workbook, formatter)
 
     package
   end
 
-  def add_student_overview_students_sheet(workbook)
+  def add_student_overview_students_sheet(workbook, formatter)
+    headers = [
+      "Student",
+      "Email",
+      "UIN",
+      "Track",
+      "Year",
+      "Status",
+      "Advisor",
+      "Assigned Surveys",
+      "Completed Surveys",
+      "Survey Completion Rate",
+      "Competencies Meeting Target",
+      "Competencies Total"
+    ]
+
     workbook.add_worksheet(name: "Students") do |sheet|
-      sheet.add_row [ "Student Overview Export" ]
-      sheet.add_row [ "Generated At", Time.current.iso8601 ]
+      formatter.add_title_row(sheet, [ "Student Overview Export" ])
+      formatter.add_meta_row(sheet, "Generated At", Time.current.iso8601)
       sheet.add_row []
-      sheet.add_row [
-        "Student",
-        "Email",
-        "UIN",
-        "Track",
-        "Year",
-        "Status",
-        "Advisor",
-        "Assigned Surveys",
-        "Completed Surveys",
-        "Survey Completion Rate",
-        "Competencies Meeting Target",
-        "Competencies Total"
-      ]
+      header_row = formatter.add_header_row(sheet, headers)
 
       Array(@student_rows).each do |row|
         student = row[:student]
         attainment = row[:competency_attainment] || {}
 
-        sheet.add_row [
+        formatter.add_data_row(sheet, [
           student&.user&.display_name || student&.student_id,
           student&.user&.email,
           student&.uin,
@@ -440,40 +443,56 @@ class StudentOverviewsController < ApplicationController
           row[:completion_rate],
           attainment[:met_count],
           attainment[:total_count]
-        ]
+        ])
       end
+
+      formatter.finish_table(
+        sheet,
+        header_row: header_row,
+        column_count: headers.size,
+        widths: [ 24, 30, 14, 18, 10, 14, 24, 16, 18, 20, 24, 18 ]
+      )
     end
   end
 
-  def add_student_overview_heatmap_sheet(workbook)
+  def add_student_overview_heatmap_sheet(workbook, formatter)
     domain_names = Array(@heatmap_rows).first&.dig(:domains)&.map { |domain| domain[:name] }
     domain_names = Reports::DataAggregator::REPORT_DOMAINS if domain_names.blank?
+    headers = [ "Student", "Track", "Year", *domain_names ]
 
     workbook.add_worksheet(name: "Domain Heatmap") do |sheet|
-      sheet.add_row [ "Student Domain Heatmap" ]
-      sheet.add_row [ "Generated At", Time.current.iso8601 ]
+      formatter.add_title_row(sheet, [ "Student Domain Heatmap" ])
+      formatter.add_meta_row(sheet, "Generated At", Time.current.iso8601)
       sheet.add_row []
-      sheet.add_row [ "Student", "Track", "Year", *domain_names ]
+      header_row = formatter.add_header_row(sheet, headers)
 
       Array(@heatmap_rows).each do |row|
         domain_lookup = Array(row[:domains]).index_by { |domain| domain[:name] }
 
-        sheet.add_row [
+        formatter.add_data_row(sheet, [
           row[:student_name],
           row[:track],
           row[:program_year],
           *domain_names.map { |domain_name| domain_lookup.dig(domain_name, :average) }
-        ]
+        ])
       end
+
+      formatter.finish_table(
+        sheet,
+        header_row: header_row,
+        column_count: headers.size,
+        widths: [ 24, 18, 10, *Array.new(domain_names.size, 28) ]
+      )
     end
   end
 
-  def add_student_overview_filters_sheet(workbook)
+  def add_student_overview_filters_sheet(workbook, formatter)
     workbook.add_worksheet(name: "Filters") do |sheet|
-      sheet.add_row [ "Filter", "Value" ]
+      header_row = formatter.add_header_row(sheet, [ "Filter", "Value" ])
       student_overview_export_filters.each do |label, value|
-        sheet.add_row [ label, value ]
+        formatter.add_data_row(sheet, [ label, value ])
       end
+      formatter.finish_table(sheet, header_row: header_row, column_count: 2, widths: [ 24, 32 ])
     end
   end
 

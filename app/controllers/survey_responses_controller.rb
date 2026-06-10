@@ -179,7 +179,15 @@ class SurveyResponsesController < ApplicationController
         user: recipient,
         title: "Survey response deleted",
         message: "An admin deleted your responses for '#{survey.title}'. If the survey has not closed yet, you may submit again.",
-        notifiable: notification_target
+        notifiable: notification_target,
+        event_key: "survey.response.deleted",
+        dedupe_key: "survey.response.deleted:survey:#{survey.id}:student:#{student.student_id}",
+        metadata: {
+          survey_id: survey.id,
+          student_id: student.student_id,
+          survey_assignment_id: assignment&.id,
+          removed_assignment: removed_assignment
+        }
       )
     end
 

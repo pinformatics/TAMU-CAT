@@ -22,6 +22,7 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "End-of-program target"
     assert_includes response.body, @competency_title
     assert_select "#competencySnapshotPanel.c-chart-panel--scrollable"
+    assert_select "#semesterTrendPanel.c-chart-panel--scrollable"
     assert_select ".c-chart-frame--radar canvas#competencyRadarChart"
   end
 

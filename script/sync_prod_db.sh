@@ -238,6 +238,9 @@ if [[ "$SKIP_MIGRATE" -ne 1 ]]; then
   echo "Running local Rails migrations on '$LOCAL_DATABASE'..."
   docker compose run --rm -e "RAILS_ENV=development" -e "DATABASE=$LOCAL_DATABASE" "$APP_SERVICE" bin/rails db:migrate
 
+  echo "Backfilling completed survey assignment timestamps..."
+  docker compose run --rm -e "RAILS_ENV=development" -e "DATABASE=$LOCAL_DATABASE" "$APP_SERVICE" bin/rails survey_assignments:backfill_completed
+
   echo "Checking V6 course schema readiness..."
   docker compose run --rm -e "RAILS_ENV=development" -e "DATABASE=$LOCAL_DATABASE" "$APP_SERVICE" bin/rails v6:readiness
 fi

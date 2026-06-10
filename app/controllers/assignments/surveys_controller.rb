@@ -103,6 +103,9 @@ module Assignments
         return
       end
 
+      changed_assignment = nil
+      previous_deadline = nil
+
       ActiveRecord::Base.transaction do
         @survey.questions.find_each do |question|
           StudentQuestion.find_or_create_by!(student_id: student.student_id, question_id: question.id) do |record|
@@ -110,8 +113,14 @@ module Assignments
           end
         end
 
-        upsert_assignment_for(student)
+        assignment, created, prior_deadline, deadline_changed = upsert_assignment_for(student)
+        unless created
+          changed_assignment = assignment if deadline_changed
+          previous_deadline = prior_deadline
+        end
       end
+
+      deliver_assignment_deadline_changed_notification!(changed_assignment, previous_deadline: previous_deadline) if changed_assignment
 
       redirect_to assignments_surveys_path,
                   notice: "Assigned '#{@survey.title}' to #{student.full_name || student.user.email} at #{timestamp_str}."
@@ -138,6 +147,7 @@ module Assignments
       end
 
       processed_count = 0
+      changed_existing_assignments = []
 
       ActiveRecord::Base.transaction do
         students.find_each do |student|
@@ -147,9 +157,14 @@ module Assignments
             end
           end
 
-          upsert_assignment_for(student)
+          assignment, created, previous_deadline, deadline_changed = upsert_assignment_for(student)
+          changed_existing_assignments << [ assignment, previous_deadline ] if !created && deadline_changed
           processed_count += 1
         end
+      end
+
+      changed_existing_assignments.each do |assignment, previous_deadline|
+        deliver_assignment_deadline_changed_notification!(assignment, previous_deadline: previous_deadline)
       end
 
       group_label = []
@@ -194,6 +209,7 @@ module Assignments
         update_attributes[:available_until] = extension_deadline
       end
 
+      assignments_to_reopen = assignments.includes(student: :user).to_a
       reopened_count = assignments.update_all(update_attributes)
 
       if reopened_count.zero?
@@ -205,6 +221,12 @@ module Assignments
       group_label = []
       group_label << (track_filter.present? ? track_filter.to_s.strip : (survey_track_key&.titleize || "selected track"))
       group_label << "Class of #{year_filter}" if year_filter.present?
+
+      assignments_to_reopen.each do |assignment|
+        assignment.completed_at = nil
+        assignment.available_until = extension_deadline if extension_deadline.present?
+        deliver_assignment_reopened_notification!(assignment)
+      end
 
       redirect_to assignments_survey_path(@survey),
                   notice: "Re-opened '#{@survey.title}' for #{reopened_count} student#{'s' unless reopened_count == 1} in #{group_label.compact.join(' • ')}."
@@ -231,12 +253,7 @@ module Assignments
         ActiveRecord::Base.transaction do
           scope.delete_all if has_responses
           assignment&.destroy!
-          Notification.deliver!(
-            user: student.user,
-            title: "Survey Unassigned",
-            message: "The survey '#{@survey.title}' was removed from your assignments.",
-            notifiable: @survey
-          )
+          deliver_assignment_unassigned_notification!(student)
         end
         redirect_to assignments_survey_path(@survey),
                     notice: "Unassigned '#{@survey.title}' from #{student.full_name || student.user.email} at #{timestamp_str}."
@@ -275,14 +292,7 @@ module Assignments
         removable_assignments.find_each do |assignment|
           assignment.destroy!
           student = student_records_by_id[assignment.student_id]
-          if student&.user.present?
-            Notification.deliver!(
-              user: student.user,
-              title: "Survey Unassigned",
-              message: "The survey '#{@survey.title}' was removed from your assignments.",
-              notifiable: @survey
-            )
-          end
+          deliver_assignment_unassigned_notification!(student) if student&.user.present?
           removed_count += 1
         end
       end
@@ -325,7 +335,9 @@ module Assignments
 
       return unless ensure_deadline_not_before_survey!(extension_deadline)
 
+      previous_deadline = assignment.available_until
       assignment.update!(available_until: extension_deadline)
+      deliver_assignment_deadline_changed_notification!(assignment, previous_deadline: previous_deadline)
       redirect_to assignments_survey_path(@survey),
                   notice: "Changed '#{@survey.title}' deadline for #{student.full_name || student.user.email} to #{format_timestamp(extension_deadline)}."
     rescue ActiveRecord::RecordInvalid => e
@@ -359,6 +371,7 @@ module Assignments
       end
 
       processed_count = 0
+      changed_existing_assignments = []
 
       ActiveRecord::Base.transaction do
         students.find_each do |student|
@@ -369,15 +382,22 @@ module Assignments
           end
 
           assignment = SurveyAssignment.find_or_initialize_by(survey_id: @survey.id, student_id: student.student_id)
+          created = assignment.new_record?
+          previous_deadline = assignment.available_until
           assignment.manual = true if assignment.respond_to?(:manual=)
           assignment.advisor_id ||= current_advisor_profile&.advisor_id
           assignment.assigned_at ||= Time.current
           assignment.available_from ||= @survey.available_from
           assignment.available_until = extension_deadline
           assignment.save! if assignment.new_record? || assignment.changed?
+          changed_existing_assignments << [ assignment, previous_deadline ] if !created && previous_deadline != extension_deadline
 
           processed_count += 1
         end
+      end
+
+      changed_existing_assignments.each do |assignment, previous_deadline|
+        deliver_assignment_deadline_changed_notification!(assignment, previous_deadline: previous_deadline)
       end
 
       group_label = []
@@ -447,7 +467,7 @@ module Assignments
     # Ensures a SurveyAssignment exists for the student/survey pair.
     #
     # @param student [Student]
-    # @return [Array<(SurveyAssignment, Boolean)>] record and flag indicating creation
+    # @return [Array<(SurveyAssignment, Boolean, Time, Boolean)>] record, creation flag, previous deadline, and deadline-change flag
     def upsert_assignment_for(student)
       assignment = SurveyAssignment.find_or_initialize_by(
         survey_id: @survey.id,
@@ -455,6 +475,7 @@ module Assignments
       )
 
       created = assignment.new_record?
+      previous_deadline = assignment.available_until
       assignment.manual = true if assignment.respond_to?(:manual=)
       assignment.advisor_id ||= current_advisor_profile&.advisor_id
       assignment.assigned_at ||= Time.current
@@ -487,7 +508,83 @@ module Assignments
       assignment.completed_at = nil if created
       assignment.save! if assignment.new_record? || assignment.changed?
 
-      [ assignment, created ]
+      [ assignment, created, previous_deadline, !created && previous_deadline != assignment.available_until ]
+    end
+
+    def deliver_assignment_unassigned_notification!(student)
+      return unless student&.user
+
+      Notification.deliver!(
+        user: student.user,
+        title: "Survey Unassigned",
+        message: "The survey '#{@survey.title}' was removed from your assignments.",
+        notifiable: @survey,
+        event_key: "survey.unassigned",
+        dedupe_key: "survey.unassigned:survey:#{@survey.id}:student:#{student.student_id}",
+        metadata: {
+          survey_id: @survey.id,
+          student_id: student.student_id
+        }
+      )
+    end
+
+    def deliver_assignment_deadline_changed_notification!(assignment, previous_deadline:)
+      user = assignment.recipient_user
+      return unless user
+
+      Notification.deliver!(
+        user: user,
+        title: "Survey Deadline Changed",
+        message: deadline_changed_message(assignment),
+        notifiable: assignment,
+        event_key: "survey.deadline_changed",
+        dedupe_key: "survey.deadline_changed:survey_assignment:#{assignment.id}",
+        metadata: {
+          survey_assignment_id: assignment.id,
+          survey_id: assignment.survey_id,
+          student_id: assignment.student_id,
+          previous_available_until: previous_deadline&.iso8601,
+          available_until: assignment.available_until&.iso8601
+        }
+      )
+    end
+
+    def deliver_assignment_reopened_notification!(assignment)
+      user = assignment.recipient_user
+      return unless user
+
+      Notification.deliver!(
+        user: user,
+        title: "Competency Survey Reopened",
+        message: reopened_assignment_message(assignment),
+        notifiable: assignment,
+        event_key: "survey.reopened",
+        dedupe_key: "survey.reopened:survey_assignment:#{assignment.id}",
+        metadata: {
+          survey_assignment_id: assignment.id,
+          survey_id: assignment.survey_id,
+          student_id: assignment.student_id,
+          available_until: assignment.available_until&.iso8601
+        }
+      )
+    end
+
+    def deadline_changed_message(assignment)
+      deadline = assignment.available_until
+      if deadline.present?
+        "The deadline for '#{assignment.survey.title}' changed to #{format_timestamp(deadline)}."
+      else
+        "The deadline for '#{assignment.survey.title}' was removed."
+      end
+    end
+
+    def reopened_assignment_message(assignment)
+      deadline = assignment.available_until
+      if deadline.present?
+        "The competency survey '#{assignment.survey.title}' was reopened. You can edit and resubmit until #{format_timestamp(deadline)}."
+      else
+        "The competency survey '#{assignment.survey.title}' was reopened. You can edit and resubmit while it is available."
+      end
     end
 
     def parsed_available_from

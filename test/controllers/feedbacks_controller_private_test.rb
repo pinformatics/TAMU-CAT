@@ -33,7 +33,7 @@ class FeedbacksControllerPrivateTest < ActionController::TestCase
     assert_equal @student.advisor_id, @controller.send(:confidential_note_owner_advisor_id_for_current_user)
 
     @student.update!(advisor_id: nil)
-    assert_nil @controller.send(:confidential_note_owner_advisor_id_for_current_user)
+    assert_equal @admin_user.id, @controller.send(:confidential_note_owner_advisor_id_for_current_user)
 
     sign_out @admin_user
     sign_in @student_user
@@ -91,12 +91,6 @@ class FeedbacksControllerPrivateTest < ActionController::TestCase
     @controller.instance_variable_set(:@submission_intent, "save")
     assert_match "Saved draft feedback", @controller.send(:feedback_saved_notice)
 
-    assert_equal "4", @controller.send(:normalize_feedback_prefill_score, { "answer" => "4" })
-    assert_equal "3", @controller.send(:normalize_feedback_prefill_score, { value: "Developing (3)" })
-    assert_equal "5", @controller.send(:normalize_feedback_prefill_score, "5 - Mastery")
-    assert_nil @controller.send(:normalize_feedback_prefill_score, "6")
-    assert_nil @controller.send(:normalize_feedback_prefill_score, "not scored")
-
     q1 = Question.new(id: 100)
     q2 = Question.new(id: 101)
     assert_equal 0, @controller.send(:legacy_answer_id_offset, [], {})
@@ -146,15 +140,17 @@ class FeedbacksControllerPrivateTest < ActionController::TestCase
       average_score: 4
     )
     @controller.instance_variable_set(:@submission_intent, "save")
-    assert_nil @controller.send(:enqueue_feedback_received_notification!, feedback)
+    assert_nil @controller.send(:enqueue_feedback_received_notification!, feedback, kind: :submitted)
 
     @controller.instance_variable_set(:@submission_intent, "submit")
+    assert_nil @controller.send(:enqueue_feedback_received_notification!, feedback)
+
     assert_enqueued_with(job: SurveyNotificationJob) do
-      @controller.send(:enqueue_feedback_received_notification!, feedback)
+      @controller.send(:enqueue_feedback_received_notification!, feedback, kind: :submitted)
     end
 
     SurveyNotificationJob.stub(:perform_later, ->(*) { raise StandardError, "queue failed" }) do
-      assert_nothing_raised { @controller.send(:enqueue_feedback_received_notification!, feedback) }
+      assert_nothing_raised { @controller.send(:enqueue_feedback_received_notification!, feedback, kind: :submitted) }
     end
   end
 
@@ -232,7 +228,7 @@ class FeedbacksControllerPrivateTest < ActionController::TestCase
     assert AdvisorFeedbackSubmission.find(draft.id).submitted_at.present?
   end
 
-  test "version answer remapping and feedback prefill skip existing and blank values" do
+  test "version answer remapping supports legacy answer id offsets" do
     @survey = Survey.create!(
       title: "Prefill Remap Survey",
       program_semester: program_semesters(:fall_2025),
@@ -268,32 +264,15 @@ class FeedbacksControllerPrivateTest < ActionController::TestCase
       answer_options: %w[1 2 3 4 5].to_json,
       has_feedback: true
     )
-    existing = Feedback.create!(
-      student_id: @student.student_id,
-      survey_id: @survey.id,
-      advisor_id: @student.advisor_id,
-      category_id: category.id,
-      question_id: first.id,
-      average_score: 2
-    )
     old_first_id = first.id - 50
     version = Struct.new(:answers).new({ old_first_id.to_s => "5", (second.id - 50).to_s => "4" })
 
     remapped = @controller.send(:remapped_version_answers, version)
     assert_equal "5", remapped[first.id]
     assert_equal "4", remapped[second.id]
-
-    @controller.instance_variable_set(:@existing_feedbacks_by_question, { first.id => existing })
-    @controller.instance_variable_set(:@survey_response, Struct.new(:answers).new({ first.id => "5", second.id => "4" }))
-    @controller.send(:apply_feedback_prefill!)
-
-    feedbacks = @controller.instance_variable_get(:@existing_feedbacks_by_question)
-    assert_equal existing, feedbacks[first.id]
-    assert_equal "4.0", feedbacks[second.id].average_score.to_s
-    assert_equal @student.advisor_id, feedbacks[second.id].advisor_id
   end
 
-  test "load feedback context covers latest versions prefill and disabled summary branches" do
+  test "load feedback context covers latest versions and disabled summary branches" do
     SurveyResponseVersion.create!(
       student_id: @student.student_id,
       survey_id: @survey.id,

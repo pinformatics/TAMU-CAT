@@ -270,7 +270,22 @@ class Admin::TargetLevelsController < Admin::BaseController
         user: admin_user,
         title: "Target Levels Changed After Submissions",
         message: message,
-        notifiable: ProgramSemester.find_by(id: semester_id)
+        notifiable: ProgramSemester.find_by(id: semester_id),
+        event_key: "target_levels.changed_after_submissions",
+        dedupe_key: [
+          "target_levels.changed_after_submissions",
+          "semester:#{semester_id || 'none'}",
+          "track:#{track.presence || 'none'}",
+          "class:#{class_of.presence || 'none'}",
+          "admin:#{admin_user.id}"
+        ].join(":"),
+        metadata: {
+          program_semester_id: semester_id,
+          semester_label: semester_label,
+          track: track,
+          class_of: class_of,
+          submitted_students: submitted_students
+        }
       )
       NotificationEmailDeliveryJob.perform_later(notification_id: notification.id)
     end

@@ -6,6 +6,9 @@
                     data: {
                       turbo: false,
                       feedback_editor: true,
+                      feedback_autosave_url: feedbacks_path(survey_id: @survey.id, student_id: @student.student_id),
+                      feedback_autosave_enabled: "true",
+                      feedback_numeric_enabled: @survey.advisor_numeric_feedback_enabled?.to_s,
                       save_popup: (@saved_popup ? "1" : "0")
                     },
                     class: "space-y-8 survey-form" do |f| %>
@@ -23,6 +26,7 @@
         <%= render partial: 'survey_responses/survey_response',
                    locals: {
                      survey_response: @survey_response,
+                     editable: false,
                      include_feedback_form: true,
                      existing_feedbacks_by_question: @existing_feedbacks_by_question,
                      missing_feedback_question_ids: @missing_rating_question_ids
@@ -30,31 +34,6 @@
 
         <% if defined?(@self_target_summary) && @self_target_summary.present? %>
           <%= render "survey_responses/self_target_summary", summary: @self_target_summary %>
-        <% end %>
-
-        <% if @survey.advisor_numeric_feedback_enabled? %>
-          <section class="c-card c-card--advisor u-stack u-stack--lg" data-advisor-feedback-summary>
-            <div class="c-panel-header">
-              <h3 class="c-panel-title">Summary Statistics</h3>
-              <p class="c-muted-meta">Updates as you edit scores</p>
-            </div>
-
-            <div class="u-grid u-grid--2">
-              <div class="c-stat c-stat--success">
-                <div class="c-stat__label">At or Above Target</div>
-                <div class="c-stat__value" data-at-or-above-count>0</div>
-                <div class="c-stat__subtext" data-at-or-above-percent>(0.0%)</div>
-              </div>
-
-              <div class="c-stat c-stat--warning">
-                <div class="c-stat__label">Below End of Program Target</div>
-                <div class="c-stat__value text-red-700" data-below-count>0</div>
-                <div class="c-stat__subtext" data-below-percent>(0.0%)</div>
-              </div>
-            </div>
-
-            <p class="c-help">Based on advisor scores (0-5) compared to each question's program target level.</p>
-          </section>
         <% end %>
 
         <% if defined?(@confidential_notes_enabled) && @confidential_notes_enabled %>
@@ -123,18 +102,21 @@
           </section>
         <% end %>
 
-        <div class="c-toolbar mt-8">
-          <div class="c-toolbar__row justify-between u-w-full">
-            <%= link_to "Cancel",
-                        cancel_path,
-                        class: button_classes(:secondary),
-                        data: { feedback_cancel: true } %>
-
+        <div class="c-form-actions-bar mt-8">
+          <div class="u-actions u-actions--split u-w-full">
             <div class="flex flex-wrap items-center gap-3">
+              <%= link_to "Cancel",
+                          cancel_path,
+                          class: button_classes(:secondary),
+                          data: { feedback_cancel: true } %>
               <%= button_tag "Save",
-                             type: :submit,
+                             type: :button,
                              class: button_classes(:secondary),
                              data: { feedback_save_button: true, submission_intent: "save" } %>
+              <span class="c-muted-meta" data-feedback-autosave-status data-autosave-state="ready">Autosave ready</span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
               <%= button_tag "Submit",
                              type: :submit,
                              class: button_classes(:primary),
@@ -151,14 +133,19 @@
 
 <script>
   (function() {
-    function toNumber(value) {
-      var n = parseFloat(value);
-      return Number.isFinite(n) ? n : null;
+    function autosaveTime() {
+      return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
     }
 
-    function formatPercent(numerator, denominator) {
-      if (!denominator || denominator <= 0) return "0.0%";
-      return ((numerator / denominator) * 100).toFixed(1) + "%";
+    function csrfToken() {
+      var token = document.querySelector('meta[name="csrf-token"]');
+      return token ? token.content : "";
+    }
+
+    function escapeModalText(value) {
+      var div = document.createElement("div");
+      div.textContent = value == null ? "" : String(value);
+      return div.innerHTML;
     }
 
     function showModalAlert(title, message) {
@@ -178,34 +165,62 @@
       return Promise.resolve(window.confirm(message));
     }
 
-    function updateAdvisorFeedbackSummary() {
-      var summary = document.querySelector('[data-advisor-feedback-summary]');
-      if (!summary) return;
+    function showFeedbackSubmitModal(form) {
+      var numericEnabled = form.getAttribute("data-feedback-numeric-enabled") === "true";
+      var message = numericEnabled
+        ? "Submit only when advisor ratings and written feedback are final. Draft saves remain private until submitted."
+        : "Submit only when written feedback and confidential notes are final. Numeric advisor ratings are retired for this survey.";
+      var id = "feedback-submit-modal-" + Math.random().toString(36).slice(2);
 
-      var inputs = document.querySelectorAll('[data-advisor-feedback-score="true"]');
+      return new Promise(function(resolve) {
+        var backdrop = document.createElement("div");
+        var closed = false;
+        backdrop.className = "c-modal-backdrop";
+        backdrop.innerHTML = [
+          '<section class="c-modal" role="dialog" aria-modal="true" aria-labelledby="' + id + '-title">',
+          '  <header class="c-modal__header">',
+          '    <div>',
+          '      <p class="c-eyebrow">Advisor feedback</p>',
+          '      <h2 id="' + id + '-title" class="c-modal__title">Ready to submit feedback?</h2>',
+          '    </div>',
+          '    <button type="button" class="c-icon-button c-modal__close" data-feedback-submit-choice="edit" aria-label="Close">&times;</button>',
+          '  </header>',
+          '  <div class="c-modal__body"><p>' + escapeModalText(message) + '</p></div>',
+          '  <footer class="c-modal__footer">',
+          '    <button type="button" class="btn btn-secondary" data-feedback-submit-choice="edit">Go back to editing</button>',
+          '    <button type="button" class="btn btn-secondary" data-feedback-submit-choice="save">Save draft</button>',
+          '    <button type="button" class="btn btn-primary" data-feedback-submit-choice="submit">Submit feedback</button>',
+          '  </footer>',
+          '</section>'
+        ].join("");
 
-      var total = 0;
-      var atOrAbove = 0;
-      var below = 0;
+        function finish(choice) {
+          if (closed) return;
+          closed = true;
+          document.removeEventListener("keydown", escapeHandler);
+          backdrop.remove();
+          document.body.classList.remove("is-modal-open");
+          resolve(choice);
+        }
 
-      inputs.forEach(function(input) {
-        var score = toNumber(input.value);
-        var target = toNumber(input.getAttribute('data-program-target-level'));
-        if (score === null || target === null) return;
-        total += 1;
-        if (score >= target) atOrAbove += 1;
-        else below += 1;
+        function escapeHandler(event) {
+          if (event.key === "Escape") finish("edit");
+        }
+
+        backdrop.querySelectorAll("[data-feedback-submit-choice]").forEach(function(button) {
+          button.addEventListener("click", function() {
+            finish(button.getAttribute("data-feedback-submit-choice") || "edit");
+          });
+        });
+        backdrop.addEventListener("click", function(event) {
+          if (event.target === backdrop) finish("edit");
+        });
+        document.addEventListener("keydown", escapeHandler);
+
+        document.body.appendChild(backdrop);
+        document.body.classList.add("is-modal-open");
+        backdrop.querySelector('[data-feedback-submit-choice="edit"]')?.focus();
       });
-
-      var atCountEl = summary.querySelector('[data-at-or-above-count]');
-      var atPctEl = summary.querySelector('[data-at-or-above-percent]');
-      var belowCountEl = summary.querySelector('[data-below-count]');
-      var belowPctEl = summary.querySelector('[data-below-percent]');
-
-      if (atCountEl) atCountEl.textContent = String(atOrAbove);
-      if (belowCountEl) belowCountEl.textContent = String(below);
-      if (atPctEl) atPctEl.textContent = "(" + formatPercent(atOrAbove, total) + ")";
-      if (belowPctEl) belowPctEl.textContent = "(" + formatPercent(below, total) + ")";
     }
 
     function serializeForm(form) {
@@ -242,6 +257,89 @@
       return JSON.stringify(values);
     }
 
+    function feedbackSnapshot(form) {
+      return Array.from(new FormData(form).entries())
+        .filter(function(entry) {
+          return entry[0].indexOf("ratings[") === 0 || entry[0].indexOf("confidential_advisor_note[") === 0;
+        })
+        .sort(function(left, right) {
+          return String(left[0] + ":" + left[1]).localeCompare(String(right[0] + ":" + right[1]));
+        })
+        .map(function(entry) {
+          return entry[0] + "=" + entry[1];
+        })
+        .join("&");
+    }
+
+    function setAutosaveStatus(form, title, detail, state) {
+      var message = detail ? title + ": " + detail : title;
+      form.querySelectorAll("[data-feedback-autosave-status]").forEach(function(target) {
+        target.textContent = message;
+        target.dataset.autosaveState = state || "ready";
+      });
+    }
+
+    function autosaveImmediatelyForControl(control) {
+      if (!control) return false;
+
+      var tagName = (control.tagName || "").toLowerCase();
+      if (tagName === "select") return true;
+      if (tagName === "textarea") return false;
+
+      if (tagName === "input") {
+        var type = (control.type || "").toLowerCase();
+        return type === "radio" || type === "checkbox";
+      }
+
+      return false;
+    }
+
+    function ensureHiddenField(container, name, value) {
+      if (!container) return;
+
+      var input = container.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        container.appendChild(input);
+      }
+      input.value = value == null ? "" : String(value);
+    }
+
+    function removeHiddenField(container, name) {
+      if (!container) return;
+
+      var input = container.querySelector('input[type="hidden"][name="' + name + '"]');
+      if (input) input.remove();
+    }
+
+    function feedbackBlockForQuestion(form, questionId) {
+      return form.querySelector('[data-advisor-feedback-block][data-feedback-question-id="' + questionId + '"]');
+    }
+
+    function updateSavedFeedbackFields(form, payload) {
+      (payload.feedbacks || []).forEach(function(feedback) {
+        if (!feedback || !feedback.question_id) return;
+        var block = feedbackBlockForQuestion(form, feedback.question_id);
+        ensureHiddenField(block, "ratings[" + feedback.question_id + "][id]", feedback.id);
+        ensureHiddenField(block, "ratings[" + feedback.question_id + "][lock_version]", feedback.lock_version);
+      });
+
+      (payload.deleted_feedbacks || []).forEach(function(feedback) {
+        if (!feedback || !feedback.question_id) return;
+        var block = feedbackBlockForQuestion(form, feedback.question_id);
+        removeHiddenField(block, "ratings[" + feedback.question_id + "][id]");
+        removeHiddenField(block, "ratings[" + feedback.question_id + "][lock_version]");
+      });
+
+      if (payload.confidential_advisor_note && payload.confidential_advisor_note.lock_version != null) {
+        var noteInput = form.querySelector('[name="confidential_advisor_note[body]"]');
+        var container = noteInput ? noteInput.closest("[data-tabs-target='panel']") || noteInput.parentElement : form;
+        ensureHiddenField(container, "confidential_advisor_note[lock_version]", payload.confidential_advisor_note.lock_version);
+      }
+    }
+
     function markMissingRequiredRatings(form) {
       var missing = [];
       var requiredSelects = form.querySelectorAll('[data-required-advisor-rating="true"]');
@@ -258,40 +356,257 @@
       return missing;
     }
 
+    function lockStudentResponseFields(form) {
+      if (!form) return;
+
+      form.querySelectorAll('[name^="readonly_answers["], [name^="readonly_other_answers["]').forEach(function(control) {
+        control.disabled = true;
+        control.setAttribute("aria-readonly", "true");
+      });
+    }
+
     function bind() {
       if (document.body && document.body.dataset.feedbackNewBound === 'true') return;
       if (document.body) document.body.dataset.feedbackNewBound = 'true';
 
-      updateAdvisorFeedbackSummary();
-
       var form = document.querySelector('form[data-feedback-editor="true"]');
+      lockStudentResponseFields(form);
       var isSubmitting = false;
       var bypassBeforeUnload = false;
       var baseline = form ? serializeForm(form) : null;
 
       if (form && form.dataset.savePopup === '1') {
-        showModalAlert('Work saved', 'The student will not be able to see the content yet.');
+        showModalAlert('Draft saved', 'Advisor feedback is saved as a draft. Students will not see it until you submit.');
         form.dataset.savePopup = '0';
       }
 
+      var saveUrl = form ? (form.getAttribute("data-feedback-autosave-url") || form.action) : "";
+      var autosaveEnabled = !!(form && form.getAttribute("data-feedback-autosave-enabled") === "true" && saveUrl);
+      var timer = null;
+      var inFlight = false;
+      var dirty = false;
+      var pending = false;
+      var pendingImmediate = false;
+      var controller = null;
+      var inFlightPromise = null;
+      var lastSavedSnapshot = form ? feedbackSnapshot(form) : null;
+      var lastSavedAt = null;
+      var textAutosaveDelay = 3500;
+      var snapshotWatchDelay = 5000;
+      var snapshotWatchInterval = null;
+
       function isDirty() {
         if (!form) return false;
-        return serializeForm(form) !== baseline;
+        return serializeForm(form) !== baseline || feedbackSnapshot(form) !== lastSavedSnapshot;
+      }
+
+      function clearTimer() {
+        if (!timer) return;
+        window.clearTimeout(timer);
+        timer = null;
+      }
+
+      function abortAutosave() {
+        clearTimer();
+        if (controller) {
+          controller.abort();
+          controller = null;
+        }
+      }
+
+      function markSaved(savedAt) {
+        updateBaseline();
+        lastSavedSnapshot = feedbackSnapshot(form);
+        lastSavedAt = savedAt;
+        dirty = false;
+        pending = false;
+        pendingImmediate = false;
+      }
+
+      function updateBaseline() {
+        baseline = form ? serializeForm(form) : null;
+      }
+
+      function currentDraftAlreadySaved() {
+        return !!lastSavedAt && feedbackSnapshot(form) === lastSavedSnapshot;
+      }
+
+      function showAlreadySavedDraft() {
+        clearTimer();
+        dirty = false;
+        pending = false;
+        pendingImmediate = false;
+        setAutosaveStatus(form, "Draft saved", "Already saved at " + lastSavedAt + ". You can keep working.", "saved");
+        return true;
+      }
+
+      async function performAutosave(options) {
+        options = options || {};
+        clearTimer();
+        if (!autosaveEnabled || isSubmitting) return false;
+        if (!dirty && !pending && !options.force) return true;
+
+        if (inFlight) {
+          pending = true;
+          return inFlightPromise || false;
+        }
+
+        inFlight = true;
+        pending = false;
+        pendingImmediate = false;
+        controller = new AbortController();
+        setAutosaveStatus(
+          form,
+          options.savingTitle || "Autosaving",
+          options.savingDetail || ("Saving advisor feedback at " + autosaveTime() + "."),
+          "saving"
+        );
+
+        var intentInput = form.querySelector('[data-feedback-intent-input="true"]');
+        if (intentInput) intentInput.value = "save";
+
+        var formData = new FormData(form);
+        formData.set("submission_intent", "save");
+        formData.append("autosave", "1");
+
+        inFlightPromise = (async function() {
+          try {
+            var response = await fetch(saveUrl, {
+              method: "POST",
+              body: formData,
+              signal: controller.signal,
+              headers: {
+                "X-CSRF-Token": csrfToken(),
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json"
+              },
+              credentials: "same-origin"
+            });
+            var payload = await response.json().catch(function() { return {}; });
+            if (!response.ok || payload.saved === false) {
+              throw new Error(payload.message || "Advisor feedback autosave failed.");
+            }
+
+            updateSavedFeedbackFields(form, payload);
+            var savedAt = autosaveTime();
+            markSaved(savedAt);
+            setAutosaveStatus(
+              form,
+              options.successTitle || "Draft auto-saved",
+              options.successDetail || ("Saved at " + savedAt + "."),
+              "saved"
+            );
+            return true;
+          } catch (error) {
+            if (error.name === "AbortError") return false;
+            setAutosaveStatus(form, "Autosave failed", error.message || "Use Save before leaving.", "error");
+            return false;
+          } finally {
+            inFlight = false;
+            controller = null;
+            inFlightPromise = null;
+
+            if (pending && !isSubmitting) {
+              queueAutosave({ immediate: pendingImmediate });
+            }
+          }
+        })();
+
+        return inFlightPromise;
+      }
+
+      function queueAutosave(options) {
+        options = options || {};
+        if (!autosaveEnabled || isSubmitting) return;
+        var immediate = options.immediate === true;
+        dirty = true;
+        pending = true;
+        pendingImmediate = pendingImmediate || immediate;
+        setAutosaveStatus(
+          form,
+          "Unsaved changes",
+          immediate ? ("Saving this change now at " + autosaveTime() + ".") : "Autosave will run shortly.",
+          "dirty"
+        );
+        clearTimer();
+        if (inFlight) return;
+        timer = window.setTimeout(performAutosave, immediate ? 0 : textAutosaveDelay);
+      }
+
+      async function saveFeedbackInPlace() {
+        if (!autosaveEnabled) return false;
+
+        if (inFlight) {
+          setAutosaveStatus(form, "Saving draft", "Waiting for the current autosave to finish.", "saving");
+          await inFlightPromise;
+        }
+
+        if (currentDraftAlreadySaved()) return showAlreadySavedDraft();
+
+        var saved = await performAutosave({
+          force: true,
+          savingTitle: "Saving draft",
+          savingDetail: "Saving advisor feedback now.",
+          successTitle: "Draft saved",
+          successDetail: "Saved at " + autosaveTime() + ". You can keep working."
+        });
+
+        if (saved) {
+          clearTimer();
+          updateBaseline();
+        }
+
+        return saved;
+      }
+
+      function beaconAutosaveBeforeLeaving() {
+        if (!autosaveEnabled || isSubmitting || (!dirty && !pending)) return;
+        clearTimer();
+
+        var intentInput = form.querySelector('[data-feedback-intent-input="true"]');
+        if (intentInput) intentInput.value = "save";
+
+        var formData = new FormData(form);
+        formData.set("submission_intent", "save");
+        formData.append("autosave", "1");
+        formData.append("beacon", "1");
+
+        if (navigator.sendBeacon && navigator.sendBeacon(saveUrl, formData)) {
+          dirty = false;
+          pending = false;
+          return;
+        }
+
+        fetch(saveUrl, {
+          method: "POST",
+          body: formData,
+          keepalive: true,
+          headers: {
+            "X-CSRF-Token": csrfToken(),
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json"
+          },
+          credentials: "same-origin"
+        }).catch(function() {});
       }
 
       document.addEventListener('input', function(e) {
         var target = e.target;
         if (target && target.matches && target.matches('[data-advisor-feedback-score="true"]')) {
-          updateAdvisorFeedbackSummary();
           target.classList.remove('border-rose-500', 'ring-1', 'ring-rose-200');
+        }
+        if (target && target.closest && target.closest('form[data-feedback-editor="true"]')) {
+          queueAutosave({ immediate: autosaveImmediatelyForControl(target) });
         }
       });
 
       document.addEventListener('change', function(e) {
         var target = e.target;
         if (target && target.matches && target.matches('[data-advisor-feedback-score="true"]')) {
-          updateAdvisorFeedbackSummary();
           target.classList.remove('border-rose-500', 'ring-1', 'ring-rose-200');
+        }
+        if (target && target.closest && target.closest('form[data-feedback-editor="true"]')) {
+          queueAutosave({ immediate: autosaveImmediatelyForControl(target) });
         }
       });
 
@@ -299,7 +614,13 @@
         var saveButton = form.querySelector('[data-feedback-save-button="true"]');
         var submitButton = form.querySelector('[data-feedback-submit-button="true"]');
 
-        form.addEventListener('submit', function(event) {
+        form.addEventListener('submit', async function(event) {
+          if (form.dataset.feedbackSubmitConfirmed === "true") {
+            isSubmitting = true;
+            abortAutosave();
+            return;
+          }
+
           var intentInput = form.querySelector('[data-feedback-intent-input="true"]');
           var submitter = event.submitter;
           var intentFromButton = submitter && submitter.dataset ? submitter.dataset.submissionIntent : null;
@@ -318,10 +639,43 @@
               });
               return;
             }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+
+            var choice = await showFeedbackSubmitModal(form);
+            if (choice === "save") {
+              await saveFeedbackInPlace();
+              return;
+            }
+            if (choice !== "submit") return;
+
+            if (inFlight) {
+              setAutosaveStatus(form, "Saving draft", "Finishing the current autosave before submitting.", "saving");
+              await inFlightPromise;
+            }
+
+            if (intentInput) intentInput.value = "submit";
+            form.dataset.feedbackSubmitConfirmed = "true";
+            isSubmitting = true;
+            bypassBeforeUnload = true;
+            if (submitButton) {
+              form.requestSubmit(submitButton);
+            } else {
+              form.requestSubmit();
+            }
+            return;
           }
 
           isSubmitting = true;
         });
+
+        if (saveButton) {
+          saveButton.addEventListener("click", function(event) {
+            event.preventDefault();
+            saveFeedbackInPlace();
+          });
+        }
 
         document.addEventListener('keydown', function(event) {
           var modifierPressed = event.ctrlKey || event.metaKey;
@@ -332,7 +686,7 @@
           if (key === 's') {
             event.preventDefault();
             if (saveButton) {
-              form.requestSubmit(saveButton);
+              saveFeedbackInPlace();
             } else {
               form.requestSubmit();
             }
@@ -349,17 +703,44 @@
 
         var cancelLinks = document.querySelectorAll('[data-feedback-cancel="true"]');
         cancelLinks.forEach(function(link) {
-          link.addEventListener('click', function(event) {
+          link.addEventListener('click', async function(event) {
             if (!isDirty()) return;
 
             event.preventDefault();
-            showModalConfirm('Leave without saving?', 'Leave this page? Any unsaved progress will be lost.').then(function(confirmed) {
+            setAutosaveStatus(form, "Saving draft", "Saving advisor feedback before leaving.", "saving");
+            var saved = await saveFeedbackInPlace();
+            if (saved) {
+              bypassBeforeUnload = true;
+              window.location.href = link.href;
+              return;
+            }
+
+            showModalConfirm('Leave without saving?', 'Advisor feedback could not be saved. Leave this page anyway?').then(function(confirmed) {
               if (!confirmed) return;
 
               bypassBeforeUnload = true;
               window.location.href = link.href;
             });
           });
+        });
+
+        snapshotWatchInterval = window.setInterval(function() {
+          if (!autosaveEnabled || isSubmitting || inFlight) return;
+          if (feedbackSnapshot(form) === lastSavedSnapshot) return;
+
+          queueAutosave({ immediate: false });
+        }, snapshotWatchDelay);
+
+        window.addEventListener("pagehide", beaconAutosaveBeforeLeaving);
+        window.addEventListener("beforeunload", beaconAutosaveBeforeLeaving);
+        document.addEventListener("visibilitychange", function() {
+          if (document.visibilityState === "hidden") beaconAutosaveBeforeLeaving();
+        });
+        document.addEventListener("turbo:before-cache", function() {
+          if (snapshotWatchInterval) {
+            window.clearInterval(snapshotWatchInterval);
+            snapshotWatchInterval = null;
+          }
         });
       }
 

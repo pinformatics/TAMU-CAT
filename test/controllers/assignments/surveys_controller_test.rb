@@ -286,6 +286,7 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
   test "assign_all updates selected existing assignments and creates missing ones" do
     StudentQuestion.delete_all
     SurveyAssignment.delete_all
+    Notification.delete_all
 
     sign_in users(:admin)
 
@@ -300,16 +301,22 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
       available_until: 3.days.from_now
     )
 
-    post assign_all_assignments_survey_path(@survey), params: {
-      student_ids: [ existing_student.student_id, new_student.student_id ],
-      available_until: "2033-05-01 12:00"
-    }
+    assert_difference -> { Notification.where(user: existing_student.user, title: "Survey Deadline Changed").count }, 1 do
+      post assign_all_assignments_survey_path(@survey), params: {
+        student_ids: [ existing_student.student_id, new_student.student_id ],
+        available_until: "2033-05-01 12:00"
+      }
+    end
 
     assert_redirected_to assignments_survey_path(@survey)
     assert_match "Assigned", flash[:notice]
 
     expected_deadline = Time.zone.local(2033, 5, 1, 12, 0)
     assert_equal expected_deadline, existing_assignment.reload.available_until
+    deadline_notification = Notification.find_by!(user: existing_student.user, title: "Survey Deadline Changed")
+    assert_equal "survey.deadline_changed", deadline_notification.event_key
+    assert_equal "survey.deadline_changed:survey_assignment:#{existing_assignment.id}", deadline_notification.dedupe_key
+    assert_equal expected_deadline.iso8601, deadline_notification.metadata["available_until"]
 
     created_assignment = SurveyAssignment.find_by!(survey: @survey, student: new_student)
     assert_equal expected_deadline, created_assignment.available_until
@@ -387,6 +394,10 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_match "Unassigned", flash[:notice]
     notification = Notification.find_by!(user: student.user, title: "Survey Unassigned")
     assert_equal "The survey '#{@survey.title}' was removed from your assignments.", notification.message
+    assert_equal "survey.unassigned", notification.event_key
+    assert_equal "survey.unassigned:survey:#{@survey.id}:student:#{student.student_id}", notification.dedupe_key
+    assert_equal @survey.id, notification.metadata["survey_id"]
+    assert_equal student.student_id, notification.metadata["student_id"]
     refute_includes notification.message, users(:advisor).name
   end
 
@@ -698,6 +709,7 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
 
   test "extend_deadline updates an incomplete assignment" do
     SurveyAssignment.delete_all
+    Notification.delete_all
 
     student = students(:student)
     assignment = SurveyAssignment.create!(
@@ -708,14 +720,20 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
       available_until: 2.days.from_now
     )
 
-    patch extend_deadline_assignments_survey_path(@survey), params: {
-      student_id: student.student_id,
-      new_available_until: "2030-02-10 17:30"
-    }
+    assert_difference -> { Notification.where(user: student.user, title: "Survey Deadline Changed").count }, 1 do
+      patch extend_deadline_assignments_survey_path(@survey), params: {
+        student_id: student.student_id,
+        new_available_until: "2030-02-10 17:30"
+      }
+    end
 
     assert_redirected_to assignments_survey_path(@survey)
     assert_match "Changed", flash[:notice]
     assert_equal Time.zone.local(2030, 2, 10, 17, 30), assignment.reload.available_until
+    notification = Notification.find_by!(user: student.user, title: "Survey Deadline Changed")
+    assert_match @survey.title, notification.message
+    assert_equal "survey.deadline_changed", notification.event_key
+    assert_equal assignment.id, notification.metadata["survey_assignment_id"]
   end
 
   test "extend_deadline rejects date earlier than survey deadline" do
@@ -1016,6 +1034,7 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
 
   test "reopen clears completion for selected assignments" do
     SurveyAssignment.delete_all
+    Notification.delete_all
 
     first_student = students(:student)
     second_student = students(:other_student)
@@ -1038,11 +1057,13 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
       available_until: 2.days.ago
     )
 
-    patch reopen_assignments_survey_path(@survey), params: {
-      track: "Residential",
-      student_ids: [ first_student.student_id ],
-      new_available_until: "2034-09-12 08:00"
-    }
+    assert_difference -> { Notification.where(user: first_student.user, title: "Competency Survey Reopened").count }, 1 do
+      patch reopen_assignments_survey_path(@survey), params: {
+        track: "Residential",
+        student_ids: [ first_student.student_id ],
+        new_available_until: "2034-09-12 08:00"
+      }
+    end
 
     assert_redirected_to assignments_survey_path(@survey)
     assert_match "Re-opened", flash[:notice]
@@ -1053,6 +1074,10 @@ class Assignments::SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_nil first_assignment.completed_at
     assert_equal Time.zone.local(2034, 9, 12, 8, 0), first_assignment.available_until
     assert second_assignment.completed_at.present?
+    notification = Notification.find_by!(user: first_student.user, title: "Competency Survey Reopened")
+    assert_equal "survey.reopened", notification.event_key
+    assert_equal "survey.reopened:survey_assignment:#{first_assignment.id}", notification.dedupe_key
+    assert_equal first_assignment.id, notification.metadata["survey_assignment_id"]
   end
 
   test "reopen rejects invalid extension deadline input" do

@@ -712,7 +712,17 @@ class Admin::GradeImportBatchesController < Admin::BaseController
         user: advisor_user,
         title: "Advisee Course Competency Data Updated",
         message: "Course competency data was #{action_label}#{semester_phrase} for #{count} #{noun} you advise.",
-        notifiable: @batch
+        notifiable: @batch,
+        event_key: "advisee.course_data.updated",
+        dedupe_key: "advisee.course_data.updated:batch:#{@batch.id}:advisor:#{advisor_user.id}:action:#{action_label}",
+        metadata: {
+          batch_id: @batch.id,
+          advisor_id: advisor_user.id,
+          advisee_count: count,
+          action: action_label,
+          program_semester_id: @batch.program_semester_id,
+          program_semester_name: semester_label
+        }
       )
       NotificationEmailDeliveryJob.perform_later(notification_id: notification.id)
     end
@@ -1268,16 +1278,20 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   def sample_bad_mapping_workbook
     package = Axlsx::Package.new
+    formatter = Exports::XlsxFormatter.new(package.workbook)
+
     package.workbook.add_worksheet(name: "PHPM_631_600") do |sheet|
-      sheet.add_row [ "Student", "ID", "SIS User ID", "SIS Login ID", "Section", "Final Project" ]
-      sheet.add_row [ "Points Possible", nil, nil, nil, nil, 100 ]
-      sheet.add_row [ "Sample Student", 1001, "123456789", "sample@example.edu", "PHPM-631-600", 94 ]
+      header_row = formatter.add_header_row(sheet, [ "Student", "ID", "SIS User ID", "SIS Login ID", "Section", "Final Project" ])
+      formatter.add_data_row(sheet, [ "Points Possible", nil, nil, nil, nil, 100 ])
+      formatter.add_data_row(sheet, [ "Sample Student", 1001, "123456789", "sample@example.edu", "PHPM-631-600", 94 ])
+      formatter.finish_table(sheet, header_row: header_row, column_count: 6, widths: [ 22, 12, 16, 28, 18, 18 ])
     end
 
     package.workbook.add_worksheet(name: "mapping") do |sheet|
-      sheet.add_row [ "assignment_match_type", "assignment_match_value", "course_code", "competency_title", "score_basis", "min_score", "max_score", "competency_level", "active" ]
-      sheet.add_row [ "exact", "Final Project", "PHPM-631-600", "Bad Competency Name", "points", 90, 100, 5, true ]
-      sheet.add_row [ "exact", "Final Project", "PHPM-631-600", "Policy Analysis", "points", 80, 89.99, 4, true ]
+      header_row = formatter.add_header_row(sheet, [ "assignment_match_type", "assignment_match_value", "course_code", "competency_title", "score_basis", "min_score", "max_score", "competency_level", "active" ])
+      formatter.add_data_row(sheet, [ "exact", "Final Project", "PHPM-631-600", "Bad Competency Name", "points", 90, 100, 5, true ])
+      formatter.add_data_row(sheet, [ "exact", "Final Project", "PHPM-631-600", "Policy Analysis", "points", 80, 89.99, 4, true ])
+      formatter.finish_table(sheet, header_row: header_row, column_count: 9, widths: [ 24, 24, 18, 32, 16, 12, 12, 18, 10 ])
     end
 
     package.to_stream.read

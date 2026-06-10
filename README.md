@@ -145,7 +145,7 @@ docker compose up --build
 
 ### Optional: sync local DB from Heroku production
 
-Use this when you need production-like student/import data locally instead of seeded demo data. The script downloads a Heroku Postgres backup from app `mha501`, drops only the local Docker development database, restores the backup into local Postgres, runs migrations, and checks V6 course schema readiness.
+Use this when you need production-like student/import data locally instead of seeded demo data. The script downloads a Heroku Postgres backup from app `mha501`, drops only the local Docker development database, restores the backup into local Postgres, runs migrations, backfills missing completed survey assignment timestamps, and checks V6 schema/data readiness.
 
 Windows PowerShell:
 
@@ -178,9 +178,20 @@ Important:
 
 - production DB data is not modified
 - the local `tamu_cat_development` database is dropped and recreated
-- V6 course tables are checked after migrations with `bin/rails v6:readiness`
+- V6 course, notification, and completion readiness are checked after migrations with `bin/rails v6:readiness`
 - use `-UseLatestBackup` / `--use-latest-backup` to skip capturing a fresh Heroku backup and download the latest existing backup
 - use `-SkipConfirm` / `--skip-confirm` only for trusted local automation
+
+### Refresh Heroku dev from production
+
+Use this when `mha-dev-eaa62d47718a` needs production-like data for QA. This overwrites only the Heroku dev database; production app `mha501` is the source and is not modified.
+
+```powershell
+heroku pg:copy mha501::DATABASE_URL DATABASE_URL --app mha-dev-eaa62d47718a --confirm mha-dev-eaa62d47718a
+heroku run rails db:migrate --app mha-dev-eaa62d47718a
+heroku run rails survey_assignments:backfill_completed --app mha-dev-eaa62d47718a
+heroku run rails v6:readiness --app mha-dev-eaa62d47718a
+```
 
 - Repository mounts into the app container for live reloads.
 - Run tests with `docker compose run --rm web ruby run_tests.rb`.

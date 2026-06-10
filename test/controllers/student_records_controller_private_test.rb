@@ -147,4 +147,25 @@ class StudentRecordsControllerPrivateTest < ActionController::TestCase
     assert_equal "Survey Records (2)", @controller.send(:unique_worksheet_name, "Survey Records", used)
     assert_equal "Sheet", @controller.send(:unique_worksheet_name, "[]:*?/\\", used)
   end
+
+  test "survey records workbook prefixes duplicate survey sheet names with semester" do
+    program_semester = Struct.new(:name)
+    export_survey = Struct.new(:title, :id, :program_semester)
+    duplicate_title = "Final Survey"
+    spring_survey = export_survey.new(duplicate_title, 1001, program_semester.new("Spring 2026"))
+    fall_survey = export_survey.new(duplicate_title, 1002, program_semester.new("Fall 2026"))
+
+    package = @controller.send(
+      :build_student_records_workbook,
+      [
+        { semester: "Spring 2026", surveys: [ { survey: spring_survey, rows: [] } ] },
+        { semester: "Fall 2026", surveys: [ { survey: fall_survey, rows: [] } ] }
+      ]
+    )
+
+    sheet_names = package.workbook.worksheets.map(&:name)
+    assert_includes sheet_names, "Spring 2026 Final Survey"
+    assert_includes sheet_names, "Fall 2026 Final Survey"
+    refute_includes sheet_names, "Final Survey (2)"
+  end
 end

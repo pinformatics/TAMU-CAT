@@ -151,7 +151,14 @@ class Admin::TargetLevelsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match(/Review before continuing:/i, response.body)
     assert_match(/Target levels changed/i, response.body)
-    assert_match(/after 1 student/i, Notification.where(title: "Target Levels Changed After Submissions").last.message)
+    notification = Notification.where(title: "Target Levels Changed After Submissions").order(:id).last
+    assert_match(/after 1 student/i, notification.message)
+    assert_equal "target_levels.changed_after_submissions", notification.event_key
+    assert_match "target_levels.changed_after_submissions:semester:#{@semester.id}:track:Residential:class:2026:admin:", notification.dedupe_key
+    assert_equal @semester.id, notification.metadata["program_semester_id"]
+    assert_equal "Residential", notification.metadata["track"]
+    assert_equal "2026", notification.metadata["class_of"].to_s
+    assert_equal 1, notification.metadata["submitted_students"]
   end
 
   test "does not warn when updating target levels and no one has submitted" do

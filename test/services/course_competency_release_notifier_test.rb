@@ -56,6 +56,13 @@ class CourseCompetencyReleaseNotifierTest < ActiveSupport::TestCase
     assert_match @semester.name, student_notification.message
     assert_match "advisee", advisor_notification.message
     assert_equal @semester, student_notification.notifiable
+    assert_equal "course_results.released", student_notification.event_key
+    assert_equal "course_results.released:semester:#{@semester.id}:student:#{@student.student_id}", student_notification.dedupe_key
+    assert_equal @semester.id, student_notification.metadata["program_semester_id"]
+    assert_equal @student.student_id, student_notification.metadata["student_id"]
+    assert_equal "advisee.course_results.released", advisor_notification.event_key
+    assert_equal "advisee.course_results.released:semester:#{@semester.id}:advisor:#{@advisor.id}", advisor_notification.dedupe_key
+    assert_equal 1, advisor_notification.metadata["advisee_count"]
     assert_equal student_competencies_path, student_notification.target_path_for(@student.user)
     assert_equal reports_path, advisor_notification.target_path_for(@advisor)
   end

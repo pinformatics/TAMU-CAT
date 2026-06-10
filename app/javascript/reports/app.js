@@ -485,6 +485,16 @@ const SummaryCards = ({ cards }) =>
     })
   )
 
+const ChartViewport = ({ children, label, size = "wide" }) =>
+  h("div", {
+    className: "c-chart-scroll",
+    role: "region",
+    "aria-label": label,
+    tabIndex: 0
+  },
+    h("div", { className: `c-chart-scroll__inner c-chart-scroll__inner--${size}` }, children)
+  )
+
 const TrendChart = ({ timeline, yAxisMode }) => {
   const canvasRef = useRef(null)
 
@@ -565,8 +575,10 @@ const TrendChart = ({ timeline, yAxisMode }) => {
 
   const ariaLabel = yAxisMode === "percent" ? "% meeting target over time" : "Monthly average scores"
 
-  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": ariaLabel },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: ariaLabel, size: "wide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": ariaLabel },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
@@ -660,8 +672,10 @@ const CompetencyAchievementChart = ({ items, yAxisMode }) => {
     return h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   }
 
-  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by competency", style: { minHeight: "360px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Average score by competency", size: "xwide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by competency", style: { minHeight: "360px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
@@ -753,8 +767,10 @@ const DomainAverageChart = ({ items, yAxisMode }) => {
     return h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   }
 
-  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by domain", style: { minHeight: "360px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Average score by domain", size: "wide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by domain", style: { minHeight: "360px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
@@ -854,7 +870,9 @@ const CompetencyDetailChart = ({ data, selectedDomain, onDomainChange, sort, onS
       ])
     ]),
     Array.isArray(data?.items) && data.items.length > 0
-      ? h("div", { className: "c-analytics-chart", style: { minHeight: "360px" } }, h("canvas", { ref: canvasRef }))
+      ? h(ChartViewport, { label: "Competency detail chart", size: "xwide" },
+          h("div", { className: "c-analytics-chart", style: { minHeight: "360px" } }, h("canvas", { ref: canvasRef }))
+        )
       : h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   ])
 }
@@ -958,8 +976,10 @@ const TrackAchievementChart = ({ tracks }) => {
     return h("p", { className: "c-analytics-placeholder" }, "No track performance data available.")
   }
 
-  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Percent achieved by track", style: { minHeight: "360px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Percent achieved by track", size: "wide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Percent achieved by track", style: { minHeight: "360px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
@@ -1004,8 +1024,10 @@ const EmploymentStatusChart = ({ statusCounts }) => {
   if (!Array.isArray(statusCounts) || statusCounts.length === 0) {
     return h("p", { className: "c-analytics-placeholder" }, "No employment status data available.")
   }
-  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Employment status breakdown", style: { minHeight: "280px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Employment status breakdown", size: "compact" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Employment status breakdown", style: { minHeight: "280px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
@@ -1038,8 +1060,10 @@ const EmploymentHoursChart = ({ distribution }) => {
   }, [ distribution ])
 
   if (!distribution) return h("p", { className: "c-analytics-placeholder" }, "No hours data available.")
-  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Hours per week distribution", style: { minHeight: "260px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Hours per week distribution", size: "compact" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Hours per week distribution", style: { minHeight: "260px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 
@@ -1073,8 +1097,10 @@ const EmploymentFlexibilityChart = ({ distribution }) => {
   }, [ distribution ])
 
   if (!distribution) return h("p", { className: "c-analytics-placeholder" }, "No flexibility data available.")
-  return h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Work schedule flexibility distribution", style: { minHeight: "260px" } },
-    h("canvas", { ref: canvasRef })
+  return h(ChartViewport, { label: "Work schedule flexibility distribution", size: "compact" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Work schedule flexibility distribution", style: { minHeight: "260px" } },
+      h("canvas", { ref: canvasRef })
+    )
   )
 }
 

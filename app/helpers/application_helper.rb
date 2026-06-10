@@ -187,7 +187,7 @@ module ApplicationHelper
   # @param status [String, Symbol]
   # @return [String]
   def survey_status_badge_classes(status)
-    unified_badge_classes(status)
+    status_badge_classes(status)
   end
 
   # Returns CSS classes for feedback status badge.
@@ -195,7 +195,29 @@ module ApplicationHelper
   # @param status [String, Symbol]
   # @return [String]
   def feedback_status_badge_classes(status)
-    unified_badge_classes(status)
+    status_badge_classes(status)
+  end
+
+  # Returns app-wide status badge classes.
+  #
+  # @param status [String, Symbol]
+  # @param extra_classes [String, nil]
+  # @return [String]
+  def status_badge_classes(status, extra_classes: nil)
+    classes = [ "c-status-badge", "c-status-badge--#{badge_tone(status)}" ]
+    classes << extra_classes if extra_classes.present?
+    classes.join(" ")
+  end
+
+  # Renders an app-wide status badge.
+  #
+  # @param label [String]
+  # @param value [String, Symbol, nil] optional tone source when the label differs from the status value
+  # @param html_options [Hash]
+  # @return [String]
+  def status_badge(label, value: nil, **html_options)
+    classes = status_badge_classes(value.presence || label, extra_classes: html_options.delete(:class))
+    content_tag(:span, label, html_options.merge(class: classes))
   end
 
   # Returns lifecycle label for a survey in student-record contexts.
@@ -222,7 +244,7 @@ module ApplicationHelper
   # @param label [String]
   # @return [String]
   def survey_lifecycle_badge_classes(label)
-    unified_badge_classes(label)
+    status_badge_classes(label)
   end
 
   # Returns a human-friendly availability label for survey summaries.
@@ -344,24 +366,13 @@ module ApplicationHelper
 
   private
 
-  # Builds a unified badge class string with only three visual variants.
+  # Builds a unified badge class string.
   # The badge text itself remains the caller-provided input.
   #
   # @param value [String, Symbol]
   # @return [String]
   def unified_badge_classes(value)
-    base = "inline-flex items-center justify-center rounded-xl border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide shadow-sm whitespace-nowrap"
-
-    variant = case badge_tone(value)
-    when :success
-      "border-emerald-200 bg-emerald-50 text-emerald-700"
-    when :warning
-      "border-amber-200 bg-amber-50 text-amber-700"
-    else
-      "border-slate-200 bg-slate-100 text-slate-600"
-    end
-
-    "#{base} #{variant}"
+    status_badge_classes(value)
   end
 
   # Resolves one of three badge tones from a free-form label.
@@ -369,10 +380,11 @@ module ApplicationHelper
   # @param value [String, Symbol]
   # @return [Symbol]
   def badge_tone(value)
-    text = value.to_s.downcase
+    text = value.to_s.downcase.squish
 
-    return :success if text.in?(%w[completed submitted active])
-    return :warning if text.in?(%w[assigned draft closed late overdue in progress])
+    return :success if text.in?([ "completed", "submitted", "active" ])
+    return :warning if text.in?([ "assigned", "draft", "closed", "late", "overdue", "in progress" ])
+    return :danger if text.in?([ "unassigned" ])
 
     :neutral
   end

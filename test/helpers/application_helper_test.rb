@@ -77,11 +77,23 @@ class ApplicationHelperTest < ActionView::TestCase
     assert_equal "Closes #{future.strftime('%B')} #{future.day}, #{future.year}", survey_availability_note(future)
   end
 
-  test "survey_status_badge_classes maps status variants" do
-    assert_includes survey_status_badge_classes("completed"), "emerald"
-    assert_includes survey_status_badge_classes("assigned"), "amber"
-    assert_includes survey_status_badge_classes("unassigned"), "slate"
-    assert_includes survey_status_badge_classes("unknown"), "slate"
+  test "status_badge_classes maps status variants" do
+    assert_includes status_badge_classes("completed"), "c-status-badge--success"
+    assert_includes status_badge_classes("assigned"), "c-status-badge--warning"
+    assert_includes status_badge_classes("in progress"), "c-status-badge--warning"
+    assert_includes status_badge_classes("unassigned"), "c-status-badge--danger"
+    assert_includes status_badge_classes("unknown"), "c-status-badge--neutral"
+    assert_includes survey_status_badge_classes("unassigned"), "c-status-badge--danger"
+    assert_includes feedback_status_badge_classes("submitted"), "c-status-badge--success"
+  end
+
+  test "status_badge renders reusable badge markup" do
+    html = status_badge("Unassigned", data: { testid: "status" })
+
+    assert_includes html, "c-status-badge"
+    assert_includes html, "c-status-badge--danger"
+    assert_includes html, "data-testid=\"status\""
+    assert_includes html, "Unassigned"
   end
 
   test "survey lifecycle label handles archived blank open and closed rows" do

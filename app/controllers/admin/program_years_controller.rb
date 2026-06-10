@@ -36,6 +36,24 @@ class Admin::ProgramYearsController < Admin::BaseController
     end
   end
 
+  def reorder
+    ordered_ids = normalized_ordered_ids
+
+    ProgramYear.transaction do
+      ordered_ids.each_with_index do |id, index|
+        ProgramYear.where(id: id).update_all(position: (index + 1) * 10, updated_at: Time.current)
+      end
+    end
+
+    respond_to do |format|
+      format.json { render json: { status: "ok" } }
+      format.html do
+        redirect_back fallback_location: admin_program_setup_path(tab: "years"),
+                      notice: "Cohort order updated."
+      end
+    end
+  end
+
   private
 
   def program_year_params
@@ -44,5 +62,11 @@ class Admin::ProgramYearsController < Admin::BaseController
 
   def set_program_year
     @program_year = ProgramYear.find(params[:id])
+  end
+
+  def normalized_ordered_ids
+    Array(params[:ordered_ids]).flat_map { |value| value.to_s.split(",") }.filter_map do |value|
+      Integer(value, exception: false)
+    end
   end
 end

@@ -194,6 +194,9 @@ if (-not $SkipMigrate) {
   Write-Host "Running local Rails migrations on '$LocalDatabase'..."
   Invoke-Checked docker @("compose", "run", "--rm", "-e", "RAILS_ENV=development", "-e", "DATABASE=$LocalDatabase", $AppService, "bin/rails", "db:migrate")
 
+  Write-Host "Backfilling completed survey assignment timestamps..."
+  Invoke-Checked docker @("compose", "run", "--rm", "-e", "RAILS_ENV=development", "-e", "DATABASE=$LocalDatabase", $AppService, "bin/rails", "survey_assignments:backfill_completed")
+
   Write-Host "Checking V6 course schema readiness..."
   Invoke-Checked docker @("compose", "run", "--rm", "-e", "RAILS_ENV=development", "-e", "DATABASE=$LocalDatabase", $AppService, "bin/rails", "v6:readiness")
 }

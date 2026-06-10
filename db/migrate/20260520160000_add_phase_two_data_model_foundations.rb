@@ -11,6 +11,8 @@ class AddPhaseTwoDataModelFoundations < ActiveRecord::Migration[8.0]
 
   def up
     add_user_notification_preferences
+    add_notification_event_columns
+    add_advisor_feedback_submission_signature
     add_student_lifecycle_columns
     add_semester_lifecycle_columns
     create_course_catalog_tables
@@ -44,9 +46,54 @@ class AddPhaseTwoDataModelFoundations < ActiveRecord::Migration[8.0]
     remove_column :program_semesters, :status if column_exists?(:program_semesters, :status)
 
     remove_column :users, :in_app_notifications_enabled if column_exists?(:users, :in_app_notifications_enabled)
+    remove_notification_event_columns
+    remove_column :advisor_feedback_submissions, :submitted_feedback_signature if column_exists?(:advisor_feedback_submissions, :submitted_feedback_signature)
   end
 
   private
+
+  def add_notification_event_columns
+    add_column :notifications, :event_key, :string unless column_exists?(:notifications, :event_key)
+    add_column :notifications, :dedupe_key, :string unless column_exists?(:notifications, :dedupe_key)
+    add_column :notifications, :metadata, :jsonb, null: false, default: {} unless column_exists?(:notifications, :metadata)
+
+    remove_index :notifications, name: "index_notifications_unique_per_user" if index_with_name_exists?(:notifications, "index_notifications_unique_per_user")
+
+    add_index :notifications,
+              [ :user_id, :title, :notifiable_type, :notifiable_id ],
+              name: "index_notifications_on_user_title_notifiable" unless index_with_name_exists?(:notifications, "index_notifications_on_user_title_notifiable")
+    add_index :notifications, :event_key unless index_exists?(:notifications, :event_key)
+    add_index :notifications,
+              [ :user_id, :dedupe_key ],
+              unique: true,
+              where: "dedupe_key IS NOT NULL",
+              name: "index_notifications_unique_user_dedupe_key" unless index_with_name_exists?(:notifications, "index_notifications_unique_user_dedupe_key")
+  end
+
+  def remove_notification_event_columns
+    remove_index :notifications, name: "index_notifications_unique_user_dedupe_key" if index_with_name_exists?(:notifications, "index_notifications_unique_user_dedupe_key")
+    remove_index :notifications, column: :event_key if index_exists?(:notifications, :event_key)
+    remove_index :notifications, name: "index_notifications_on_user_title_notifiable" if index_with_name_exists?(:notifications, "index_notifications_on_user_title_notifiable")
+
+    add_index :notifications,
+              [ :user_id, :title, :notifiable_type, :notifiable_id ],
+              unique: true,
+              name: "index_notifications_unique_per_user" unless index_with_name_exists?(:notifications, "index_notifications_unique_per_user")
+
+    remove_column :notifications, :metadata if column_exists?(:notifications, :metadata)
+    remove_column :notifications, :dedupe_key if column_exists?(:notifications, :dedupe_key)
+    remove_column :notifications, :event_key if column_exists?(:notifications, :event_key)
+  end
+
+  def index_with_name_exists?(table_name, index_name)
+    connection.indexes(table_name).any? { |index| index.name == index_name }
+  end
+
+  def add_advisor_feedback_submission_signature
+    return if column_exists?(:advisor_feedback_submissions, :submitted_feedback_signature)
+
+    add_column :advisor_feedback_submissions, :submitted_feedback_signature, :text
+  end
 
   def add_user_notification_preferences
     return if column_exists?(:users, :in_app_notifications_enabled)

@@ -156,17 +156,42 @@
                         <% student = row[:student] %>
                         <tr>
                           <td>
-                            <span class="c-table__title"><%= student.user&.display_name || student.student_id %></span>
-                            <span class="c-table__meta"><%= [student.user&.email, student.uin.presence].compact.join(" / ") %></span>
+                            <div class="u-stack u-stack--xs">
+                              <span class="c-table__title"><%= student.user&.display_name || student.student_id %></span>
+                              <% if student.user&.email.present? %>
+                                <span class="c-table__meta"><%= student.user.email %></span>
+                              <% end %>
+                              <% if student.uin.present? %>
+                                <span class="c-table__meta">UIN: <%= student.uin %></span>
+                              <% else %>
+                                <%= status_badge("Missing UIN", value: "unassigned") %>
+                              <% end %>
+                            </div>
                             <% unless student.current_record? %>
                               <span class="c-pill c-pill--muted"><%= student.lifecycle_label %></span>
                             <% end %>
                           </td>
                           <td>
-                            <span><%= student.track.presence || "Unknown" %></span>
+                            <% if student.track.present? %>
+                              <span><%= student.track %></span>
+                            <% else %>
+                              <%= status_badge("Missing track", value: "unassigned") %>
+                            <% end %>
                           </td>
-                          <td><%= student.program_year.presence || "Missing" %></td>
-                          <td><%= student.advisor&.display_name || "Unassigned" %></td>
+                          <td>
+                            <% if student.program_year.present? %>
+                              <%= student.program_year %>
+                            <% else %>
+                              <%= status_badge("Missing year", value: "unassigned") %>
+                            <% end %>
+                          </td>
+                          <td>
+                            <% if student.advisor.present? %>
+                              <%= student.advisor.display_name %>
+                            <% else %>
+                              <%= status_badge("Unassigned advisor", value: "unassigned") %>
+                            <% end %>
+                          </td>
                           <td>
                             <span class="c-table__title"><%= row[:completed_count] %> / <%= row[:assigned_count] %></span>
                             <span class="c-table__meta"><%= row[:completion_rate].present? ? "#{row[:completion_rate]}% complete" : "No assigned surveys" %></span>
@@ -225,9 +250,19 @@
                     <tr>
                       <td>
                         <%= link_to row[:student_name], student_overview_path(row[:student_id]), class: "c-table__title" %>
-                        <span class="c-table__meta"><%= row[:track].presence || "Unknown track" %></span>
+                        <% if row[:track].present? %>
+                          <span class="c-table__meta"><%= row[:track] %></span>
+                        <% else %>
+                          <%= status_badge("Missing track", value: "unassigned") %>
+                        <% end %>
                       </td>
-                      <td><%= row[:program_year].presence || "Missing" %></td>
+                      <td>
+                        <% if row[:program_year].present? %>
+                          <%= row[:program_year] %>
+                        <% else %>
+                          <%= status_badge("Missing year", value: "unassigned") %>
+                        <% end %>
+                      </td>
                       <% row[:domains].each do |domain| %>
                         <td>
                           <span class="c-heatmap-cell c-heatmap-cell--<%= domain[:status] %>">

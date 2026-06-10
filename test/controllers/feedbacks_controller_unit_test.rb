@@ -92,8 +92,8 @@ class FeedbacksControllerUnitTest < ActionController::TestCase
 
     get :new, params: { survey_id: @survey.id, student_id: @student.student_id }
 
-    assert_response :success
-    assert_equal false, assigns(:confidential_notes_enabled)
+    assert_redirected_to dashboard_path
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   test "new enables confidential note context for admins" do

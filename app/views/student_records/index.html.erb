@@ -259,8 +259,8 @@
                                 <div class="c-table__meta u-stack u-stack--xs">
                                   <% if student.uin.present? %><div><%= student.uin %></div><% end %>
                                   <% if student.user&.email.present? %><div><%= student.user.email %></div><% end %>
-                                  <div>Track: <%= student.track.present? ? student.track.titleize : "Unknown" %></div>
-                                  <div>Program year: <%= graduation_year.present? ? graduation_year : "—" %></div>
+                                  <div><%= student.track.present? ? student.track.titleize : "Unknown" %></div>
+                                  <div><%= graduation_year.present? ? graduation_year : "—" %></div>
                                 </div>
                               </td>
 
@@ -277,7 +277,7 @@
                                     <% if advisor.email.present? %><div><%= advisor.email %></div><% end %>
                                   </div>
                                 <% else %>
-                                  <div class="c-table__title u-danger">Unassigned</div>
+                                  <%= status_badge("Unassigned") %>
                                 <% end %>
                               </td>
 

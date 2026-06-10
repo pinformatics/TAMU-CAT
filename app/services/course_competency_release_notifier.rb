@@ -41,7 +41,14 @@ class CourseCompetencyReleaseNotifier
         user: student.user,
         title: "Course Competency Results Released",
         message: "Your course competency results for #{semester.name} are now available in My Competencies.",
-        notifiable: semester
+        notifiable: semester,
+        event_key: "course_results.released",
+        dedupe_key: "course_results.released:semester:#{semester.id}:student:#{student.student_id}",
+        metadata: {
+          program_semester_id: semester.id,
+          student_id: student.student_id,
+          triggered_by_id: triggered_by_id
+        }
       )
       enqueue_email(notification)
       1
@@ -57,7 +64,15 @@ class CourseCompetencyReleaseNotifier
         user: advisor_user,
         title: "Advisee Course Competency Results Released",
         message: "#{advisee_count} advisee#{'s' unless advisee_count == 1} have newly available #{semester.name} course competency results.",
-        notifiable: semester
+        notifiable: semester,
+        event_key: "advisee.course_results.released",
+        dedupe_key: "advisee.course_results.released:semester:#{semester.id}:advisor:#{advisor_user.id}",
+        metadata: {
+          program_semester_id: semester.id,
+          advisor_id: advisor_user.id,
+          advisee_count: advisee_count,
+          triggered_by_id: triggered_by_id
+        }
       )
       enqueue_email(notification)
       1

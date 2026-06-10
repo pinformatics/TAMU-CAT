@@ -160,6 +160,9 @@
                          class="c-question-card <%= question.sub_question? ? 'c-question-card--nested' : '' %> <%= hide_question_card ? 'hidden' : '' %>"
                          data-question-id="<%= question.id %>"
                          data-question-type="<%= question.question_type %>"
+                         <% if include_feedback_form && !editable %>
+                           data-feedback-readonly-response="true"
+                         <% end %>
                          data-survey-required="<%= required ? "true" : "false" %>"
                          data-preview-required="<%= required ? "true" : "false" %>"
                          <% if conditional_branch_child || conditional_reflection_child %>
@@ -424,7 +427,9 @@
                     <% if supports_feedback %>
                     <% advisor_numeric_enabled = survey&.advisor_numeric_feedback_enabled? %>
                     <% missing_score = advisor_numeric_enabled && missing_feedback_question_ids.include?(feedback_question_id.to_i) %>
-                    <article class="c-question-card c-card--advisor u-stack u-stack--md">
+                    <article class="c-question-card c-card--advisor u-stack u-stack--md"
+                             data-advisor-feedback-block
+                             data-feedback-question-id="<%= feedback_question_id %>">
                     <div class="u-actions u-actions--split">
                       <h5 class="c-h3">Advisor feedback — <%= question_prefix %><%= question_number %></h5>
                       <p class="c-help"><%= advisor_numeric_enabled ? "Score 0-5, feedback optional" : "Written feedback optional; numeric ratings are retired for this survey" %></p>
