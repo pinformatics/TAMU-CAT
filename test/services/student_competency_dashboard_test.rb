@@ -54,6 +54,43 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
     assert_equal [ "PHPM-601-700" ], competency[:course_sources].map { |source| source[:course_code] }
   end
 
+  test "committed course evidence appears when derived rating row is missing" do
+    ProgramSemester.update_all(current: false)
+    spring = program_semesters(:spring_2026)
+    spring.update!(current: true)
+    unique = SecureRandom.hex(6)
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: spring,
+      status: "completed",
+      summary: { "dry_run" => false }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "Outcomes-26S-PHPM-602-601.csv",
+      file_checksum: "student-dashboard-evidence-only-#{unique}",
+      status: "processed"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Course Evidence #{unique}",
+      course_code: "PHPM-602-601",
+      competency_title: @competency_title,
+      raw_grade: 90,
+      mapped_level: 4,
+      row_number: 2,
+      source_key: "student-dashboard-evidence-only-source-#{unique}",
+      import_fingerprint: "student-dashboard-evidence-only-fingerprint-#{unique}"
+    )
+
+    payload = StudentCompetencyDashboard.new(student: @student, params: { semester: "Spring 2026" }).call
+    competency = find_competency(payload, @competency_title)
+
+    assert_in_delta 4.0, competency[:course_rating], 0.001
+    assert_equal "present", competency[:course_status]
+    assert_equal [ "PHPM-602-601" ], competency[:course_sources].map { |source| source[:course_code] }
+  end
+
   test "course data prefers canonical competency id when imported title drifts" do
     records = create_course_record(level: 4.0, semester: program_semesters(:fall_2025), course_code: "PHPM-CANON-700")
     records[:rating].update_columns(competency_title: "Typo #{@competency_title}")

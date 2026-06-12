@@ -856,28 +856,72 @@ class StudentCompetencyDashboard
   end
 
   def course_rating_details_for_semester(semester_name)
-    rows = GradeCompetencyRating
+    rating_rows = GradeCompetencyRating
       .joins(:grade_import_batch)
       .merge(GradeImportBatch.reportable)
       .includes(:competency)
       .where(student_id: student.student_id)
-    rows = filter_competency_identity(rows, table_name: "grade_competency_ratings")
+    rating_rows = filter_competency_identity(rating_rows, table_name: "grade_competency_ratings")
       .select(:competency_id, :competency_title, :aggregated_level, :updated_at, :grade_import_batch_id)
+    rating_rows = released_course_rows_for_semester(rating_rows, semester_name)
 
-    rows = if semester_name.present?
-      semester = ProgramSemester.find_by_name_case_insensitive(semester_name)
-      scoped_rows = semester ? rows.where(grade_import_batches: { program_semester_id: semester.id }) : rows.none
-      scoped_rows.includes(grade_import_batch: { program_semester: :course_grade_release_date }).to_a.select { |row| course_row_released?(row) }
-    else
-      filter_course_rows_by_semester(rows)
-    end
-
-    rows.group_by { |row| canonical_competency_title(row) }.transform_values do |ratings|
+    rating_entries = rating_rows.map do |row|
       {
-        value: CourseCompetencyRule.aggregate(ratings.filter_map { |rating| rating.aggregated_level&.to_f }, rule_key: SiteSetting.course_competency_rule),
-        updated_at: ratings.filter_map(&:updated_at).max
+        batch_id: row.grade_import_batch_id,
+        title: canonical_competency_title(row),
+        value: row.aggregated_level&.to_f,
+        updated_at: row.updated_at
       }
     end
+    rated_keys = rating_entries.map { |entry| [ entry[:batch_id], entry[:title] ] }.to_set
+
+    evidence_rows = GradeCompetencyEvidence
+      .joins(:grade_import_batch)
+      .merge(GradeImportBatch.reportable)
+      .includes(:competency)
+      .where(student_id: student.student_id)
+    evidence_rows = filter_competency_identity(evidence_rows, table_name: "grade_competency_evidences")
+      .select(:competency_id, :competency_title, :mapped_level, :updated_at, :grade_import_batch_id)
+    evidence_rows = released_course_rows_for_semester(evidence_rows, semester_name)
+
+    fallback_entries = evidence_rows
+      .group_by { |row| [ row.grade_import_batch_id, canonical_competency_title(row) ] }
+      .filter_map do |(batch_id, title), rows|
+        next if rated_keys.include?([ batch_id, title ])
+
+        value = rows.filter_map { |row| row.mapped_level&.to_f }.max
+        next if value.blank?
+
+        {
+          batch_id: batch_id,
+          title: title,
+          value: value,
+          updated_at: rows.filter_map(&:updated_at).max
+        }
+      end
+
+    (rating_entries + fallback_entries).group_by { |entry| entry[:title] }.transform_values do |entries|
+      values = entries.filter_map { |entry| entry[:value] }
+      {
+        value: CourseCompetencyRule.aggregate(values, rule_key: SiteSetting.course_competency_rule),
+        updated_at: entries.filter_map { |entry| entry[:updated_at] }.max
+      }
+    end
+  end
+
+  def released_course_rows_for_semester(scope, semester_name)
+    if semester_name.present?
+      semester = ProgramSemester.find_by_name_case_insensitive(semester_name)
+      return [] if semester.blank?
+
+      return scope
+        .where(grade_import_batches: { program_semester_id: semester.id })
+        .includes(grade_import_batch: { program_semester: :course_grade_release_date })
+        .to_a
+        .select { |row| course_row_released?(row) }
+    end
+
+    filter_course_rows_by_semester(scope)
   end
 
   def change_direction(delta)

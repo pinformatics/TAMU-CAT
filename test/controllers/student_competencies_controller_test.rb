@@ -265,11 +265,13 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_select "td details.c-cell-details[open]", count: 0
     assert_includes response.body, "2 sources"
     assert_includes response.body, "PHPM-601-700"
-    assert_includes response.body, "Competency level 1"
-    assert_includes response.body, "Course target level 3"
+    assert_includes response.body, "Level"
+    assert_includes response.body, ">1<"
+    assert_includes response.body, "Course target"
+    assert_includes response.body, ">3<"
     assert_includes response.body, "PHPM-633-700"
-    assert_includes response.body, "Competency level 5"
-    assert_includes response.body, "Course target level 4"
+    assert_includes response.body, ">5<"
+    assert_includes response.body, ">4<"
     refute_includes response.body, "Community Assessment"
     refute_includes response.body, "Raw 71.0"
     refute_includes response.body, "PHPM-601.xlsx"
@@ -298,7 +300,7 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "th", "End-of-Program Target"
     refute_includes response.body, "<th>Course Target</th>"
-    assert_includes response.body, "End-of-program expectation"
+    assert_includes response.body, "Program target"
     assert_select ".c-score-pill--program", text: "5"
     assert_select ".c-score-pill--program", text: "2", count: 0
   end
@@ -392,7 +394,8 @@ class StudentCompetenciesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "PHPM-650-700"
-    assert_includes response.body, "Competency level 4"
+    assert_includes response.body, "Level"
+    assert_includes response.body, ">4<"
   end
 
   test "admin cannot view student competency dashboard" do
