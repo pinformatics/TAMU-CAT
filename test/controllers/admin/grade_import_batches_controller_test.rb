@@ -1293,6 +1293,92 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     refute_includes response.body, "Course Code Issues"
   end
 
+  test "course code warning can repair missing section across imported rows" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: { "dry_run" => true }
+    )
+    old_offering = CourseOffering.find_or_create_from_code!("PHPM-603", program_semester: batch.program_semester)
+    file = batch.grade_import_files.create!(
+      file_name: "missing-section-603.csv",
+      file_checksum: "checksum-missing-section-603",
+      status: "processed",
+      imported_rows: 1,
+      pending_rows: 1,
+      course_offering: old_offering,
+      parsed_content: {
+        "mode" => "direct_competency",
+        "direct_course_code" => "PHPM-603",
+        "grade_sheet_debug" => { "direct_course_code" => "PHPM-603" }
+      }
+    )
+    evidence = batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Direct competency",
+      course_code: "PHPM-603",
+      competency_title: "Policy Analysis",
+      raw_grade: 4,
+      mapped_level: 4,
+      course_target_level: 3,
+      row_number: 2,
+      source_key: "source-missing-section-603-evidence",
+      import_fingerprint: "fingerprint-missing-section-603-evidence"
+    )
+    pending = batch.grade_import_pending_rows.create!(
+      grade_import_file: file,
+      student_identifier: "Missing Student",
+      student_identifier_type: "student_name",
+      student_name: "Missing Student",
+      student_uin: "555666777",
+      assignment_name: "Direct competency",
+      course_code: "PHPM-603",
+      competency_title: "Communication",
+      raw_grade: 3,
+      mapped_level: 3,
+      course_target_level: 2,
+      row_number: 3,
+      source_key: "source-missing-section-603-pending",
+      import_fingerprint: "fingerprint-missing-section-603-pending"
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "Course Code Issues"
+    assert_includes response.body, "Full course code"
+    assert_includes response.body, "PHPM-603-"
+    assert_includes response.body, "Apply to"
+
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      patch course_code_admin_grade_import_batch_path(batch), params: {
+        grade_import_course_code_repair: {
+          old_course_code: "PHPM-603",
+          new_course_code: "PHPM-603-601"
+        }
+      }
+    end
+
+    assert_redirected_to admin_grade_import_batch_path(batch)
+    assert_match "Updated 2 imported rows", flash[:notice]
+    assert_equal "PHPM-603-601", evidence.reload.course_code
+    assert_equal "PHPM-603-601", evidence.course_offering.display_code
+    assert_equal "checksum-missing-section-603:phpm_603_601:2:direct_competency:policy_analysis", evidence.import_fingerprint
+    assert_equal "PHPM-603-601", pending.reload.course_code
+    assert_equal "PHPM-603-601", pending.course_offering.display_code
+    assert_equal "PHPM-603-601", file.reload.parsed_content["direct_course_code"]
+    assert_equal "PHPM-603-601", file.parsed_content.dig("grade_sheet_debug", "direct_course_code")
+    assert_equal "PHPM-603-601", file.course_offering.display_code
+    assert batch.grade_competency_ratings.exists?(student: @student, competency_title: "Policy Analysis")
+
+    activity = AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first
+    assert_equal "course_code_group_update", activity.metadata["import_action"]
+    assert_equal "PHPM-603", activity.metadata["old_course_code"]
+    assert_equal "PHPM-603-601", activity.metadata["new_course_code"]
+  end
+
   test "uploaded course targets do not require configured target records" do
     competency_title = "Policy Analysis"
     batch = GradeImportBatch.create!(

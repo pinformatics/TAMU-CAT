@@ -13,7 +13,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   before_action :set_batch, only: %i[
     show approve commit reupload rollback recommit rebuild_ratings finalize semester destroy
-    export_ratings export_evidence error_report correction_file update_pending_row update_pending_row_group update_evidence
+    export_ratings export_evidence error_report correction_file update_pending_row update_pending_row_group update_evidence update_course_code
   ]
 
   def index
@@ -326,6 +326,71 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     )
 
     redirect_to admin_grade_import_batch_path(@batch), notice: "Batch semester updated to #{@batch.program_semester.name}."
+  end
+
+  def update_course_code
+    if @batch.finalized?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "This batch is finalized and locked. Course codes cannot be changed." and return
+    end
+
+    old_course_code = course_code_repair_params[:old_course_code].to_s.strip
+    new_course_code = canonical_required_course_code(course_code_repair_params[:new_course_code])
+    if old_course_code.blank?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Choose the course code that needs correction." and return
+    end
+    unless new_course_code
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Enter the full course code with a 4-letter department, 3-digit course number, and 3-digit section number, such as PHPM-603-601." and return
+    end
+
+    evidence_rows = @batch.grade_competency_evidences.where(course_code: old_course_code).includes(:grade_import_file)
+    pending_rows = @batch.grade_import_pending_rows.where(course_code: old_course_code).includes(:grade_import_file)
+    affected_count = evidence_rows.count + pending_rows.count
+    if affected_count.zero?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "No imported rows currently use #{old_course_code}." and return
+    end
+
+    offering = CourseOffering.find_or_create_from_code!(
+      new_course_code,
+      program_semester: @batch.program_semester,
+      source_name: course_code_repair_params[:source_name]
+    )
+
+    affected_file_ids = []
+    ActiveRecord::Base.transaction do
+      evidence_rows.find_each do |row|
+        affected_file_ids << row.grade_import_file_id
+        row.assign_attributes(course_code: new_course_code, course_offering: offering)
+        refresh_import_identity!(row)
+        row.save!
+      end
+
+      pending_rows.find_each do |row|
+        affected_file_ids << row.grade_import_file_id
+        row.assign_attributes(course_code: new_course_code, course_offering: offering)
+        refresh_import_identity!(row)
+        row.save!
+      end
+
+      refresh_course_code_file_metadata!(
+        file_ids: affected_file_ids.uniq,
+        old_course_code: old_course_code,
+        new_course_code: new_course_code,
+        offering: offering
+      )
+    end
+
+    rebuild_batch_ratings!
+    record_grade_import_activity!(
+      "course_code_group_update",
+      "Corrected #{affected_count} imported course-code rows in grade import batch ##{@batch.id}.",
+      old_course_code: old_course_code,
+      new_course_code: new_course_code,
+      affected_rows: affected_count
+    )
+
+    redirect_to admin_grade_import_batch_path(@batch), notice: "Updated #{affected_count} imported rows from #{old_course_code} to #{new_course_code} and rebuilt derived ratings."
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+    redirect_to admin_grade_import_batch_path(@batch), alert: "Could not update course code: #{e.message}"
   end
 
   def destroy
@@ -690,6 +755,90 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     )
 
     normalize_blank_level_params(raw)
+  end
+
+  def course_code_repair_params
+    params.require(:grade_import_course_code_repair).permit(:old_course_code, :new_course_code, :source_name)
+  end
+
+  def canonical_required_course_code(value)
+    parsed = CourseOffering.parse_source_code(value)
+    return if parsed.blank?
+    return unless parsed[:department_code].to_s.match?(/\A[A-Z]{4}\z/)
+    return unless parsed[:course_number].to_s.match?(/\A\d{3}\z/)
+    return unless parsed[:section_number].to_s.match?(/\A\d{3}\z/)
+
+    parsed[:source_code]
+  end
+
+  def refresh_import_identity!(row)
+    return unless row.grade_import_file
+
+    identifier = row.respond_to?(:student_id) && row.student_id.present? ? row.student_id : row.student_identifier
+    identifier = row.student_uin.presence || identifier if row.respond_to?(:student_uin)
+    identifier = row.student_email.presence || identifier if row.respond_to?(:student_email)
+    identifier = row.student_name.presence || identifier if row.respond_to?(:student_name)
+    row.source_key = import_source_key(
+      identifier: identifier,
+      course_code: row.course_code,
+      assignment_name: row.assignment_name,
+      competency_title: row.competency_title,
+      row_number: row.row_number
+    )
+    row.import_fingerprint = import_fingerprint(
+      grade_file: row.grade_import_file,
+      row_number: row.row_number,
+      competency_title: row.competency_title,
+      assignment_name: row.assignment_name,
+      course_code: row.course_code
+    )
+    row.metadata = row.metadata.merge(
+      "course_code_corrected_at" => Time.current.iso8601,
+      "course_code_corrected_by" => current_user&.email
+    )
+  end
+
+  def refresh_course_code_file_metadata!(file_ids:, old_course_code:, new_course_code:, offering:)
+    GradeImportFile.where(id: file_ids).find_each do |file|
+      parsed = file.parsed_content.deep_dup
+      parsed["direct_course_code"] = new_course_code if parsed["direct_course_code"].to_s == old_course_code
+      if parsed.dig("grade_sheet_debug", "direct_course_code").to_s == old_course_code
+        parsed["grade_sheet_debug"]["direct_course_code"] = new_course_code
+      end
+
+      distinct_course_codes = (
+        file.grade_competency_evidences.distinct.pluck(:course_code) +
+          file.grade_import_pending_rows.distinct.pluck(:course_code)
+      ).compact_blank.uniq
+
+      file.course_offering = offering if distinct_course_codes == [ new_course_code ]
+      file.parsed_content = parsed
+      file.save!
+    end
+  end
+
+  def import_source_key(identifier:, course_code:, assignment_name:, competency_title:, row_number:)
+    [
+      import_identity_token(identifier),
+      import_identity_token(course_code),
+      import_identity_token(assignment_name),
+      import_identity_token(competency_title),
+      row_number.to_i
+    ].join(":")
+  end
+
+  def import_fingerprint(grade_file:, row_number:, competency_title:, assignment_name:, course_code:)
+    [
+      grade_file.file_checksum,
+      import_identity_token(course_code),
+      row_number.to_i,
+      import_identity_token(assignment_name),
+      import_identity_token(competency_title)
+    ].compact_blank.join(":")
+  end
+
+  def import_identity_token(value)
+    value.to_s.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "")
   end
 
   def normalize_blank_level_params(attrs)

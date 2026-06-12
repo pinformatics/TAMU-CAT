@@ -2506,6 +2506,14 @@ details.u-hover-dropdown[open] > .u-hover-dropdown__panel {
   font-size: var(--font-size-sm);
 }
 
+.c-field--inline {
+  gap: var(--spacing-xs);
+}
+
+.c-inline-repair-form {
+  margin-top: var(--spacing-sm);
+}
+
 .c-input--monospace {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }

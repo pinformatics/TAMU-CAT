@@ -320,6 +320,33 @@
                           <td>
                             <% if warning_type == "course_code" %>
                               <%= row[:course_code_issue].presence || "Add the full course code before commit." %>
+                              <% unless @batch.finalized? %>
+                                <% suggested_course_code = row[:course_code].to_s.match?(/\A[A-Z]{4}-\d{3}\z/i) ? "#{row[:course_code]}-" : row[:course_code] %>
+                                <%= form_with url: course_code_admin_grade_import_batch_path(@batch),
+                                      method: :patch,
+                                      local: true,
+                                      data: { turbo: false },
+                                      class: "c-inline-repair-form" do %>
+                                  <%= hidden_field_tag "grade_import_course_code_repair[old_course_code]", row[:course_code] %>
+                                  <div class="c-field c-field--inline">
+                                    <%= label_tag "grade_import_course_code_repair_#{warning_type}_#{row[:course_code].to_s.parameterize}_new_course_code",
+                                          "Full course code",
+                                          class: "c-label" %>
+                                    <div class="u-actions u-actions--start u-gap-xs">
+                                      <%= text_field_tag "grade_import_course_code_repair[new_course_code]",
+                                            suggested_course_code,
+                                            id: "grade_import_course_code_repair_#{warning_type}_#{row[:course_code].to_s.parameterize}_new_course_code",
+                                            class: "c-input c-input--compact",
+                                            placeholder: "PHPM-603-601",
+                                            required: true,
+                                            pattern: "[A-Za-z]{4}[-_ ]?\\d{3}[-_ ]?\\d{3}",
+                                            title: "Use a 4-letter department code, 3-digit course number, and 3-digit section number." %>
+                                      <%= submit_tag "Apply to #{row[:affected_label].presence || row[:student]}",
+                                            class: button_classes(:secondary) %>
+                                    </div>
+                                  </div>
+                                <% end %>
+                              <% end %>
                             <% elsif warning_type == "target_mismatch" %>
                               Uploaded target <%= row[:course_target].presence || "missing" %>; configured target <%= row[:configured_course_target].presence || "missing" %>.
                             <% else %>

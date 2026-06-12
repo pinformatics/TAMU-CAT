@@ -117,6 +117,7 @@ Rails.application.routes.draw do
         post :rebuild_ratings
         post :finalize
         patch :semester
+        patch :course_code, to: "grade_import_batches#update_course_code"
         get :export_ratings
         get :export_evidence
         get :error_report
