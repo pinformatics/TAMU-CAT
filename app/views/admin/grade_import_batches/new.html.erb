@@ -22,9 +22,10 @@
                 <%= label_tag :program_semester_id, "Program semester", class: "c-label" %>
                 <%= select_tag :program_semester_id,
                       options_from_collection_for_select(ProgramSemester.ordered, :id, :name, ProgramSemester.current&.id),
-                      include_blank: "No semester",
+                      include_blank: "Select semester",
+                      required: true,
                       class: "c-input" %>
-                <small class="c-help">Used to associate competency sources on the student dashboard.</small>
+                <small class="c-help">Required. Course sections are semester-specific and are used for student competency views and reports.</small>
               </div>
 
               <div class="c-field">

@@ -54,6 +54,110 @@ class GradeImports::TargetWarningAnalyzerTest < ActiveSupport::TestCase
     assert_equal 3, mismatch[:configured_course_target]
   end
 
+  test "missing uploaded targets are grouped by course competency target" do
+    competency = create_competency!("Grouped Missing Uploaded Target")
+    batch = create_batch
+    file = create_file(batch)
+    create_evidence!(
+      batch: batch,
+      file: file,
+      student: @student,
+      course_code: "PHPM-645-700",
+      competency_title: competency.title,
+      course_target_level: nil,
+      fingerprint: "fingerprint-grouped-missing-target-one"
+    )
+    create_evidence!(
+      batch: batch,
+      file: file,
+      student: students(:other_student),
+      course_code: "PHPM-645-700",
+      competency_title: competency.title,
+      course_target_level: nil,
+      fingerprint: "fingerprint-grouped-missing-target-two"
+    )
+
+    summary = GradeImports::TargetWarningAnalyzer.call(batch: batch)
+    missing_target = summary[:missing_course_targets].first
+
+    assert summary[:requires_review]
+    assert_equal 2, summary.dig(:counts, :missing_course_targets)
+    assert_equal 1, summary.dig(:counts, :missing_course_target_groups)
+    assert_equal 1, summary[:missing_course_targets].size
+    assert_equal "PHPM-645-700", missing_target[:course_code]
+    assert_equal competency.title, missing_target[:competency]
+    assert_equal 2, missing_target[:affected_count]
+    assert_equal 2, missing_target[:student_count]
+  end
+
+  test "incomplete course codes require review and are grouped by course" do
+    competency = create_competency!("Incomplete Course Code")
+    batch = create_batch
+    file = create_file(batch)
+    create_evidence!(
+      batch: batch,
+      file: file,
+      student: @student,
+      course_code: "PHPM-646",
+      competency_title: competency.title,
+      course_target_level: 3,
+      fingerprint: "fingerprint-missing-section-one"
+    )
+    create_evidence!(
+      batch: batch,
+      file: file,
+      student: students(:other_student),
+      course_code: "PHPM-646",
+      competency_title: "Other Missing Section Competency",
+      course_target_level: 3,
+      fingerprint: "fingerprint-missing-section-two"
+    )
+
+    summary = GradeImports::TargetWarningAnalyzer.call(batch: batch)
+    course_code_issue = summary[:course_code_issues].first
+
+    assert summary[:requires_review]
+    assert_equal 2, summary.dig(:counts, :course_code_issues)
+    assert_equal 1, summary.dig(:counts, :course_code_issue_groups)
+    assert_equal 1, summary[:course_code_issues].size
+    assert_equal "PHPM-646", course_code_issue[:course_code]
+    assert_equal "2 competencies", course_code_issue[:competency]
+    assert_equal 2, course_code_issue[:affected_count]
+    assert_includes course_code_issue[:course_code_issue], "section number"
+  end
+
+  test "course code validation requires four letter department course number and section number" do
+    competency = create_competency!("Course Code Components")
+    batch = create_batch
+    file = create_file(batch)
+    create_evidence!(
+      batch: batch,
+      file: file,
+      student: @student,
+      course_code: "PHP-646-700",
+      competency_title: competency.title,
+      course_target_level: 3,
+      fingerprint: "fingerprint-invalid-department"
+    )
+    create_evidence!(
+      batch: batch,
+      file: file,
+      student: students(:other_student),
+      course_code: "",
+      competency_title: competency.title,
+      course_target_level: 3,
+      fingerprint: "fingerprint-missing-course-code"
+    )
+
+    summary = GradeImports::TargetWarningAnalyzer.call(batch: batch)
+    issues = summary[:course_code_issues]
+
+    assert_equal 2, summary.dig(:counts, :course_code_issues)
+    assert_equal 2, summary.dig(:counts, :course_code_issue_groups)
+    assert issues.any? { |row| row[:course_code] == "PHP-646-700" && row[:course_code_issue].include?("department code") }
+    assert issues.any? { |row| row[:course_code] == "No course code" && row[:course_code_issue].include?("4-letter department code") }
+  end
+
   test "pending matched rows are compared to configured course targets" do
     competency = create_competency!("Configured Pending Target")
     create_configured_target!("PHPM-642-700", competency, 2)
@@ -136,10 +240,10 @@ class GradeImports::TargetWarningAnalyzerTest < ActiveSupport::TestCase
     )
   end
 
-  def create_evidence!(batch:, file:, course_code:, competency_title:, course_target_level:, fingerprint:)
+  def create_evidence!(batch:, file:, course_code:, competency_title:, course_target_level:, fingerprint:, student: @student)
     batch.grade_competency_evidences.create!(
       grade_import_file: file,
-      student: @student,
+      student: student,
       assignment_name: "Final Project",
       course_code: course_code,
       competency_title: competency_title,

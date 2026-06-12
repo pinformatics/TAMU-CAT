@@ -126,6 +126,9 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "People Management"
     assert_includes response.body, "Member Management"
+    assert_select "select.c-select--compact[name^='role_updates']"
+    assert_select ".c-inline-editor__trigger", count: 0
+    refute_includes response.body, "Use Change to edit"
   end
 
   test "people management warns and confirms admin role changes" do
@@ -152,6 +155,12 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Bulk lifecycle update"
     assert_includes response.body, "Class Year"
     assert_includes response.body, "program_year_updates"
+    assert_select "select.c-select--compact[name^='advisor_updates']"
+    assert_select "select.c-select--compact[name^='track_updates']"
+    assert_select "select.c-select--compact[name^='program_year_updates']"
+    assert_select "select.c-select--compact[name^='status_updates']"
+    assert_select ".c-inline-editor__trigger", count: 0
+    refute_includes response.body, "Use Change to edit"
   end
 
   test "people management warns about current students missing profile assignment fields" do

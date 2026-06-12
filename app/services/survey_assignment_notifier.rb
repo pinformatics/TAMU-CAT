@@ -26,9 +26,25 @@ class SurveyAssignmentNotifier
     # @param assignment [SurveyAssignment]
     # @param title [String]
     # @param message [String]
-    # @return [Notification]
-    def notify_now!(assignment:, title:, message:)
-      Notification.deliver!(user: assignment.recipient_user, title: title, message: message, notifiable: assignment)
+    # @return [Notification, nil]
+    def notify_now!(assignment:, title:, message:, event_key: "survey.assignment.notice")
+      user = assignment.recipient_user
+      return unless user
+
+      Notification.deliver!(
+        user: user,
+        title: title,
+        message: message,
+        notifiable: assignment,
+        event_key: event_key,
+        dedupe_key: "#{event_key}:survey_assignment:#{assignment.id}:title:#{title.to_s.parameterize.presence || 'notice'}",
+        metadata: {
+          survey_assignment_id: assignment.id,
+          survey_id: assignment.survey_id,
+          student_id: assignment.student_id,
+          advisor_id: assignment.advisor_id
+        }
+      )
     end
   end
 end

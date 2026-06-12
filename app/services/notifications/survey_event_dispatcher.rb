@@ -60,6 +60,7 @@ module Notifications
       assignment = assignment_scope.includes(:survey, student: :user).find(survey_assignment_id)
       return if assignment.completed_at?
       return unless assignment.available_until
+      return unless assignment.recipient_user
 
       closes_in = ActionController::Base.helpers.distance_of_time_in_words(Time.current, assignment.available_until)
 
@@ -79,6 +80,7 @@ module Notifications
       assignment = assignment_scope.includes(:survey, student: :user).find(survey_assignment_id)
       return if assignment.completed_at?
       return unless assignment.available_until
+      return unless assignment.recipient_user
 
       deliver_event!(
         user: assignment.recipient_user,
@@ -98,11 +100,12 @@ module Notifications
 
       if student_user
         event_key = revision ? "survey.response.revised" : "survey.response.submitted"
+        title = revision ? "Competency Survey Revision Received" : "Competency Survey Submitted"
         deliver_event!(
           user: student_user,
           event_key: event_key,
           dedupe_key: assignment_dedupe_key(assignment, event_key),
-          title: "Competency Survey Submitted",
+          title: title,
           message: student_submission_message(assignment, revision: revision),
           notifiable: assignment,
           metadata: assignment_metadata(assignment).merge(revision: revision)
@@ -287,6 +290,8 @@ module Notifications
     end
 
     def deliver_event!(user:, event_key:, dedupe_key:, title:, message:, notifiable: nil, metadata: {})
+      return unless user
+
       Notification.deliver!(
         user: user,
         event_key: event_key,
@@ -342,6 +347,8 @@ module Notifications
     end
 
     def enqueue_notification_email(notification)
+      return unless notification
+
       NotificationEmailDeliveryJob.perform_later(notification_id: notification.id)
     end
   end

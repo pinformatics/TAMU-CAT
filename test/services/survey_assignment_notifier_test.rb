@@ -252,6 +252,12 @@ class SurveyAssignmentNotifierTest < ActiveSupport::TestCase
       assert_equal "Survey Closing Soon", notification.title
       assert_equal "Please complete your survey before it closes at #{assignment.available_until}", notification.message
       assert_equal assignment, notification.notifiable
+      assert_equal "survey.assignment.notice", notification.event_key
+      assert_equal "survey.assignment.notice:survey_assignment:#{assignment.id}:title:survey-closing-soon", notification.dedupe_key
+      assert_equal assignment.id, notification.metadata["survey_assignment_id"]
+      assert_equal assignment.survey_id, notification.metadata["survey_id"]
+      assert_equal assignment.student_id, notification.metadata["student_id"]
+      assert_equal assignment.advisor_id, notification.metadata["advisor_id"]
     end
   end
 
@@ -446,6 +452,31 @@ class SurveyAssignmentNotifierTest < ActiveSupport::TestCase
       )
 
       assert_equal @student.user, notification.user
+    end
+  end
+
+  test "notify_now! skips assignments without a recipient user" do
+    orphan_assignment = Struct.new(
+      :id,
+      :survey_id,
+      :student_id,
+      :advisor_id,
+      :recipient_user,
+      keyword_init: true
+    ).new(
+      id: 123_456,
+      survey_id: @survey.id,
+      student_id: @student.student_id,
+      advisor_id: @advisor.advisor_id,
+      recipient_user: nil
+    )
+
+    assert_no_difference "Notification.count" do
+      assert_nil SurveyAssignmentNotifier.notify_now!(
+        assignment: orphan_assignment,
+        title: "No recipient",
+        message: "This should not be persisted."
+      )
     end
   end
 

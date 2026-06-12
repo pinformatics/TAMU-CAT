@@ -143,6 +143,20 @@ class NotificationTest < ActiveSupport::TestCase
     assert_equal 0, user.notifications.unread.count
   end
 
+  test "deliver! skips missing users instead of raising" do
+    assert_no_difference "Notification.count" do
+      notification = Notification.deliver!(
+        user: nil,
+        event_key: "orphan.notice",
+        dedupe_key: "orphan.notice:test",
+        title: "Orphan notification",
+        message: "This should not be persisted without a recipient."
+      )
+
+      assert_nil notification
+    end
+  end
+
   test "target_path_for returns survey response for completed student assignments" do
     user = users(:student)
     assignment = survey_assignments(:residential_assignment)

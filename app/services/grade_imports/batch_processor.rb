@@ -88,6 +88,7 @@ module GradeImports
     DIRECT_RESULT_SUFFIXES = %w[result assessed_level level].freeze
     DIRECT_TARGET_SUFFIXES = %w[mastery_points course_target].freeze
     COURSE_CODE_PATTERN = /([A-Z]{2,5})[\s_-]*(\d{3})(?:[\s_-]*(\d{3}))?/i.freeze
+    FULL_COURSE_CODE_EXPECTATION = "4-letter department code, 3-digit course number, and 3-digit section number, such as PHPM-601-700".freeze
 
     def initialize(batch:, files:, dry_run: false, replace_existing_files: false)
       @batch = batch
@@ -362,6 +363,10 @@ module GradeImports
       competency_columns = direct_mapping[:columns]
       course_code = normalized_direct_course_code(source_name.presence || fallback_source_name)
       assignment_name = ""
+      course_warnings = []
+      if (course_warning = course_code_warning_for(course_code, row_number: 1, column: "file or sheet name", context: "Direct competency import"))
+        course_warnings << course_warning
+      end
 
       imported_rows = 0
       pending_rows = 0
@@ -459,10 +464,19 @@ module GradeImports
           import_fingerprint = build_import_fingerprint(
             grade_file: grade_file,
             row_number: row_number,
-            competency_title: column[:competency_title]
+            competency_title: column[:competency_title],
+            course_code: course_code
           )
 
-          if import_already_recorded?(import_fingerprint)
+          if import_already_recorded?(
+            import_fingerprint,
+            legacy_import_fingerprint: build_legacy_import_fingerprint(
+              grade_file: grade_file,
+              row_number: row_number,
+              competency_title: column[:competency_title]
+            ),
+            course_code: course_code
+          )
             duplicate_warnings << row_error(row_number, "Duplicate import suppressed for #{assignment_name} / #{column[:competency_title]}")
             next
           end
@@ -566,6 +580,8 @@ module GradeImports
             pending_row_count: pending_rows,
             duplicate_warning_count: duplicate_warnings.size,
             duplicate_warnings_preview: duplicate_warnings.first(100),
+            mapping_warning_count: course_warnings.size,
+            mapping_warnings_preview: course_warnings.first(100),
             ignored_prefixes: [ "HPMC" ]
           }
         }
@@ -609,9 +625,12 @@ module GradeImports
     def direct_competency_column_mapping(headers)
       columns = []
       errors = []
+      seen_competencies = {}
+      result_prefixes = Set.new
 
       direct_competency_result_headers(headers).each do |header|
         header_text = header.to_s.strip
+        result_prefixes << direct_competency_header_prefix(header_text, DIRECT_RESULT_SUFFIXES)
         competency_token = extract_direct_competency_title(header_text)
         competency_title = normalized_competency_title(competency_token)
 
@@ -619,6 +638,19 @@ module GradeImports
           errors << missing_competency_mapping_error(1, competency_token, column: header_text, context: "uploaded header")
           next
         end
+
+        if seen_competencies.key?(competency_title)
+          errors << row_error(
+            1,
+            "Duplicate result/assessed level columns were found for '#{competency_title}'. Keep one result column per competency.",
+            type: "mapping",
+            column: [ seen_competencies[competency_title], header_text ].compact.join(", "),
+            value: competency_title,
+            correction_hint: "Remove the duplicate result or assessed level column before importing."
+          )
+          next
+        end
+        seen_competencies[competency_title] = header_text
 
         target_header = direct_target_header_for(headers, header_text)
         if target_header.blank?
@@ -637,6 +669,22 @@ module GradeImports
           mastery_points_header: target_header,
           competency_title: competency_title
         }
+      end
+
+      direct_competency_target_headers(headers).each do |target_header|
+        target_prefix = direct_competency_header_prefix(target_header, DIRECT_TARGET_SUFFIXES)
+        next if result_prefixes.include?(target_prefix)
+
+        competency_token = extract_direct_competency_title(target_header)
+        competency_title = normalized_competency_title(competency_token).presence || competency_token.presence || "unknown competency"
+        errors << row_error(
+          1,
+          "Course target/mastery points column for '#{competency_title}' has no matching result or assessed level column.",
+          type: "mapping",
+          column: target_header,
+          value: competency_title,
+          correction_hint: "Add the matching result/assessed level column, or remove this target-only column."
+        )
       end
 
       { columns: columns, errors: errors }
@@ -662,6 +710,19 @@ module GradeImports
       headers.find do |header|
         normalized = normalize_key(header)
         DIRECT_TARGET_SUFFIXES.any? { |suffix| normalized == "#{target_prefix}_#{suffix}" }
+      end
+    end
+
+    def direct_competency_target_headers(headers)
+      headers.filter_map do |header|
+        next if header.blank?
+
+        header_text = header.to_s.strip
+        normalized = normalize_key(header_text)
+        next unless DIRECT_TARGET_SUFFIXES.any? { |suffix| normalized.end_with?("_#{suffix}") }
+        next if normalized.start_with?("hpmc_")
+
+        header_text
       end
     end
 
@@ -965,6 +1026,11 @@ module GradeImports
           next
         end
 
+        course_code = normalize_course_code(row[:course_code]) || row[:course_code].to_s.strip.presence
+        if row[:course_code].present? && (course_warning = course_code_warning_for(course_code, row_number:, column: "course_code", context: "Mapping row"))
+          warnings << course_warning
+        end
+
         rows << {
           source_row_number: row_number,
           assignment_match_type: match_type,
@@ -974,7 +1040,7 @@ module GradeImports
           min_grade: min_grade,
           max_grade: max_grade,
           competency_level: level,
-          course_code: normalize_course_code(row[:course_code]) || row[:course_code].to_s.strip.presence,
+          course_code: course_code,
           notes: row[:notes].to_s.strip.presence
         }
       end
@@ -1154,9 +1220,19 @@ module GradeImports
               grade_file: grade_file,
               row_number: row_number,
               competency_title: applied_mapping[:mapping][:competency_title],
-              assignment_name: assignment_name
+              assignment_name: assignment_name,
+              course_code: row_course_code.presence || applied_mapping[:mapping][:course_code]
             )
-            if import_already_recorded?(import_fingerprint)
+            if import_already_recorded?(
+              import_fingerprint,
+              legacy_import_fingerprint: build_legacy_import_fingerprint(
+                grade_file: grade_file,
+                row_number: row_number,
+                competency_title: applied_mapping[:mapping][:competency_title],
+                assignment_name: assignment_name
+              ),
+              course_code: row_course_code.presence || applied_mapping[:mapping][:course_code]
+            )
               duplicate_warnings << row_error(row_number, "Duplicate import suppressed for #{assignment_name} / #{applied_mapping[:mapping][:competency_title]}")
               next
             end
@@ -1194,9 +1270,19 @@ module GradeImports
             grade_file: grade_file,
             row_number: row_number,
             competency_title: applied_mapping[:mapping][:competency_title],
-            assignment_name: assignment_name
+            assignment_name: assignment_name,
+            course_code: row_course_code.presence || applied_mapping[:mapping][:course_code]
           )
-          if import_already_recorded?(import_fingerprint)
+          if import_already_recorded?(
+            import_fingerprint,
+            legacy_import_fingerprint: build_legacy_import_fingerprint(
+              grade_file: grade_file,
+              row_number: row_number,
+              competency_title: applied_mapping[:mapping][:competency_title],
+              assignment_name: assignment_name
+            ),
+            course_code: row_course_code.presence || applied_mapping[:mapping][:course_code]
+          )
             duplicate_warnings << row_error(row_number, "Duplicate import suppressed for #{assignment_name} / #{applied_mapping[:mapping][:competency_title]}")
             next
           end
@@ -1377,9 +1463,19 @@ module GradeImports
             grade_file: grade_file,
             row_number: row_number,
             competency_title: applied_mapping[:mapping][:competency_title],
-            assignment_name: assignment_name
+            assignment_name: assignment_name,
+            course_code: course_code.presence || applied_mapping[:mapping][:course_code]
           )
-          if import_already_recorded?(import_fingerprint)
+          if import_already_recorded?(
+            import_fingerprint,
+            legacy_import_fingerprint: build_legacy_import_fingerprint(
+              grade_file: grade_file,
+              row_number: row_number,
+              competency_title: applied_mapping[:mapping][:competency_title],
+              assignment_name: assignment_name
+            ),
+            course_code: course_code.presence || applied_mapping[:mapping][:course_code]
+          )
             duplicate_warnings << row_error(row_number, "Duplicate import suppressed for #{assignment_name} / #{applied_mapping[:mapping][:competency_title]}")
             next
           end
@@ -1471,9 +1567,19 @@ module GradeImports
               grade_file: grade_file,
               row_number: row_number,
               competency_title: applied_mapping[:mapping][:competency_title],
-              assignment_name: assignment_name
+              assignment_name: assignment_name,
+              course_code: course_code.presence || applied_mapping[:mapping][:course_code]
             )
-            if import_already_recorded?(import_fingerprint)
+            if import_already_recorded?(
+              import_fingerprint,
+              legacy_import_fingerprint: build_legacy_import_fingerprint(
+                grade_file: grade_file,
+                row_number: row_number,
+                competency_title: applied_mapping[:mapping][:competency_title],
+                assignment_name: assignment_name
+              ),
+              course_code: course_code.presence || applied_mapping[:mapping][:course_code]
+            )
               duplicate_warnings << row_error(row_number, "Duplicate import suppressed for #{assignment_name} / #{applied_mapping[:mapping][:competency_title]}")
               next
             end
@@ -2048,6 +2154,31 @@ module GradeImports
       )
     end
 
+    def course_code_warning_for(course_code, row_number:, column:, context:)
+      return if full_course_code?(course_code)
+
+      row_error(
+        row_number,
+        "#{context} should include a full course code with #{FULL_COURSE_CODE_EXPECTATION}.",
+        type: "course_code",
+        severity: "warning",
+        column: column,
+        value: course_code.presence || "blank",
+        expected: "DEPT-###-###",
+        received: course_code.presence || "blank",
+        correction_hint: "Rename the file/sheet, correct the mapping row, or enter the full course and section in the batch review page."
+      )
+    end
+
+    def full_course_code?(course_code)
+      parsed = CourseOffering.parse_source_code(course_code)
+      return false if parsed.blank?
+
+      parsed[:department_code].to_s.match?(/\A[A-Z]{4}\z/) &&
+        parsed[:course_number].to_s.match?(/\A\d{3}\z/) &&
+        parsed[:section_number].to_s.match?(/\A\d{3}\z/)
+    end
+
     def display_cell_value(value)
       token = value.to_s.strip
       token.present? ? token : "blank"
@@ -2098,7 +2229,17 @@ module GradeImports
       ].join(":")
     end
 
-    def build_import_fingerprint(grade_file:, row_number:, competency_title:, assignment_name: nil)
+    def build_import_fingerprint(grade_file:, row_number:, competency_title:, assignment_name: nil, course_code: nil)
+      [
+        grade_file.file_checksum,
+        normalize_key(course_code),
+        row_number.to_i,
+        normalize_key(assignment_name),
+        normalize_key(competency_title)
+      ].compact_blank.join(":")
+    end
+
+    def build_legacy_import_fingerprint(grade_file:, row_number:, competency_title:, assignment_name: nil)
       [
         grade_file.file_checksum,
         row_number.to_i,
@@ -2107,9 +2248,21 @@ module GradeImports
       ].compact_blank.join(":")
     end
 
-    def import_already_recorded?(import_fingerprint)
+    def import_already_recorded?(import_fingerprint, legacy_import_fingerprint: nil, course_code: nil)
       GradeCompetencyEvidence.exists?(import_fingerprint: import_fingerprint) ||
-        GradeImportPendingRow.exists?(import_fingerprint: import_fingerprint)
+        GradeImportPendingRow.exists?(import_fingerprint: import_fingerprint) ||
+        legacy_import_already_recorded?(legacy_import_fingerprint, course_code)
+    end
+
+    def legacy_import_already_recorded?(legacy_import_fingerprint, course_code)
+      normalized_course_code = normalize_key(course_code)
+      return false if legacy_import_fingerprint.blank? || normalized_course_code.blank?
+
+      GradeCompetencyEvidence.where(import_fingerprint: legacy_import_fingerprint).any? do |row|
+        normalize_key(row.course_code) == normalized_course_code
+      end || GradeImportPendingRow.where(import_fingerprint: legacy_import_fingerprint).any? do |row|
+        normalize_key(row.course_code) == normalized_course_code
+      end
     end
 
     def duplicate_uploads_for(file_checksum)

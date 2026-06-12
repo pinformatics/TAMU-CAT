@@ -9,7 +9,7 @@
     <p class="c-lede">Review advisees and assign advisors, tracks, and assignment groups across the program.</p>
   </div>
 
-  <div class="c-stats-grid">
+  <div class="c-stats-grid c-stats-grid--one-row">
     <div class="c-stat c-stat--info">
       <div class="c-stat__label">Total Students</div>
       <div class="c-stat__value c-stat__value--md"><%= @assignment_stats[:total] %></div>
@@ -135,30 +135,10 @@
               </th>
               <th class="table-header-avatar">Avatar</th>
               <th class="table-header-name" style="min-width: 15rem;">Student</th>
-              <th class="table-header-current-role" style="min-width: 12rem;">
-                Status
-                <div class="c-table__meta">
-                  Click a status tag to change.
-                </div>
-              </th>
-              <th class="table-header-track" style="min-width: 14rem;">
-                Track
-                <div class="c-table__meta">
-                  Click a track tag to change.
-                </div>
-              </th>
-              <th class="table-header-track" style="min-width: 12rem;">
-                Class Year
-                <div class="c-table__meta">
-                  Click a year tag to change.
-                </div>
-              </th>
-              <th class="table-header-current-role" style="min-width: 16rem;">
-                Advisor
-                <div class="c-table__meta">
-                  Click an advisor tag to change.
-                </div>
-              </th>
+              <th class="table-header-current-role" style="min-width: 12rem;">Status</th>
+              <th class="table-header-track" style="min-width: 14rem;">Track</th>
+              <th class="table-header-track" style="min-width: 12rem;">Class Year</th>
+              <th class="table-header-current-role" style="min-width: 16rem;">Advisor</th>
               <th class="table-header-actions" style="min-width: 12rem;">Changes</th>
             </tr>
           </thead>
@@ -207,67 +187,55 @@
                 </td>
 
                 <td class="user-current-role-cell" style="min-width: 12rem;">
-                  <div class="c-role-badge c-role-badge--track u-inline-flex js-status-badge" id="status_badge_<%= student.student_id %>" tabindex="0" style="cursor:pointer;"><%= status_label %></div>
-                  <div class="u-mt-sm c-select-wrapper" id="status_select_wrapper_<%= student.student_id %>" style="display:none;">
-                    <%= select_tag "status_updates[#{student.student_id}]",
-                            options_for_select(status_select_options, status_key),
-                            class: "c-select u-w-full status-select",
-                            data: {
-                              student_id: student.student_id,
-                              original_status: status_key,
-                              original_status_name: status_label,
-                              student_name: user&.name || "Student ##{student.student_id}"
-                            },
-                            id: "status_select_#{student.student_id}" %>
-                  </div>
+                  <%= select_tag "status_updates[#{student.student_id}]",
+                          options_for_select(status_select_options, status_key),
+                          class: "c-select c-select--compact u-w-full status-select",
+                          data: {
+                            student_id: student.student_id,
+                            original_status: status_key,
+                            original_status_name: status_label,
+                            student_name: user&.name || "Student ##{student.student_id}"
+                          },
+                          id: "status_select_#{student.student_id}" %>
                 </td>
 
                 <td class="user-track-cell" style="min-width: 14rem;">
-                  <div class="c-role-badge c-role-badge--track u-inline-flex js-track-badge" id="track_badge_<%= student.student_id %>" tabindex="0" style="cursor:pointer;"><%= track_label %></div>
-                  <div class="u-mt-sm c-select-wrapper" id="track_select_wrapper_<%= student.student_id %>" style="display:none;">
-                    <%= select_tag "track_updates[#{student.student_id}]",
-                            options_for_select(track_select_options, track_key),
-                            class: "c-select u-w-full track-select",
-                            data: {
-                              student_id: student.student_id,
-                              original_track: track_key,
-                              original_track_name: track_label,
-                              student_name: user&.name || "Student ##{student.student_id}"
-                            },
-                            id: "track_select_#{student.student_id}" %>
-                  </div>
+                  <%= select_tag "track_updates[#{student.student_id}]",
+                          options_for_select(track_select_options, track_key),
+                          class: "c-select c-select--compact u-w-full track-select",
+                          data: {
+                            student_id: student.student_id,
+                            original_track: track_key,
+                            original_track_name: track_label,
+                            student_name: user&.name || "Student ##{student.student_id}"
+                          },
+                          id: "track_select_#{student.student_id}" %>
                 </td>
 
                 <td class="user-track-cell" style="min-width: 12rem;">
-                  <div class="c-role-badge c-role-badge--track u-inline-flex js-program-year-badge" id="program_year_badge_<%= student.student_id %>" tabindex="0" style="cursor:pointer;"><%= program_year_label %></div>
-                  <div class="u-mt-sm c-select-wrapper" id="program_year_select_wrapper_<%= student.student_id %>" style="display:none;">
-                    <%= select_tag "program_year_updates[#{student.student_id}]",
-                            options_for_select(program_year_select_options, program_year_value),
-                            class: "c-select u-w-full program-year-select",
-                            data: {
-                              student_id: student.student_id,
-                              original_program_year: program_year_value,
-                              original_program_year_name: program_year_label,
-                              student_name: user&.name || "Student ##{student.student_id}"
-                            },
-                            id: "program_year_select_#{student.student_id}" %>
-                  </div>
+                  <%= select_tag "program_year_updates[#{student.student_id}]",
+                          options_for_select(program_year_select_options, program_year_value),
+                          class: "c-select c-select--compact u-w-full program-year-select",
+                          data: {
+                            student_id: student.student_id,
+                            original_program_year: program_year_value,
+                            original_program_year_name: program_year_label,
+                            student_name: user&.name || "Student ##{student.student_id}"
+                          },
+                          id: "program_year_select_#{student.student_id}" %>
                 </td>
 
                 <td class="user-current-role-cell" style="min-width: 16rem;">
-                  <div class="c-role-badge c-role-badge--advisor u-inline-flex js-advisor-badge" id="advisor_badge_<%= student.student_id %>" tabindex="0" style="cursor:pointer;"><%= current_advisor_name %></div>
-                  <div class="u-mt-sm c-select-wrapper" id="advisor_select_wrapper_<%= student.student_id %>" style="display:none;">
-                    <%= select_tag "advisor_updates[#{student.student_id}]",
-                            options_for_select(@advisor_select_options, current_advisor_id),
-                            class: "c-select u-w-full advisor-select",
-                            data: {
-                              student_id: student.student_id,
-                              original_advisor: current_advisor_id,
-                              original_advisor_name: current_advisor_name,
-                              student_name: user&.name || "Student ##{student.student_id}"
-                            },
-                            id: "advisor_select_#{student.student_id}" %>
-                  </div>
+                  <%= select_tag "advisor_updates[#{student.student_id}]",
+                          options_for_select(@advisor_select_options, current_advisor_id),
+                          class: "c-select c-select--compact u-w-full advisor-select",
+                          data: {
+                            student_id: student.student_id,
+                            original_advisor: current_advisor_id,
+                            original_advisor_name: current_advisor_name,
+                            student_name: user&.name || "Student ##{student.student_id}"
+                          },
+                          id: "advisor_select_#{student.student_id}" %>
                 </td>
 
                 <td class="user-actions-cell" style="min-width: 12rem;">
@@ -490,28 +458,11 @@
         updateUI();
       }
 
-      function attachToggleHandlers(selector, wrapperPrefix) {
-        form.querySelectorAll(selector).forEach(badge => {
-          badge.addEventListener('click', () => {
-            const studentId = badge.id.replace(wrapperPrefix.replace('select_wrapper', 'badge'), '');
-            const wrapper = document.getElementById(`${wrapperPrefix}${studentId}`);
-            if (wrapper) {
-              wrapper.style.display = wrapper.style.display === 'none' ? 'block' : 'none';
-            }
-          });
-        });
-      }
-
       form.querySelectorAll('.advisor-select').forEach(select => {
         select.addEventListener('change', () => {
           const studentId = select.dataset.studentId;
           const fromLabel = normalizeLabel(select.dataset.originalAdvisorName, 'Unassigned');
           const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Unassigned');
-          const badge = document.getElementById(`advisor_badge_${studentId}`);
-
-          if (badge) {
-            badge.textContent = toLabel;
-          }
 
           updateRegistry(studentId, 'advisor', fromLabel, toLabel);
         });
@@ -522,11 +473,6 @@
           const studentId = select.dataset.studentId;
           const fromLabel = normalizeLabel(select.dataset.originalTrackName, 'Unassigned');
           const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Unassigned');
-          const badge = document.getElementById(`track_badge_${studentId}`);
-
-          if (badge) {
-            badge.textContent = toLabel;
-          }
 
           updateRegistry(studentId, 'track', fromLabel, toLabel);
         });
@@ -537,11 +483,6 @@
           const studentId = select.dataset.studentId;
           const fromLabel = normalizeLabel(select.dataset.originalProgramYearName, 'Unassigned');
           const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Unassigned');
-          const badge = document.getElementById(`program_year_badge_${studentId}`);
-
-          if (badge) {
-            badge.textContent = toLabel;
-          }
 
           updateRegistry(studentId, 'programYear', fromLabel, toLabel);
         });
@@ -552,11 +493,6 @@
           const studentId = select.dataset.studentId;
           const fromLabel = normalizeLabel(select.dataset.originalStatusName, 'Active');
           const toLabel = normalizeLabel(select.options[select.selectedIndex]?.text, 'Active');
-          const badge = document.getElementById(`status_badge_${studentId}`);
-
-          if (badge) {
-            badge.textContent = toLabel;
-          }
 
           updateRegistry(studentId, 'status', fromLabel, toLabel);
         });
@@ -578,11 +514,6 @@
           updateUI();
         });
       }
-
-      attachToggleHandlers('.js-advisor-badge', 'advisor_select_wrapper_');
-      attachToggleHandlers('.js-track-badge', 'track_select_wrapper_');
-      attachToggleHandlers('.js-program-year-badge', 'program_year_select_wrapper_');
-      attachToggleHandlers('.js-status-badge', 'status_select_wrapper_');
 
       updateUI();
     }

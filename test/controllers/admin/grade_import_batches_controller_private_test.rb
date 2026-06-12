@@ -215,4 +215,70 @@ class Admin::GradeImportBatchesControllerPrivateTest < ActionController::TestCas
       assert_nothing_raised { @controller.send(:notify_advisors_of_course_data_update!, "uploaded") }
     end
   end
+
+  test "admin grade import notifications cover review failure missing semester and rescue branch" do
+    admin_count = User.admins.count
+    @batch.update!(status: "completed_with_errors", summary: { "dry_run" => true })
+    file = @batch.grade_import_files.create!(
+      file_name: "needs-review.csv",
+      file_checksum: "needs-review-#{SecureRandom.hex(4)}",
+      status: "failed",
+      imported_rows: 0,
+      pending_rows: 1,
+      error_rows: 2,
+      parse_errors: [ "Missing required competency column" ]
+    )
+    @batch.grade_import_pending_rows.create!(
+      grade_import_file: file,
+      student_identifier: "Missing Student",
+      student_identifier_type: "student_name",
+      student_name: "Missing Student",
+      course_code: "PHPM-601",
+      assignment_name: "Case",
+      competency_title: "Policy Analysis",
+      raw_grade: 80,
+      mapped_level: 3,
+      course_target_level: nil,
+      row_number: 2,
+      source_key: "admin-notify-pending",
+      import_fingerprint: "admin-notify-pending"
+    )
+
+    assert_difference -> { Notification.where(event_key: "grade_import.review_needed").count }, admin_count do
+      assert_enqueued_jobs admin_count, only: NotificationEmailDeliveryJob do
+        @controller.send(:notify_admins_of_grade_import_review_if_needed!, "upload")
+      end
+    end
+
+    review_notification = Notification.where(user: @admin, event_key: "grade_import.review_needed").order(:created_at).last
+    assert_match "needs admin review", review_notification.message
+    assert_match "pending student", review_notification.message
+    assert_equal @batch.id, review_notification.metadata["batch_id"]
+    assert_equal "upload", review_notification.metadata["action"]
+    assert_equal 2, review_notification.metadata["failed_row_count"]
+
+    assert_difference -> { Notification.where(event_key: "grade_import.failed").count }, admin_count do
+      assert_enqueued_jobs admin_count, only: NotificationEmailDeliveryJob do
+        @controller.send(:notify_admins_of_grade_import_failure!, "Parser crashed")
+      end
+    end
+    failure_notification = Notification.where(user: @admin, event_key: "grade_import.failed").order(:created_at).last
+    assert_equal "Grade Import Failed", failure_notification.title
+    assert_match "Parser crashed", failure_notification.message
+    assert_equal "Parser crashed", failure_notification.metadata["error_message"]
+
+    @batch.update!(status: "completed", program_semester: nil, summary: { "dry_run" => false })
+    assert_difference -> { Notification.where(event_key: "grade_import.missing_semester").count }, admin_count do
+      assert_enqueued_jobs admin_count, only: NotificationEmailDeliveryJob do
+        @controller.send(:notify_admins_of_missing_grade_import_semester!)
+      end
+    end
+    semester_notification = Notification.where(user: @admin, event_key: "grade_import.missing_semester").order(:created_at).last
+    assert_match "does not have a semester assigned", semester_notification.message
+    assert_equal true, semester_notification.metadata["reportable"]
+
+    Notification.stub(:deliver!, ->(**_kwargs) { raise StandardError, "notification failure" }) do
+      assert_nothing_raised { @controller.send(:notify_admins_of_grade_import_failure!, "Parser crashed") }
+    end
+  end
 end

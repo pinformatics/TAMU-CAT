@@ -68,54 +68,61 @@
         <% end %>
 
         <% if @target_attainment_by_semester_course.any? %>
-          <section class="c-card c-card--tight u-stack u-stack--md">
-            <div>
-              <p class="c-eyebrow">Course target attainment</p>
-              <h2 class="c-section-title c-heading-inline">Course/Semester Target Performance</h2>
+          <details class="c-card c-card--flush c-section-group">
+            <summary class="c-section-group__header">
+              <div>
+                <p class="c-eyebrow">Optional report</p>
+                <h2 class="c-section-title">Course/Semester Target Performance</h2>
+              </div>
+              <span><%= pluralize(@target_attainment_by_semester_course.size, "course competency") %></span>
+            </summary>
+            <div class="u-stack u-stack--md u-p-md">
               <p class="c-help">Committed, reportable rows only. Met rate uses rows with both an assessed level and an uploaded course target.</p>
-            </div>
-            <div class="c-table-wrapper">
-              <table class="c-table c-table--sm">
-                <thead>
-                  <tr>
-                    <th>Semester</th>
-                    <th>Course</th>
-                    <th>Competency</th>
-                    <th>Rows</th>
-                    <th>Actual avg</th>
-                    <th>Course target avg</th>
-                    <th>Met</th>
-                    <th>Below</th>
-                    <th>No target</th>
-                    <th>Met rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <% @target_attainment_by_semester_course.each do |summary| %>
+              <div class="c-table-wrapper">
+                <table class="c-table c-table--sm">
+                  <thead>
                     <tr>
-                      <td><%= summary[:semester_name] %></td>
-                      <td class="c-table__title"><%= summary[:course_code] %></td>
-                      <td><%= summary[:competency_title] %></td>
-                      <td><%= summary[:total_count] %></td>
-                      <td><%= summary[:assessed_average] ? number_with_precision(summary[:assessed_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
-                      <td><%= summary[:course_target_average] ? number_with_precision(summary[:course_target_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
-                      <td><span class="c-score-pill c-score-pill--met"><%= summary[:met_count] %></span></td>
-                      <td><span class="c-score-pill c-score-pill--below"><%= summary[:below_count] %></span></td>
-                      <td><span class="c-score-pill c-score-pill--no-target c-score-pill--empty"><%= summary[:no_target_count] %></span></td>
-                      <td><%= summary[:met_rate] ? "#{summary[:met_rate]}%" : "—" %></td>
+                      <th>Semester</th>
+                      <th>Course</th>
+                      <th>Competency</th>
+                      <th>Rows</th>
+                      <th>Actual avg</th>
+                      <th>Course target avg</th>
+                      <th>Met</th>
+                      <th>Below</th>
+                      <th>No target</th>
+                      <th>Met rate</th>
                     </tr>
-                  <% end %>
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    <% @target_attainment_by_semester_course.each do |summary| %>
+                      <tr>
+                        <td><%= summary[:semester_name] %></td>
+                        <td class="c-table__title"><%= summary[:course_code] %></td>
+                        <td><%= summary[:competency_title] %></td>
+                        <td><%= summary[:total_count] %></td>
+                        <td><%= summary[:assessed_average] ? number_with_precision(summary[:assessed_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
+                        <td><%= summary[:course_target_average] ? number_with_precision(summary[:course_target_average], precision: 2, strip_insignificant_zeros: true) : "—" %></td>
+                        <td><span class="c-score-pill c-score-pill--met"><%= summary[:met_count] %></span></td>
+                        <td><span class="c-score-pill c-score-pill--below"><%= summary[:below_count] %></span></td>
+                        <td><span class="c-score-pill c-score-pill--no-target c-score-pill--empty"><%= summary[:no_target_count] %></span></td>
+                        <td><%= summary[:met_rate] ? "#{summary[:met_rate]}%" : "—" %></td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </section>
+          </details>
         <% end %>
 
         <div class="c-card c-card--flush u-overflow-hidden">
         <%= render TableComponent.new(
-          headers: ["Batch", "Status", "Mode", "Semester", "Uploaded By", "Notes", "Source Files", "Files", "Evidence", "Pending", "Ratings", "Created", ""]
+          headers: ["Batch", "Review state", "Semester", "Upload", "Files", "Outcomes", "Created", ""]
         ) do %>
           <% @batches.each do |batch| %>
+            <% batch_summary = batch.summary || {} %>
+            <% source_files = batch.grade_import_files.map(&:file_name) %>
             <% batch_modes = batch.grade_import_files.filter_map { |file| file.parsed_content["mode"].presence || file.parsed_content.dig("grade_sheet_debug", "mode").presence }.uniq %>
             <% mode_label = if batch_modes.include?("direct_competency")
               "Direct"
@@ -124,18 +131,57 @@
             else
               "—"
             end %>
+            <% workflow_label = if batch.finalized?
+              "Finalized"
+            elsif batch.rolled_back?
+              "Rolled back"
+            elsif batch.dry_run?
+              "Preview"
+            elsif batch.reportable?
+              "Committed"
+            else
+              batch.status.to_s.humanize
+            end %>
+            <% workflow_tone = if batch.rolled_back?
+              "closed"
+            elsif batch.dry_run?
+              "draft"
+            elsif batch.finalized? || batch.reportable?
+              "completed"
+            else
+              batch.status
+            end %>
             <tr>
-              <td class="c-table__title">#<%= batch.id %></td>
-              <td><%= batch.status.humanize %></td>
-              <td><%= mode_label %></td>
-              <td><%= batch.program_semester&.name || "—" %></td>
-              <td><%= batch.uploaded_by&.email %></td>
-              <td><%= truncate(batch.summary["import_notes"].to_s, length: 48).presence || "—" %></td>
-              <td><%= batch.grade_import_files.map(&:file_name).first(2).to_sentence.presence || "—" %></td>
-              <td><%= "#{batch.processed_files}/#{batch.total_files}" %></td>
-              <td><%= batch.evidence_count %></td>
-              <td><%= batch.pending_count %></td>
-              <td><%= batch.rating_count %></td>
+              <td>
+                <span class="c-table__title">Batch #<%= batch.id %></span>
+                <% if batch_summary["import_notes"].present? %>
+                  <span class="c-table__meta"><%= truncate(batch_summary["import_notes"].to_s, length: 72) %></span>
+                <% end %>
+              </td>
+              <td>
+                <%= status_badge(workflow_label, value: workflow_tone) %>
+                <span class="c-table__meta"><%= batch.status.humanize %></span>
+              </td>
+              <td><%= batch.program_semester&.name || "No semester" %></td>
+              <td>
+                <span class="c-table__title"><%= batch.uploaded_by&.email || "Unknown uploader" %></span>
+                <span class="c-table__meta"><%= mode_label %> format</span>
+              </td>
+              <td>
+                <span class="c-table__title"><%= "#{batch.processed_files}/#{batch.total_files}" %> processed</span>
+                <span class="c-table__meta">
+                  <%= source_files.first(2).to_sentence.presence || "No source files" %><%= " +#{source_files.size - 2} more" if source_files.size > 2 %>
+                </span>
+              </td>
+              <td>
+                <div class="u-actions u-actions--start u-gap-xs">
+                  <span class="c-score-pill c-score-pill--course"><%= batch.evidence_count %> evidence</span>
+                  <% if batch.pending_count.to_i.positive? %>
+                    <span class="c-score-pill c-score-pill--below"><%= batch.pending_count %> pending</span>
+                  <% end %>
+                  <span class="c-score-pill c-score-pill--program"><%= batch.rating_count %> ratings</span>
+                </div>
+              </td>
               <td><%= l(batch.created_at, format: :short) %></td>
               <td class="u-text-right"><%= link_to "View", admin_grade_import_batch_path(batch), class: "u-link" %></td>
             </tr>

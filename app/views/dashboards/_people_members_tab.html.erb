@@ -47,18 +47,20 @@
     <%= hidden_field_tag :authenticity_token, form_authenticity_token %>
 
     <div class="c-card c-card--flush c-table-wrapper">
-      <table class="c-table">
+      <table class="c-table c-table--fixed" style="--table-min-width: 58rem;">
+        <colgroup>
+          <col style="width: 7%;">
+          <col style="width: 8%;">
+          <col style="width: 38%;">
+          <col style="width: 18%;">
+          <col style="width: 29%;">
+        </colgroup>
         <thead>
           <tr>
             <th class="table-header-select">Select</th>
             <th class="table-header-avatar">Avatar</th>
             <th class="table-header-name">Name</th>
-            <th class="table-header-current-role">
-              Role
-              <div class="c-table__meta">
-                Click a role tag to change the role.
-              </div>
-            </th>
+            <th class="table-header-current-role">Role</th>
             <th class="table-header-actions">Actions</th>
           </tr>
         </thead>
@@ -91,31 +93,27 @@
                 </div>
               </td>
               <td class="user-current-role-cell">
-                <div class="role-edit-container" data-user-id="<%= user.id %>">
-                  <div class="c-role-badge c-role-badge--<%= user.role || 'student' %> u-inline-flex js-role-badge" id="role_badge_<%= user.id %>" tabindex="0" style="cursor:pointer;">
+                <% if user == current_user %>
+                  <div class="c-role-badge c-role-badge--<%= user.role || 'student' %> u-inline-flex">
                     <%= (user.role || 'student').upcase %>
                   </div>
-                  <% if user == current_user %>
-                    <div class="u-mt-sm">
-                      <span class="c-help">Role Locked</span>
-                    </div>
-                  <% else %>
-                    <div class="u-mt-sm c-select-wrapper" id="role_select_wrapper_<%= user.id %>" style="display:none;">
-                      <%= select_tag "role_updates[#{user.id}]",
-                          options_for_select(User.roles.map { |key, value| [key.titleize, key] }, user.role || 'student'),
-                          {
-                            class: 'c-select u-w-full',
-                            data: {
-                              user_id: user.id,
-                              user_label: user.full_name.presence || user.email,
-                              current_role: user.role || 'student',
-                              original_role: user.role || 'student'
-                            },
-                            id: "role_select_#{user.id}"
-                          } %>
-                    </div>
-                  <% end %>
-                </div>
+                  <div class="u-mt-xs">
+                    <span class="c-help">Role locked</span>
+                  </div>
+                <% else %>
+                  <%= select_tag "role_updates[#{user.id}]",
+                      options_for_select(User.roles.map { |key, _value| [key.titleize, key] }, user.role || 'student'),
+                      {
+                        class: 'c-select c-select--compact u-w-full',
+                        data: {
+                          user_id: user.id,
+                          user_label: user.full_name.presence || user.email,
+                          current_role: user.role || 'student',
+                          original_role: user.role || 'student'
+                        },
+                        id: "role_select_#{user.id}"
+                      } %>
+                <% end %>
               </td>
               <td class="user-actions-cell">
                 <% if user == current_user %>
@@ -301,15 +299,12 @@
           const userId = select.dataset.userId;
           const originalRole = select.dataset.originalRole;
           const selectedRole = select.value;
-          const badge = document.getElementById(`role_badge_${userId}`);
           const indicator = findIndicator(userId);
 
-          if (!userId || !badge) return;
+          if (!userId) return;
 
           if (selectedRole === originalRole) {
             delete pendingChanges[userId];
-            badge.textContent = originalRole.toUpperCase();
-            badge.className = `c-role-badge c-role-badge--${originalRole || 'student'} inline-flex js-role-badge`;
             if (indicator && !memberCheckboxes.find(box => box.dataset.userId === userId && box.checked)) {
               indicator.textContent = 'No changes';
               indicator.className = 'c-change-indicator';
@@ -330,16 +325,6 @@
 
           updateUI();
           updateBatchRemoveUI();
-        });
-      });
-
-      form.querySelectorAll('.js-role-badge').forEach(badge => {
-        badge.addEventListener('click', () => {
-          const userId = badge.id.replace('role_badge_', '');
-          const wrapper = document.getElementById(`role_select_wrapper_${userId}`);
-          if (wrapper) {
-            wrapper.style.display = wrapper.style.display === 'none' ? 'block' : 'none';
-          }
         });
       });
 

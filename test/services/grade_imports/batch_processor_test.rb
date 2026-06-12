@@ -168,6 +168,42 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 0, evidences.count { |evidence| evidence.competency_title.include?("HPMC") }
   end
 
+  test "faculty phpm 633 csv imports all result mastery pairs and leaves unmatched students pending" do
+    path = build_primary_direct_competency_csv(
+      rows: [
+        [ @student.user.name, @student.student_id, @student.uin, 5, 2, 5, 2, 3, 3, 3, 3, 2, 3, 100, 5, 100, 5 ],
+        [ "Pending, Student", nil, "999888777", 5, 2, 5, 2, 3, 3, 3, 3, 2, 3, 100, 5, 100, 5 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 5 do
+      assert_difference -> { GradeImportPendingRow.count }, 5 do
+        GradeImports::BatchProcessor.new(
+          batch: batch,
+          files: [ uploaded_csv_file(path, "Outcomes-26_SPRING_PHPM_633_700__HEALTH_LAW__ETHICS.csv") ],
+          dry_run: true
+        ).call
+      end
+    end
+
+    evidences = batch.reload.grade_competency_evidences.order(:competency_title)
+    pending_rows = batch.grade_import_pending_rows.order(:competency_title)
+    debug = batch.grade_import_files.first.parsed_content.fetch("grade_sheet_debug")
+
+    assert_equal "completed", batch.status
+    assert_equal [ "PHPM-633-700" ], evidences.map(&:course_code).uniq
+    assert_equal [ "PHPM-633-700" ], pending_rows.map(&:course_code).uniq
+    assert_equal 1, debug["matched_student_count"]
+    assert_equal 1, debug["pending_student_count"]
+    assert_equal 5, debug["pending_row_count"]
+    assert_equal 0, evidences.count { |evidence| evidence.competency_title.include?("HPMC") }
+    assert_equal 0, pending_rows.count { |row| row.competency_title.include?("HPMC") }
+    assert_equal 2, evidences.find { |evidence| evidence.competency_title == "Delivery, Organization, and Financing of Health Services and Health Systems" }.course_target_level
+    assert_equal 2, evidences.find { |evidence| evidence.competency_title == "Problem Solving, Decision Making, and Critical Thinking" }.mapped_level
+  end
+
   test "faculty direct competency csv imports shortened course target and assessed level columns" do
     path = build_direct_competency_csv(
       headers: [
@@ -203,6 +239,80 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 4, public_health.course_target_level
     assert_equal 4, policy.mapped_level
     assert_equal 5, policy.course_target_level
+  end
+
+  test "faculty phpm 601 600 csv imports section aware shortened columns" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student UIN",
+        "Public and Population Health Assessment COURSE TARGET",
+        "Public and Population Health Assessment ASSESSED LEVEL",
+        "Delivery, Organization, and Financing of Health Services and Health Systems COURSE TARGET",
+        "Delivery, Organization, and Financing of Health Services and Health Systems ASSESSED LEVEL",
+        "Organizational Dynamics COURSE TARGET",
+        "Organizational Dynamics ASSESSED LEVEL",
+        "Systems Thinking COURSE TARGET",
+        "Systems Thinking ASSESSED LEVEL"
+      ],
+      rows: [
+        [ @student.user.name, @student.uin, 2, 3, 1, 2, 1, 2, 1, 2 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 4 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-601-600.csv") ],
+        dry_run: true
+      ).call
+    end
+
+    file = batch.reload.grade_import_files.first
+    evidences = batch.grade_competency_evidences.order(:competency_title)
+
+    assert_equal "completed", batch.status
+    assert_equal "PHPM-601-600", file.parsed_content["direct_course_code"]
+    assert_empty file.parse_errors
+    assert_equal [ "PHPM-601-600" ], evidences.map(&:course_code).uniq
+    assert_equal 4, evidences.size
+    assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Public and Population Health Assessment" }.mapped_level
+    assert_equal 2, evidences.find { |evidence| evidence.competency_title == "Public and Population Health Assessment" }.course_target_level
+    assert_equal 2, evidences.find { |evidence| evidence.competency_title == "Systems Thinking" }.mapped_level
+    assert_equal 1, evidences.find { |evidence| evidence.competency_title == "Systems Thinking" }.course_target_level
+  end
+
+  test "direct competency csv warns when course section is missing from file name" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student UIN",
+        "Public and Population Health Assessment COURSE TARGET",
+        "Public and Population Health Assessment ASSESSED LEVEL"
+      ],
+      rows: [
+        [ @student.user.name, @student.uin, 4, 3 ]
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-601.csv") ],
+      dry_run: true
+    ).call
+
+    debug = batch.reload.grade_import_files.first.parsed_content.fetch("grade_sheet_debug")
+    warning = debug.fetch("mapping_warnings_preview").first
+
+    assert_equal "processed", batch.grade_import_files.first.status
+    assert_equal "course_code", warning["type"]
+    assert_equal "warning", warning["severity"]
+    assert_includes warning["message"], "4-letter department code"
+    assert_includes warning["message"], "3-digit section number"
   end
 
   test "direct competency csv resolves faculty shorthand through competency alias lookup" do
@@ -471,6 +581,37 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 1, batch.grade_competency_ratings.count
   end
 
+  test "canvas xlsx format used by 2026 comp imports mapped values without course targets" do
+    path = build_canvas_workbook(
+      grade_sheet_name: "PHPM_631_600",
+      course_code: "PHPM-631-600",
+      rows: [
+        [ @student.user.name, 8001, @student.uin, @student.uin, "PHPM-631-600", 75 ]
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "2026_comp.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    file = batch.reload.grade_import_files.first
+    evidence = batch.grade_competency_evidences.first
+
+    assert_equal "completed", batch.status
+    assert_equal "canvas", file.parsed_content["mode"]
+    assert_empty file.parse_errors
+    assert_equal "PHPM-631-600", evidence.course_code
+    assert_equal "Policy Analysis", evidence.competency_title
+    assert_equal 3, evidence.mapped_level
+    assert_nil evidence.course_target_level
+  end
+
   test "canvas workbook falls back to unique student name when ids are blank" do
     path = build_canvas_workbook(
       grade_sheet_name: "PHPM_791_002",
@@ -643,6 +784,44 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 1, first_batch.grade_competency_ratings.count
     assert_equal 0, second_batch.grade_competency_ratings.count
     assert_equal 1, duplicate_count
+  end
+
+  test "same direct competency data imports for a different course section" do
+    path = build_direct_competency_csv(
+      headers: [
+        "Student name",
+        "Student UIN",
+        "Public and Population Health Assessment COURSE TARGET",
+        "Public and Population Health Assessment ASSESSED LEVEL"
+      ],
+      rows: [
+        [ @student.user.name, @student.uin, 4, 3 ]
+      ]
+    )
+    first_batch = create_batch
+    second_batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: first_batch,
+        files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-602-601.csv") ],
+        dry_run: true
+      ).call
+    end
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: second_batch,
+        files: [ uploaded_csv_file(path, "Outcomes-26S-PHPM-603-601.csv") ],
+        dry_run: true
+      ).call
+    end
+
+    second_file = second_batch.reload.grade_import_files.first
+
+    assert_equal "PHPM-602-601", first_batch.grade_competency_evidences.first.course_code
+    assert_equal "PHPM-603-601", second_batch.grade_competency_evidences.first.course_code
+    assert_equal 0, second_file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count")
   end
 
   test "duplicate upload warning records previous matching file checksum" do
@@ -900,11 +1079,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
   end
 
   test "unsupported upload records failed file and failed batch summary" do
-    path = Tempfile.new([ "unsupported_import", ".txt" ]).tap do |file|
-      file.write("not a spreadsheet")
-      file.close
-      @temp_paths << file.path
-    end.path
+    path = temp_text_path("unsupported_import", "not a spreadsheet")
     batch = create_batch
 
     GradeImports::BatchProcessor.new(
@@ -928,11 +1103,7 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
       sheet_name: "PHPM_790_001",
       rows: [ [ @student.user.name, @student.student_id, @student.uin, 5, 3 ] ]
     )
-    invalid_path = Tempfile.new([ "bad_import", ".txt" ]).tap do |file|
-      file.write("bad")
-      file.close
-      @temp_paths << file.path
-    end.path
+    invalid_path = temp_text_path("bad_import", "bad")
     batch = create_batch
 
     GradeImports::BatchProcessor.new(
@@ -1171,7 +1342,8 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
       [ "exact", "Inactive", "PHPM-601", "Policy Analysis", "points", 0, 100, 3, false ],
       [ "exact", "Bad Basis", "PHPM-601", "Policy Analysis", "raw", 0, 100, 3, true ],
       [ "wildcard", "Bad Match", "PHPM-601", "Policy Analysis", "points", 0, 100, 3, true ],
-      [ "", "Default Match", "PHPM-601", "Policy Analysis", "", 0, 100, 3, true ]
+      [ "", "Default Match", "PHPM-601", "Policy Analysis", "", 0, 100, 3, true ],
+      [ "exact", "Valid Full Course", "PHPM-601-700", "Policy Analysis", "points", 0, 100, 3, true ]
     ])
     header_index = {
       index: {
@@ -1192,11 +1364,12 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     error_messages = errors.map { |error| error[:message] || error["message"] }
     error_types = errors.map { |error| error[:type] || error["type"] }
 
-    assert_equal 1, mappings.size
+    assert_equal 2, mappings.size
     assert_equal "exact", mappings.first[:assignment_match_type]
     assert_equal "points", mappings.first[:score_basis]
     assert_equal "PHPM-601", mappings.first[:course_code]
-    assert_empty warnings
+    assert_equal "PHPM-601-700", mappings.second[:course_code]
+    assert warnings.any? { |warning| warning[:type] == "course_code" && warning[:message].include?("3-digit section number") }
     assert error_messages.any? { |message| message.include?("min_grade and max_grade") }
     assert error_messages.any? { |message| message.include?("competency_level") }
     assert error_messages.any? { |message| message.include?("max_grade") }
@@ -1276,6 +1449,25 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
 
     missing_target = processor.send(:direct_competency_column_mapping, [ "Policy Analysis result" ])
     assert missing_target[:errors].any? { |error| error[:message].include?("Missing mastery points") }
+  end
+
+  test "direct competency helpers report duplicate result and orphan target columns" do
+    processor = GradeImports::BatchProcessor.new(batch: create_batch, files: [], dry_run: true)
+    headers = [
+      "Student name",
+      "Student UIN",
+      "Communication result",
+      "Communication assessed level",
+      "Communication mastery points",
+      "Policy Analysis course target"
+    ]
+
+    mapping = processor.send(:direct_competency_column_mapping, headers)
+    messages = mapping[:errors].map { |error| error[:message] }
+
+    assert_equal [ "Communication" ], mapping[:columns].map { |column| column[:competency_title] }
+    assert messages.any? { |message| message.include?("Duplicate result/assessed level columns") }
+    assert messages.any? { |message| message.include?("Policy Analysis") && message.include?("no matching result") }
   end
 
   test "course code filtering and mapping helpers cover blank exact fallback and match types" do
@@ -1371,7 +1563,8 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "blank", processor.send(:display_cell_value, nil)
     assert_equal "abc", processor.send(:display_cell_value, " abc ")
     assert_equal "abc:phpm_601:case:policy_analysis:9", processor.send(:build_source_key, identifier: "ABC", course_code: "PHPM 601", assignment_name: "Case", competency_title: "Policy Analysis", row_number: 9)
-    assert_equal "#{grade_file.file_checksum}:9:case:policy_analysis", processor.send(:build_import_fingerprint, grade_file: grade_file, row_number: 9, assignment_name: "Case", competency_title: "Policy Analysis")
+    assert_equal "#{grade_file.file_checksum}:phpm_601:9:case:policy_analysis", processor.send(:build_import_fingerprint, grade_file: grade_file, row_number: 9, assignment_name: "Case", competency_title: "Policy Analysis", course_code: "PHPM 601")
+    assert_equal "#{grade_file.file_checksum}:9:case:policy_analysis", processor.send(:build_legacy_import_fingerprint, grade_file: grade_file, row_number: 9, assignment_name: "Case", competency_title: "Policy Analysis")
 
     summary = processor.send(:preview_validation_summary, batch.reload)
     assert_equal true, summary[:commit_ready]
@@ -1678,6 +1871,15 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
       true,
       original_filename: filename
     )
+  end
+
+  def temp_text_path(prefix, content)
+    file = Tempfile.new([ prefix, ".txt" ])
+    path = file.path
+    file.close!
+    @temp_paths << path
+    File.write(path, content)
+    path
   end
 
   def fake_sheet(rows)

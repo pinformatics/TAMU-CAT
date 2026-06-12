@@ -57,9 +57,14 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       redirect_to new_admin_grade_import_batch_path, alert: "Please choose at least one .xlsx, .xlsm, or .csv file." and return
     end
 
+    program_semester_id = required_program_semester_id
+    unless program_semester_id
+      redirect_to new_admin_grade_import_batch_path, alert: "Choose a program semester for this batch before importing. Course sections are semester-specific." and return
+    end
+
     @batch = GradeImportBatch.create!(
       uploaded_by: current_user,
-      program_semester_id: grade_import_batch_params[:program_semester_id].presence,
+      program_semester_id: program_semester_id,
       summary: {
         "dry_run" => dry_run_requested?,
         "import_notes" => grade_import_batch_params[:import_notes].to_s.strip.presence
@@ -73,6 +78,8 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       file_names: files.map { |file| file.original_filename.to_s }
     )
     notify_advisors_of_course_data_update!("uploaded") if @batch.reportable?
+    notify_admins_of_grade_import_review_if_needed!("upload")
+    notify_admins_of_missing_grade_import_semester! if @batch.reportable?
 
     notice = dry_run_requested? ? "Preview completed. Review the results before committing." : "Grade import batch processed."
     redirect_to admin_grade_import_batch_path(@batch), notice: notice
@@ -80,6 +87,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     Rails.logger.error("[Admin::GradeImportBatchesController#create] #{e.class}: #{e.message}")
     if @batch&.persisted?
       @batch.update(status: "failed", completed_at: Time.current, summary: { error: e.message })
+      notify_admins_of_grade_import_failure!(e.message)
       redirect_to admin_grade_import_batch_path(@batch), alert: "Batch failed: #{e.message}"
     else
       redirect_to new_admin_grade_import_batch_path, alert: "Batch failed: #{e.message}"
@@ -124,6 +132,10 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       redirect_to admin_grade_import_batch_path(@batch), alert: "Only previews can be approved for commit." and return
     end
 
+    if course_code_issues_present?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Fix the course code issues before approving. Each imported course needs a 4-letter department code, 3-digit course number, and 3-digit section number." and return
+    end
+
     unless @batch.needs_admin_approval? || target_warning_summary[:requires_review]
       redirect_to admin_grade_import_batch_path(@batch), alert: "Only previews with failed, pending, or target-warning rows need admin approval." and return
     end
@@ -141,6 +153,14 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   end
 
   def commit
+    unless @batch.program_semester_id.present?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Assign a program semester before committing. Course sections are semester-specific." and return
+    end
+
+    if course_code_issues_present?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Fix the course code issues before committing. Each imported course needs a 4-letter department code, 3-digit course number, and 3-digit section number." and return
+    end
+
     if (@batch.needs_admin_approval? || target_warning_summary[:requires_review]) && !@batch.admin_approved?
       redirect_to admin_grade_import_batch_path(@batch),
                   alert: "Review and approve this preview before committing because it has failed, pending, or target-warning rows." and return
@@ -159,6 +179,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @batch.update!(summary: committed_summary)
     record_grade_import_activity!("commit", "Committed grade import preview ##{@batch.id} so its course competency data is reportable.")
     notify_advisors_of_course_data_update!("published")
+    notify_admins_of_missing_grade_import_semester!
 
     redirect_to admin_grade_import_batch_path(@batch), notice: "Preview committed. This batch now appears in reportable course competency views."
   end
@@ -170,6 +191,10 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
     unless @batch.dry_run?
       redirect_to admin_grade_import_batch_path(@batch), alert: "Only preview batches can be re-uploaded before commit." and return
+    end
+
+    unless @batch.program_semester_id.present?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Assign a program semester before re-uploading corrected files. Course sections are semester-specific." and return
     end
 
     files = selected_import_files
@@ -197,10 +222,12 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       "Re-uploaded corrected files for grade import preview ##{@batch.id}.",
       file_names: files.map { |file| file.original_filename.to_s }
     )
+    notify_admins_of_grade_import_review_if_needed!("reupload")
 
     redirect_to admin_grade_import_batch_path(@batch), notice: "Corrected file re-uploaded. Matching filenames replaced previous rows in this batch."
   rescue StandardError => e
     Rails.logger.error("[Admin::GradeImportBatchesController#reupload] #{e.class}: #{e.message}")
+    notify_admins_of_grade_import_failure!(e.message) if @batch&.persisted?
     redirect_to admin_grade_import_batch_path(@batch), alert: "Re-upload failed: #{e.message}"
   end
 
@@ -227,6 +254,10 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   end
 
   def recommit
+    unless @batch.program_semester_id.present?
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Assign a program semester before recommitting. Course sections are semester-specific." and return
+    end
+
     unless @batch.recommittable_rollback?
       redirect_to admin_grade_import_batch_path(@batch), alert: "Only rolled-back committed batches with preserved import data can be recommitted." and return
     end
@@ -242,6 +273,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     )
     record_grade_import_activity!("recommit", "Recommitted grade import batch ##{@batch.id}; its course competency data is reportable again.")
     notify_advisors_of_course_data_update!("re-published")
+    notify_admins_of_missing_grade_import_semester!
 
     redirect_to admin_grade_import_batch_path(@batch), notice: "Batch recommitted. Its course competency data is visible in the app again."
   end
@@ -279,7 +311,12 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     end
 
     previous_semester_id = @batch.program_semester_id
-    @batch.update!(program_semester_id: grade_import_batch_params[:program_semester_id].presence)
+    program_semester_id = required_program_semester_id
+    unless program_semester_id
+      redirect_to admin_grade_import_batch_path(@batch), alert: "Choose a program semester. Grade import batches cannot be left without one." and return
+    end
+
+    @batch.update!(program_semester_id: program_semester_id)
     record_grade_import_activity!(
       "semester_change",
       "Changed semester assignment for grade import batch ##{@batch.id}.",
@@ -288,13 +325,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       new_program_semester_name: @batch.program_semester&.name
     )
 
-    message = if @batch.program_semester.present?
-      "Batch semester updated to #{@batch.program_semester.name}."
-    else
-      "Batch semester cleared. It will only appear in unfiltered course competency views."
-    end
-
-    redirect_to admin_grade_import_batch_path(@batch), notice: message
+    redirect_to admin_grade_import_batch_path(@batch), notice: "Batch semester updated to #{@batch.program_semester.name}."
   end
 
   def destroy
@@ -473,6 +504,13 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   def grade_import_batch_params
     params.permit(:program_semester_id, :import_notes)
+  end
+
+  def required_program_semester_id
+    semester_id = grade_import_batch_params[:program_semester_id].presence
+    return unless semester_id
+
+    ProgramSemester.exists?(semester_id) ? semester_id : nil
   end
 
   def grade_import_batch_filter_params
@@ -728,6 +766,120 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     end
   rescue StandardError => e
     Rails.logger.warn("[GradeImportNotifications] Failed advisor notification for batch #{@batch&.id}: #{e.class}: #{e.message}")
+  end
+
+  def notify_admins_of_grade_import_review_if_needed!(action_label)
+    summary = grade_import_attention_summary
+    return unless summary[:needs_review]
+
+    reasons = summary[:reasons].presence || [ "review is required before this batch can be committed" ]
+    notify_admins_of_grade_import_event!(
+      event_key: "grade_import.review_needed",
+      title: "Grade Import Needs Review",
+      message: "Grade import batch ##{@batch.id} needs admin review after #{action_label}: #{reasons.to_sentence}.",
+      metadata: grade_import_attention_metadata(summary, action_label: action_label)
+    )
+  end
+
+  def notify_admins_of_grade_import_failure!(error_message)
+    summary = grade_import_attention_summary(error_message: error_message)
+    notify_admins_of_grade_import_event!(
+      event_key: "grade_import.failed",
+      title: "Grade Import Failed",
+      message: "Grade import batch ##{@batch.id} failed: #{error_message}.",
+      metadata: grade_import_attention_metadata(summary, action_label: "failure", error_message: error_message)
+    )
+  end
+
+  def notify_admins_of_missing_grade_import_semester!
+    return unless @batch&.reportable?
+    return if @batch.program_semester_id.present?
+
+    notify_admins_of_grade_import_event!(
+      event_key: "grade_import.missing_semester",
+      title: "Grade Import Missing Semester",
+      message: "Grade import batch ##{@batch.id} is reportable but does not have a semester assigned. Add a semester so reports and student views filter correctly.",
+      metadata: {
+        batch_id: @batch.id,
+        status: @batch.status,
+        dry_run: @batch.dry_run?,
+        reportable: @batch.reportable?,
+        program_semester_id: @batch.program_semester_id
+      }
+    )
+  end
+
+  def notify_admins_of_grade_import_event!(event_key:, title:, message:, metadata:)
+    User.admins.find_each do |admin_user|
+      notification = Notification.deliver!(
+        user: admin_user,
+        title: title,
+        message: message,
+        notifiable: @batch,
+        event_key: event_key,
+        dedupe_key: "#{event_key}:batch:#{@batch.id}:admin:#{admin_user.id}",
+        metadata: metadata.merge(admin_id: admin_user.id)
+      )
+      NotificationEmailDeliveryJob.perform_later(notification_id: notification.id) if notification
+    end
+  rescue StandardError => e
+    Rails.logger.warn("[GradeImportNotifications] Failed admin notification for batch #{@batch&.id}: #{e.class}: #{e.message}")
+  end
+
+  def grade_import_attention_summary(error_message: nil)
+    files = @batch.grade_import_files.to_a
+    target_counts = target_warning_summary.fetch(:counts, {})
+    failed_file_count = files.count { |file| file.status == "failed" || Array(file.parse_errors).any? }
+    failed_row_count = files.sum(&:error_rows)
+    pending_row_count = @batch.grade_import_pending_rows.pending_student_match.count
+    course_code_issue_count = target_counts[:course_code_issues].to_i
+    missing_target_count = target_counts[:missing_course_targets].to_i
+    mismatched_target_count = target_counts[:mismatched_configured_course_targets].to_i
+
+    reasons = []
+    reasons << error_message if error_message.present?
+    reasons << count_phrase(failed_file_count, "failed file") if failed_file_count.positive?
+    reasons << count_phrase(failed_row_count, "failed row") if failed_row_count.positive?
+    reasons << count_phrase(pending_row_count, "pending student match", "pending student matches") if pending_row_count.positive?
+    reasons << count_phrase(course_code_issue_count, "course code issue") if course_code_issue_count.positive?
+    reasons << count_phrase(missing_target_count, "missing course target") if missing_target_count.positive?
+    reasons << count_phrase(mismatched_target_count, "course target mismatch", "course target mismatches") if mismatched_target_count.positive?
+    reasons << "preview completed with errors" if reasons.blank? && @batch.completed_with_errors?
+
+    {
+      needs_review: error_message.present? || @batch.failed? || @batch.needs_admin_approval? || target_warning_summary[:requires_review],
+      reasons: reasons,
+      failed_file_count: failed_file_count,
+      failed_row_count: failed_row_count,
+      pending_row_count: pending_row_count,
+      course_code_issue_count: course_code_issue_count,
+      missing_target_count: missing_target_count,
+      mismatched_target_count: mismatched_target_count
+    }
+  end
+
+  def grade_import_attention_metadata(summary, action_label:, error_message: nil)
+    {
+      batch_id: @batch.id,
+      action: action_label,
+      status: @batch.status,
+      dry_run: @batch.dry_run?,
+      reportable: @batch.reportable?,
+      program_semester_id: @batch.program_semester_id,
+      program_semester_name: @batch.program_semester&.name,
+      failed_file_count: summary[:failed_file_count],
+      failed_row_count: summary[:failed_row_count],
+      pending_row_count: summary[:pending_row_count],
+      course_code_issue_count: summary[:course_code_issue_count],
+      missing_target_count: summary[:missing_target_count],
+      mismatched_target_count: summary[:mismatched_target_count],
+      reasons: summary[:reasons],
+      error_message: error_message
+    }.compact
+  end
+
+  def count_phrase(count, singular, plural = nil)
+    "#{count} #{count == 1 ? singular : (plural || singular.pluralize)}"
   end
 
   def grade_import_activity_metadata(import_action)
@@ -1028,6 +1180,10 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @target_warning_summary ||= GradeImports::TargetWarningAnalyzer.call(batch: @batch)
   end
 
+  def course_code_issues_present?
+    Array(target_warning_summary[:course_code_issues]).any?
+  end
+
   def approval_confirmation_message(sections:)
     if sections.blank?
       return "Approve this preview? This confirms admin review and allows the preview to be committed."
@@ -1038,7 +1194,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       "",
       "Review every listed item before approving. Nothing is hidden or summarized in this popup.",
       "",
-      "Approving allows commit; it does not fix failed rows, pending matches, target warnings, or duplicate-file warnings."
+      "Approving allows commit; it does not fix failed rows, pending matches, course-code issues, target warnings, or duplicate-file warnings."
     ].join("\n")
   end
 
@@ -1064,8 +1220,11 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     sections << approval_section("Failed Values", failed_items)
     sections << approval_section("Duplicate Uploads", duplicate_upload_items)
 
-    pending_student_items = pending_rows.map { |row| approval_pending_row_item(row) }
+    pending_student_items = approval_pending_student_items(pending_rows)
     sections << approval_section("Pending Student Matches", pending_student_items)
+
+    course_code_issue_items = Array(target_warning_summary[:course_code_issues]).map { |row| approval_course_code_issue_item(row) }
+    sections << approval_section("Course Code Issues", course_code_issue_items)
 
     missing_target_items = Array(target_warning_summary[:missing_course_targets]).map { |row| approval_missing_target_item(row) }
     sections << approval_section("Missing Course Targets", missing_target_items)
@@ -1104,11 +1263,48 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     prior.present? ? "#{label} (#{prior})" : label
   end
 
-  def approval_pending_row_item(row)
-    student_label = row.student_name.presence || row.student_identifier.presence || "Unmatched student"
-    student = row.student_uin.present? ? "#{student_label} (UIN #{row.student_uin})" : student_label
+  def approval_pending_student_items(pending_rows)
+    pending_rows
+      .group_by { |row| pending_student_group_key(row) }
+      .values
+      .map { |rows| approval_pending_student_group_item(rows) }
+  end
 
-    [ student, row.course_code, row.competency_title ].compact_blank.join(" | ")
+  def pending_student_group_key(row)
+    identity = row.student_uin.presence ||
+               row.student_email.presence ||
+               row.student_identifier.presence ||
+               row.student_name.presence ||
+               "pending-row-#{row.id}"
+
+    [ row.student_identifier_type.presence || "student", identity.to_s.downcase.strip ]
+  end
+
+  def approval_pending_student_group_item(rows)
+    primary_row = rows.first
+    student = approval_pending_student_label(primary_row)
+    course_codes = rows.map(&:course_code).compact_blank.uniq.sort
+    competencies = rows.map(&:competency_title).compact_blank.uniq.sort
+    competency_preview = competencies.first(3).join(", ")
+    competency_label = if competencies.size > 3
+      "#{competency_preview}, +#{competencies.size - 3} more"
+    elsif competencies.size > 1
+      "#{competencies.size} competencies: #{competency_preview}"
+    else
+      competency_preview
+    end
+
+    [
+      student,
+      "#{rows.size} pending #{rows.size == 1 ? 'row' : 'rows'}",
+      course_codes.to_sentence,
+      competency_label
+    ].compact_blank.join(" | ")
+  end
+
+  def approval_pending_student_label(row)
+    student_label = row.student_name.presence || row.student_identifier.presence || "Unmatched student"
+    row.student_uin.present? ? "#{student_label} (UIN #{row.student_uin})" : student_label
   end
 
   def approval_pending_invalid_uin_item(row)
@@ -1126,20 +1322,30 @@ class Admin::GradeImportBatchesController < Admin::BaseController
   end
 
   def approval_missing_target_item(row)
-    student = row[:student].presence || "Unknown student"
+    [
+      row[:course_code],
+      row[:competency],
+      row[:affected_label].presence || row[:student],
+      "missing course target"
+    ].compact_blank.join(" | ")
+  end
 
-    [ student, row[:course_code], row[:competency], "missing course target" ].compact_blank.join(" | ")
+  def approval_course_code_issue_item(row)
+    [
+      row[:course_code],
+      row[:affected_label].presence || row[:student],
+      row[:course_code_issue].presence || "course code must include department, course number, and section"
+    ].compact_blank.join(" | ")
   end
 
   def approval_configured_target_mismatch_item(row)
-    student = row[:student].presence || "Unknown student"
     uploaded = row[:course_target].presence || "missing"
     configured = row[:configured_course_target].presence || "missing"
 
     [
-      student,
       row[:course_code],
       row[:competency],
+      row[:affected_label].presence || row[:student],
       "uploaded target #{uploaded}",
       "configured target #{configured}"
     ].compact_blank.join(" | ")

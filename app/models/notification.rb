@@ -23,8 +23,10 @@ class Notification < ApplicationRecord
   # @param event_key [String, Symbol, nil]
   # @param dedupe_key [String, nil]
   # @param metadata [Hash]
-  # @return [Notification]
+  # @return [Notification, nil]
   def self.deliver!(user:, title:, message:, notifiable: nil, event_key: nil, dedupe_key: nil, metadata: {})
+    return unless user
+
     normalized_dedupe_key = dedupe_key.presence
     relation = if normalized_dedupe_key
       where(user: user, dedupe_key: normalized_dedupe_key)

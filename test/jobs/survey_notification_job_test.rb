@@ -80,8 +80,9 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
       )
     end
 
-    student_notification = Notification.find_by!(user: @assignment.student.user, title: "Competency Survey Submitted", notifiable: @assignment)
+    student_notification = Notification.find_by!(user: @assignment.student.user, title: "Competency Survey Revision Received", notifiable: @assignment)
     assert_match "updated responses", student_notification.message
+    assert_equal "survey.response.revised", student_notification.event_key
 
     advisor_notification = Notification.find_by!(user: @assignment.advisor.user, title: "Advisee Survey Edited", notifiable: @assignment)
     assert_match "updated", advisor_notification.message
@@ -569,6 +570,23 @@ class SurveyNotificationJobTest < ActiveJob::TestCase
         metadata: {}
       )
     end
+  end
+
+  test "dispatcher skips notification delivery when recipient user is missing" do
+    dispatcher = Notifications::SurveyEventDispatcher.new
+
+    assert_no_difference -> { Notification.count } do
+      assert_nil dispatcher.send(
+        :deliver_event!,
+        user: nil,
+        event_key: "orphan.event",
+        dedupe_key: "orphan.event:test",
+        title: "Orphan event",
+        message: "This event has no recipient."
+      )
+    end
+
+    assert_nothing_raised { dispatcher.send(:enqueue_notification_email, nil) }
   end
 
   private
