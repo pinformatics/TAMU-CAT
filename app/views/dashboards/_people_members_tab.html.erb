@@ -315,8 +315,6 @@
               to: selectedRole,
               name: select.dataset.userLabel || `User #${userId}`
             };
-            badge.textContent = selectedRole.toUpperCase();
-            badge.className = `c-role-badge c-role-badge--${selectedRole || 'student'} inline-flex js-role-badge`;
             if (indicator) {
               indicator.textContent = `${originalRole} → ${selectedRole}`;
               indicator.className = 'c-change-indicator changed';
