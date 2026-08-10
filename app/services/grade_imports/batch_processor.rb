@@ -241,13 +241,19 @@ module GradeImports
       workbook = Roo::Spreadsheet.open(uploaded_file.path, extension: router.spreadsheet_extension)
       if (outcomes_info = detect_canvas_outcomes_sheet(workbook))
         sheet = workbook.sheet(outcomes_info[:sheet_name])
-        result = process_canvas_outcomes_sheet_file!(
+        rows = extract_sheet_rows(grade_sheet: sheet, header_row_number: outcomes_info[:header_row_number], headers: outcomes_info[:headers])
+        # Roo parses the whole workbook into memory up front; large wide
+        # exports (many outcome columns) can hold hundreds of MB. Drop the
+        # reference and reclaim it before the row-write phase adds its own
+        # memory pressure, instead of letting both peaks stack.
+        workbook = nil
+        sheet = nil
+        GC.start
+        result = process_canvas_outcomes_rows!(
           grade_file: grade_file,
-          grade_sheet: sheet,
-          header_row_number: outcomes_info[:header_row_number],
+          rows: rows,
           headers: outcomes_info[:headers],
-          source_name: outcomes_info[:sheet_name],
-          fallback_source_name: uploaded_file.original_filename.to_s
+          fallback_source_name: outcomes_info[:sheet_name].presence || uploaded_file.original_filename.to_s
         )
         update_grade_file_with_result!(grade_file:, result:)
         return
@@ -255,10 +261,13 @@ module GradeImports
 
       if (direct_info = detect_direct_competency_sheet(workbook))
         sheet = workbook.sheet(direct_info[:sheet_name])
-        result = process_direct_competency_sheet_file!(
+        rows = extract_sheet_rows(grade_sheet: sheet, header_row_number: direct_info[:header_row_number], headers: direct_info[:headers])
+        workbook = nil
+        sheet = nil
+        GC.start
+        result = process_direct_competency_rows!(
           grade_file: grade_file,
-          grade_sheet: sheet,
-          header_row_number: direct_info[:header_row_number],
+          rows: rows,
           headers: direct_info[:headers],
           source_name: direct_info[:sheet_name],
           fallback_source_name: uploaded_file.original_filename.to_s
@@ -381,22 +390,14 @@ module GradeImports
       )
     end
 
-    def process_direct_competency_sheet_file!(grade_file:, grade_sheet:, header_row_number:, headers:, source_name:, fallback_source_name:)
-      rows = ((header_row_number + 1)..grade_sheet.last_row).map do |row_number|
+    def extract_sheet_rows(grade_sheet:, header_row_number:, headers:)
+      ((header_row_number + 1)..grade_sheet.last_row).map do |row_number|
         values = grade_sheet.row(row_number)
         row_hash = headers.each_with_index.each_with_object({}) do |(header, index), out|
           out[header] = values[index]
         end
         [ row_number, row_hash ]
       end
-
-      process_direct_competency_rows!(
-        grade_file: grade_file,
-        rows: rows,
-        headers: headers,
-        source_name: source_name,
-        fallback_source_name: fallback_source_name
-      )
     end
 
     def process_direct_competency_rows!(grade_file:, rows:, headers:, source_name:, fallback_source_name:)
@@ -644,23 +645,6 @@ module GradeImports
         rows: csv.each_with_index.map { |row, index| [ index + 2, row.to_h ] },
         headers: headers,
         fallback_source_name: uploaded_file.original_filename.to_s
-      )
-    end
-
-    def process_canvas_outcomes_sheet_file!(grade_file:, grade_sheet:, header_row_number:, headers:, source_name:, fallback_source_name:)
-      rows = ((header_row_number + 1)..grade_sheet.last_row).map do |row_number|
-        values = grade_sheet.row(row_number)
-        row_hash = headers.each_with_index.each_with_object({}) do |(header, index), out|
-          out[header] = values[index]
-        end
-        [ row_number, row_hash ]
-      end
-
-      process_canvas_outcomes_rows!(
-        grade_file: grade_file,
-        rows: rows,
-        headers: headers,
-        fallback_source_name: source_name.presence || fallback_source_name
       )
     end
 
