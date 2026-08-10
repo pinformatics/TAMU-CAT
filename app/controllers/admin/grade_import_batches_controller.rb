@@ -102,6 +102,37 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   def show
     @files = @batch.grade_import_files.order(:id)
+    @failed_row_count = @files.sum(&:error_rows)
+    @processed_row_count = @files.sum(&:imported_rows)
+    @duplicate_warnings = @files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
+    @duplicate_upload_warnings = @files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i }
+    @validation_summary = validation_summary_for(@files)
+
+    # While the background import job is still writing rows, none of the
+    # per-row review data below is meaningful yet (nothing can be approved,
+    # rated, or matched until the batch finishes). Computing it anyway is
+    # expensive -- target_warning_summary and target_attainment_by_course
+    # each load every evidence/pending row from the DB -- and this page
+    # auto-refreshes every 5s while pending/processing, so that cost was
+    # repeatedly competing with the background job for the same dyno's
+    # CPU/GVL time and measurably slowing imports down.
+    if @batch.status.in?(%w[pending processing])
+      @ratings = GradeCompetencyRating.none
+      @evidences = GradeCompetencyEvidence.none
+      @pending_rows = GradeImportPendingRow.none
+      @pending_competency_counts_by_file = {}
+      @pending_student_counts_by_file = {}
+      @match_rate = nil
+      @pending_row_count = 0
+      @target_warning_summary = { requires_review: false }
+      @target_attainment_by_course = []
+      @target_attainment_by_course_and_competency = []
+      @student_match_options = []
+      @approval_confirmation_sections = []
+      @approval_confirmation_message = nil
+      return
+    end
+
     @ratings = @batch.grade_competency_ratings.includes(student: :user).order(:competency_title, :student_id).limit(500)
     @evidences = @batch.grade_competency_evidences
                      .includes(:grade_import_file)
@@ -115,12 +146,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @pending_competency_counts_by_file = @batch.grade_import_pending_rows.pending_student_match.group(:grade_import_file_id).count
     @pending_student_counts_by_file = pending_student_counts_by_file
     @match_rate = match_rate_for(@files)
-    @failed_row_count = @files.sum(&:error_rows)
-    @processed_row_count = @files.sum(&:imported_rows)
     @pending_row_count = @batch.grade_import_pending_rows.pending_student_match.count
-    @duplicate_warnings = @files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
-    @duplicate_upload_warnings = @files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i }
-    @validation_summary = validation_summary_for(@files)
     @target_warning_summary = target_warning_summary
     @target_attainment_by_course = target_attainment_by_course
     @target_attainment_by_course_and_competency = target_attainment_by_course_and_competency

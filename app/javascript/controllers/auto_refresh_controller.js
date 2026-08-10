@@ -14,6 +14,13 @@ import { Controller } from "@hotwired/stimulus"
 // away in the instant the timer fires. Turbo.visit is a *managed* visit:
 // Turbo automatically cancels an in-flight visit when a new one starts, so
 // the user's own navigation always supersedes a pending auto-refresh.
+//
+// turbo:before-visit only covers link-style navigation. Actions like the
+// "Delete batch" button submit a form instead, which Turbo handles through
+// a separate lifecycle that doesn't fire turbo:before-visit until *after*
+// the request completes -- so without also listening for turbo:submit-start,
+// the timer can still fire mid-submission and reload a page whose record
+// the submission just deleted, landing on a 404.
 export default class extends Controller {
   static values = { interval: { type: Number, default: 5000 } }
 
@@ -24,12 +31,14 @@ export default class extends Controller {
     this.stop = this.stop.bind(this)
     document.addEventListener("turbo:before-visit", this.stop)
     document.addEventListener("turbo:before-cache", this.stop)
+    document.addEventListener("turbo:submit-start", this.stop)
   }
 
   disconnect() {
     this.stop()
     document.removeEventListener("turbo:before-visit", this.stop)
     document.removeEventListener("turbo:before-cache", this.stop)
+    document.removeEventListener("turbo:submit-start", this.stop)
   }
 
   stop() {
