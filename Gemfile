@@ -4,7 +4,7 @@ ruby "3.4.6"
 source "https://rubygems.org"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem "rails", "~> 8.0.3"
+gem "rails", "~> 8.1.0"
 # The modern asset pipeline for Rails [https://github.com/rails/propshaft]
 gem "propshaft"
 gem "tailwindcss-rails"
@@ -89,6 +89,11 @@ group :development do
 end
 
 group :test do
+  # Pin below Minitest 6, which split minitest/mock into a separate gem and
+  # breaks test_helper.rb's require. Revisit when the app is ready to adopt
+  # Minitest 6 deliberately.
+  gem "minitest", "~> 5.25"
+
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"
   gem "selenium-webdriver"
