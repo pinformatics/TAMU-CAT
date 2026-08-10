@@ -15,9 +15,7 @@
 } %>
 <% batch_still_processing = @batch.status.in?(%w[pending processing]) %>
 <% if batch_still_processing %>
-  <% content_for :head do %>
-    <meta http-equiv="refresh" content="5">
-  <% end %>
+  <div data-controller="auto-refresh" data-auto-refresh-interval-value="5000" hidden></div>
 <% end %>
 <% target_review_required = @batch.dry_run? && @target_warning_summary[:requires_review] %>
 <% has_file_issues = @failed_row_count.positive? || @duplicate_upload_warnings.positive? || @duplicate_warnings.positive? || target_review_required %>
