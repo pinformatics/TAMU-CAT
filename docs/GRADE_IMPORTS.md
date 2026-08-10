@@ -77,6 +77,54 @@ Course code derivation:
 - derived from sheet or file name
 - example: `PHPM_633_700` becomes `PHPM-633-700`
 
+### 3. Canvas Learning Mastery / Outcomes Results export
+
+This is Canvas's raw outcomes export: one row per student per assessment per
+learning outcome. It does not need a mapping sheet.
+
+Supported file types:
+
+- `.csv`
+- `.xlsx`
+- `.xlsm`
+
+Detection requires:
+
+- a student identifier column (`Student SIS ID` or `Student ID`)
+- a `Learning Outcome Name` column
+- an `Outcome Score` column
+
+Any subset of the full Canvas export columns is accepted as long as those
+three are present, so trimmed/working-copy versions of the export work the
+same as the full raw download. Recognized optional columns:
+
+- `Learning Outcome Friendly Name` (used if `Learning Outcome Name` is blank)
+- `Learning Outcome Mastery Score` (course target, optional)
+- `Learning Outcome Points Possible`
+- `Learning Outcome Rating`
+- `Assessment Title`
+- `Course Name`, `Course SIS ID`, `Section Name`, `Section SIS ID`
+
+Important interpretation:
+
+- `outcome score` is used directly as the student's competency level for that
+  assessment (already on the 1-5 proficiency scale)
+- `learning outcome mastery score` is used as the course target level, when present
+- each row becomes its own evidence row (one per student/assessment/outcome);
+  the batch rating rebuild already takes the max level per student/competency,
+  so a student's rating reflects their peak score across all assessments
+- rows where `outcome score` is blank, zero, or the rating is "Not able to
+  assess" are skipped without creating evidence and without counting as
+  errors — these represent ungraded submissions, not bad data
+- learning outcome names starting with `HPMC` are ignored, same as the `HPMC`
+  columns ignored in the direct competency format
+
+Course code derivation:
+
+- derived per row, in order, from: `Section SIS ID`, `Section Name`,
+  `Course SIS ID`, `Course Name`, falling back to the file name
+- a single file can contain rows for multiple course sections
+
 ## Current workflow
 
 1. Go to `Admin > Grade Import Batches`
@@ -246,10 +294,11 @@ When changing import behavior, test:
 
 1. mapping workbook import
 2. direct competency CSV import
-3. duplicate suppression on re-upload
-4. pending-row creation for missing students
-5. reconciliation after creating a matching student
-6. dry run commit
-7. rollback
-8. target-met reporting
-9. student overview competency history export
+3. Canvas outcomes export import (raw and trimmed column subsets)
+4. duplicate suppression on re-upload
+5. pending-row creation for missing students
+6. reconciliation after creating a matching student
+7. dry run commit
+8. rollback
+9. target-met reporting
+10. student overview competency history export

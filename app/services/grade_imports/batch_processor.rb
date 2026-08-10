@@ -90,6 +90,28 @@ module GradeImports
     COURSE_CODE_PATTERN = /([A-Z]{2,5})[\s_-]*(\d{3})(?:[\s_-]*(\d{3}))?/i.freeze
     FULL_COURSE_CODE_EXPECTATION = "4-letter department code, 3-digit course number, and 3-digit section number, such as PHPM-601-700".freeze
 
+    CANVAS_OUTCOME_STUDENT_HEADER_ALIASES = {
+      student_name: %w[student_name],
+      student_id: %w[student_id],
+      student_sis_id: %w[student_sis_id]
+    }.freeze
+    CANVAS_OUTCOME_HEADER_ALIASES = {
+      learning_outcome_name: %w[learning_outcome_name],
+      learning_outcome_friendly_name: %w[learning_outcome_friendly_name],
+      outcome_score: %w[outcome_score],
+      learning_outcome_mastery_score: %w[learning_outcome_mastery_score],
+      learning_outcome_points_possible: %w[learning_outcome_points_possible],
+      learning_outcome_rating: %w[learning_outcome_rating],
+      assessment_title: %w[assessment_title],
+      assessment_id: %w[assessment_id],
+      attempt: %w[attempt],
+      course_name: %w[course_name],
+      course_sis_id: %w[course_sis_id],
+      section_name: %w[section_name],
+      section_sis_id: %w[section_sis_id]
+    }.freeze
+    CANVAS_OUTCOME_NOT_ASSESSABLE_RATINGS = %w[not_able_to_assess].freeze
+
     def initialize(batch:, files:, dry_run: false, replace_existing_files: false)
       @batch = batch
       @files = Array(files)
@@ -203,12 +225,31 @@ module GradeImports
       router.validate!
 
       if router.csv?
-        result = process_direct_competency_csv_file!(grade_file:, uploaded_file:)
+        csv_headers = CSV.read(uploaded_file.path, headers: true, encoding: "bom|utf-8").headers.to_a.map { |header| header.to_s.strip }
+        result = if canvas_outcomes_headers?(csv_headers)
+          process_canvas_outcomes_csv_file!(grade_file:, uploaded_file:)
+        else
+          process_direct_competency_csv_file!(grade_file:, uploaded_file:)
+        end
         update_grade_file_with_result!(grade_file:, result:)
         return
       end
 
       workbook = Roo::Spreadsheet.open(uploaded_file.path, extension: router.spreadsheet_extension)
+      if (outcomes_info = detect_canvas_outcomes_sheet(workbook))
+        sheet = workbook.sheet(outcomes_info[:sheet_name])
+        result = process_canvas_outcomes_sheet_file!(
+          grade_file: grade_file,
+          grade_sheet: sheet,
+          header_row_number: outcomes_info[:header_row_number],
+          headers: outcomes_info[:headers],
+          source_name: outcomes_info[:sheet_name],
+          fallback_source_name: uploaded_file.original_filename.to_s
+        )
+        update_grade_file_with_result!(grade_file:, result:)
+        return
+      end
+
       if (direct_info = detect_direct_competency_sheet(workbook))
         sheet = workbook.sheet(direct_info[:sheet_name])
         result = process_direct_competency_sheet_file!(
@@ -543,6 +584,8 @@ module GradeImports
             }
           )
           imported_rows += 1
+        rescue ActiveRecord::RecordNotUnique
+          duplicate_warnings << row_error(row_number, "Duplicate import suppressed for row #{row_number} (detected on insert)")
         rescue ActiveRecord::RecordInvalid => e
           error_rows += 1
           errors << row_error(row_number, e.record.errors.full_messages.to_sentence.presence || e.message)
@@ -586,6 +629,341 @@ module GradeImports
           }
         }
       }
+    end
+
+    def process_canvas_outcomes_csv_file!(grade_file:, uploaded_file:)
+      csv = CSV.read(uploaded_file.path, headers: true, encoding: "bom|utf-8")
+      headers = csv.headers.map { |header| header.to_s.strip }
+      detect_canvas_outcomes_headers!(headers)
+
+      process_canvas_outcomes_rows!(
+        grade_file: grade_file,
+        rows: csv.each_with_index.map { |row, index| [ index + 2, row.to_h ] },
+        headers: headers,
+        fallback_source_name: uploaded_file.original_filename.to_s
+      )
+    end
+
+    def process_canvas_outcomes_sheet_file!(grade_file:, grade_sheet:, header_row_number:, headers:, source_name:, fallback_source_name:)
+      rows = ((header_row_number + 1)..grade_sheet.last_row).map do |row_number|
+        values = grade_sheet.row(row_number)
+        row_hash = headers.each_with_index.each_with_object({}) do |(header, index), out|
+          out[header] = values[index]
+        end
+        [ row_number, row_hash ]
+      end
+
+      process_canvas_outcomes_rows!(
+        grade_file: grade_file,
+        rows: rows,
+        headers: headers,
+        fallback_source_name: source_name.presence || fallback_source_name
+      )
+    end
+
+    def process_canvas_outcomes_rows!(grade_file:, rows:, headers:, fallback_source_name:)
+      student_name_header = canvas_outcome_student_header_for(headers, :student_name)
+      student_id_header = canvas_outcome_student_header_for(headers, :student_id)
+      student_sis_id_header = canvas_outcome_student_header_for(headers, :student_sis_id)
+      outcome_name_header = canvas_outcome_header_for(headers, :learning_outcome_name)
+      outcome_friendly_name_header = canvas_outcome_header_for(headers, :learning_outcome_friendly_name)
+      outcome_score_header = canvas_outcome_header_for(headers, :outcome_score)
+      mastery_score_header = canvas_outcome_header_for(headers, :learning_outcome_mastery_score)
+      points_possible_header = canvas_outcome_header_for(headers, :learning_outcome_points_possible)
+      rating_header = canvas_outcome_header_for(headers, :learning_outcome_rating)
+      assessment_title_header = canvas_outcome_header_for(headers, :assessment_title)
+      course_name_header = canvas_outcome_header_for(headers, :course_name)
+      course_sis_id_header = canvas_outcome_header_for(headers, :course_sis_id)
+      section_name_header = canvas_outcome_header_for(headers, :section_name)
+      section_sis_id_header = canvas_outcome_header_for(headers, :section_sis_id)
+
+      imported_rows = 0
+      pending_rows = 0
+      errors = []
+      error_rows = 0
+      duplicate_warnings = []
+      matched_students = Set.new
+      pending_students = Set.new
+      seen_rows = Hash.new(0)
+      rows_scanned = 0
+      rows_skipped_blank = 0
+      rows_skipped_hpmc = 0
+      rows_skipped_ungraded = 0
+
+      rows.each do |row_number, row|
+        rows_scanned += 1
+        if row.values.all?(&:blank?)
+          rows_skipped_blank += 1
+          next
+        end
+
+        raw_competency_name = row[outcome_name_header].to_s.strip.presence || row[outcome_friendly_name_header].to_s.strip.presence
+        if raw_competency_name.to_s.strip.match?(/\Ahpmc\b/i)
+          rows_skipped_hpmc += 1
+          next
+        end
+
+        student_name = row[student_name_header].to_s.strip.presence
+        student_id_token = normalize_numeric_identifier(row[student_id_header])
+        student_sis_id = normalize_numeric_identifier(row[student_sis_id_header])
+        identifier = student_sis_id.presence || student_id_token.presence || student_name.presence
+        identifier_type = if student_sis_id.present?
+          "uin"
+        elsif student_id_token.present?
+          "student_id"
+        elsif student_name.present?
+          "student_name"
+        end
+
+        if identifier.blank?
+          error_rows += 1
+          errors << row_error(row_number, "Student SIS ID, Student ID, or Student name is required", type: "student_identifier")
+          next
+        end
+
+        if row[student_sis_id_header].present? && invalid_uin?(student_sis_id)
+          error_rows += 1
+          errors << invalid_uin_error(row_number, column: student_sis_id_header, value: row[student_sis_id_header])
+          next
+        end
+
+        if raw_competency_name.blank?
+          error_rows += 1
+          errors << row_error(row_number, "Learning outcome name is required", type: "missing_value")
+          next
+        end
+
+        competency_title = normalized_competency_title(raw_competency_name)
+        if competency_title.blank? || !COMPETENCY_TITLES.include?(competency_title)
+          error_rows += 1
+          errors << missing_competency_mapping_error(row_number, raw_competency_name, column: outcome_name_header, context: "uploaded learning outcome name")
+          next
+        end
+
+        outcome_score_value = row[outcome_score_header]
+        rating_text = row[rating_header]
+        if canvas_outcome_ungraded?(outcome_score_value, rating_text)
+          rows_skipped_ungraded += 1
+          next
+        end
+
+        mapped_level = parse_level_value(outcome_score_value)
+        if mapped_level.nil? || !(1..5).cover?(mapped_level)
+          error_rows += 1
+          errors << invalid_direct_level_error(row_number, label: "#{competency_title} outcome score", column: outcome_score_header, value: outcome_score_value)
+          next
+        end
+
+        target_value = row[mastery_score_header]
+        course_target_level = nil
+        if target_value.present?
+          course_target_level = parse_level_value(target_value)
+          if course_target_level.nil? || !(1..5).cover?(course_target_level)
+            error_rows += 1
+            errors << invalid_direct_level_error(row_number, label: "#{competency_title} mastery score", column: mastery_score_header, value: target_value)
+            next
+          end
+        end
+
+        student = find_student_by_uin(student_sis_id)
+        student ||= find_student_by_canvas_identifier(student_id_token)
+        student ||= find_student_by_name(student_name)
+        matched_students << student.student_id if student
+
+        course_code = canvas_outcomes_course_code_for(
+          row,
+          section_sis_id_header: section_sis_id_header,
+          section_name_header: section_name_header,
+          course_sis_id_header: course_sis_id_header,
+          course_name_header: course_name_header,
+          fallback_source_name: fallback_source_name
+        )
+        assignment_name = row[assessment_title_header].to_s.strip
+
+        raw_points = parse_decimal(outcome_score_value) || mapped_level
+        points_possible = parse_decimal(row[points_possible_header])
+
+        import_fingerprint = build_import_fingerprint(
+          grade_file: grade_file,
+          row_number: row_number,
+          competency_title: competency_title,
+          assignment_name: assignment_name,
+          course_code: course_code
+        )
+
+        if import_already_recorded?(
+          import_fingerprint,
+          legacy_import_fingerprint: build_legacy_import_fingerprint(
+            grade_file: grade_file,
+            row_number: row_number,
+            competency_title: competency_title,
+            assignment_name: assignment_name
+          ),
+          course_code: course_code
+        )
+          duplicate_warnings << row_error(row_number, "Duplicate import suppressed for #{assignment_name} / #{competency_title}")
+          next
+        end
+
+        source_key = build_source_key(
+          identifier: identifier,
+          course_code: course_code,
+          assignment_name: assignment_name,
+          competency_title: competency_title,
+          row_number: row_number
+        )
+
+        if student.nil?
+          create_pending_row!(
+            grade_file: grade_file,
+            identifier: identifier,
+            identifier_type: identifier_type,
+            student_uin: student_sis_id,
+            student_email: nil,
+            student_name: student_name,
+            assignment_name: assignment_name,
+            course_code: course_code,
+            raw_points: raw_points,
+            mapped_level: mapped_level,
+            course_target_level: course_target_level,
+            competency_title: competency_title,
+            row_number: row_number,
+            score_for_mapping: raw_points,
+            score_basis: "canvas_outcome_result",
+            points_possible: points_possible,
+            source_key: source_key,
+            import_fingerprint: import_fingerprint
+          )
+          pending_rows += 1
+          pending_students << [ identifier_type, identifier.to_s.downcase.strip ]
+          next
+        end
+
+        duplicate_key = [ student.student_id, course_code, assignment_name, competency_title ]
+        seen_rows[duplicate_key] += 1
+        if seen_rows[duplicate_key] > 1
+          duplicate_warnings << row_error(row_number, "Duplicate evidence row for #{assignment_name} / #{competency_title}")
+        end
+
+        create_evidence!(
+          grade_file: grade_file,
+          student: student,
+          source_key: source_key,
+          import_fingerprint: import_fingerprint,
+          assignment_name: assignment_name,
+          course_code: course_code,
+          raw_points: raw_points,
+          mapped_level: mapped_level,
+          course_target_level: course_target_level,
+          competency_title: competency_title,
+          row_number: row_number,
+          score_for_mapping: raw_points,
+          score_basis: "canvas_outcome_result",
+          points_possible: points_possible,
+          student_identifiers: {
+            student_uin: student_sis_id.presence,
+            student_id: student_id_token.presence,
+            student_name: student_name
+          }
+        )
+        imported_rows += 1
+      rescue ActiveRecord::RecordNotUnique
+        duplicate_warnings << row_error(row_number, "Duplicate import suppressed for row #{row_number} (detected on insert)")
+      rescue ActiveRecord::RecordInvalid => e
+        error_rows += 1
+        errors << row_error(row_number, e.record.errors.full_messages.to_sentence.presence || e.message)
+      end
+
+      {
+        status: "processed",
+        total_rows: rows.size,
+        imported_rows: imported_rows,
+        pending_rows: pending_rows,
+        error_rows: error_rows,
+        parse_errors: errors,
+        parsed_content: {
+          mode: "canvas_outcomes",
+          selected_grade_sheet: fallback_source_name,
+          selected_mapping_sheet: nil,
+          grade_sheet_debug: {
+            mode: "canvas_outcomes",
+            rows_scanned: rows_scanned,
+            rows_skipped_blank: rows_skipped_blank,
+            rows_skipped_hpmc: rows_skipped_hpmc,
+            rows_skipped_ungraded: rows_skipped_ungraded,
+            matched_student_count: matched_students.size,
+            pending_student_count: pending_students.size,
+            pending_row_count: pending_rows,
+            duplicate_warning_count: duplicate_warnings.size,
+            duplicate_warnings_preview: duplicate_warnings.first(100),
+            ignored_prefixes: [ "HPMC" ]
+          }
+        }
+      }
+    end
+
+    def canvas_outcome_ungraded?(outcome_score_value, rating_text)
+      return true if outcome_score_value.blank?
+
+      score = parse_decimal(outcome_score_value)
+      return true if score && score.zero?
+
+      normalized_rating = normalize_key(rating_text)
+      CANVAS_OUTCOME_NOT_ASSESSABLE_RATINGS.include?(normalized_rating)
+    end
+
+    def canvas_outcomes_course_code_for(row, section_sis_id_header:, section_name_header:, course_sis_id_header:, course_name_header:, fallback_source_name:)
+      [ section_sis_id_header, section_name_header, course_sis_id_header, course_name_header ].each do |header|
+        next if header.blank?
+
+        code = normalize_course_code(row[header])
+        return code if code.present?
+      end
+
+      normalize_course_code(fallback_source_name)
+    end
+
+    def detect_canvas_outcomes_sheet(workbook)
+      workbook.sheets.each do |sheet_name|
+        sheet = workbook.sheet(sheet_name)
+        max_probe = [ sheet.last_row.to_i, 12 ].min
+        (1..max_probe).each do |row_number|
+          headers = sheet.row(row_number).map { |value| value.to_s.strip }
+          begin
+            detect_canvas_outcomes_headers!(headers)
+            return { sheet_name: sheet_name.to_s, header_row_number: row_number, headers: headers }
+          rescue RuntimeError
+            next
+          end
+        end
+      end
+
+      nil
+    end
+
+    def detect_canvas_outcomes_headers!(headers)
+      raise "Not a Canvas outcomes export" unless canvas_outcomes_headers?(headers)
+
+      true
+    end
+
+    def canvas_outcomes_headers?(headers)
+      has_student_identifier = canvas_outcome_student_header_for(headers, :student_sis_id).present? ||
+                                canvas_outcome_student_header_for(headers, :student_id).present?
+      has_outcome_name = canvas_outcome_header_for(headers, :learning_outcome_name).present?
+      has_outcome_score = canvas_outcome_header_for(headers, :outcome_score).present?
+
+      has_student_identifier && has_outcome_name && has_outcome_score
+    end
+
+    def canvas_outcome_student_header_for(headers, canonical)
+      aliases = CANVAS_OUTCOME_STUDENT_HEADER_ALIASES.fetch(canonical)
+      headers.find { |header| aliases.include?(normalize_key(header)) }
+    end
+
+    def canvas_outcome_header_for(headers, canonical)
+      aliases = CANVAS_OUTCOME_HEADER_ALIASES.fetch(canonical)
+      headers.find { |header| aliases.include?(normalize_key(header)) }
     end
 
     def detect_direct_competency_sheet(workbook)
@@ -1317,6 +1695,8 @@ module GradeImports
           )
           imported_rows += 1
         end
+      rescue ActiveRecord::RecordNotUnique
+        duplicate_warnings << row_error(row_number, "Duplicate import suppressed for row #{row_number} (detected on insert)")
       rescue ActiveRecord::RecordInvalid => e
         error_rows += 1
         errors << row_error(row_number, e.record.errors.full_messages.to_sentence.presence || e.message)
@@ -1638,6 +2018,8 @@ module GradeImports
             )
             imported_rows += 1
           end
+        rescue ActiveRecord::RecordNotUnique
+          duplicate_warnings << row_error(row_number, "Duplicate import suppressed for row #{row_number} (detected on insert)")
         rescue ActiveRecord::RecordInvalid => e
           error_rows += 1
           errors << row_error(row_number, e.record.errors.full_messages.to_sentence.presence || e.message)

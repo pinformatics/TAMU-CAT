@@ -112,6 +112,417 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 3, evidences.find { |evidence| evidence.competency_title == "Policy Analysis" }.course_target_level
   end
 
+  test "canvas outcomes xlsx imports one evidence row per assessment and uses outcome score as the level" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Discussion blog # 8",
+          assessment_id: 2822346,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 3,
+          points_possible: 5,
+          mastery_score: 3,
+          rating: "Capable"
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "canvas_outcomes.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    evidence = batch.reload.grade_competency_evidences.first
+    rating = batch.grade_competency_ratings.first
+
+    assert_equal "completed", batch.status
+    assert_equal "PHPM-653-700", evidence.course_code
+    assert_equal "Discussion blog # 8", evidence.assignment_name
+    assert_equal "Systems Thinking", evidence.competency_title
+    assert_equal 3, evidence.mapped_level
+    assert_equal 3, evidence.course_target_level
+    assert_equal 3, rating.aggregated_level
+    assert_equal "canvas_outcomes", batch.grade_import_files.first.parsed_content["mode"]
+  end
+
+  test "canvas outcomes csv detects raw export headers and imports" do
+    path = build_canvas_outcomes_csv(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Final Policy and Political Strategy Analysis",
+          assessment_id: 2824686,
+          submission_score: 20,
+          learning_outcome_name: "Policy Analysis",
+          outcome_score: 5,
+          points_possible: 5,
+          mastery_score: 4,
+          rating: "Mastery"
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_csv_file(path, "canvas_outcomes.csv") ],
+        dry_run: true
+      ).call
+    end
+
+    evidence = batch.reload.grade_competency_evidences.first
+    assert_equal "completed", batch.status
+    assert_equal "Policy Analysis", evidence.competency_title
+    assert_equal 5, evidence.mapped_level
+    assert_equal 4, evidence.course_target_level
+  end
+
+  test "canvas outcomes rating uses the peak score across multiple assessments of the same competency" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Discussion blog # 8",
+          assessment_id: 2822346,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 3
+        ),
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Assignment # 4",
+          assessment_id: 2822359,
+          submission_score: 9,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 4
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 2 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "canvas_outcomes_peak.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    rating = batch.reload.grade_competency_ratings.first
+    assert_equal 1, batch.grade_competency_ratings.count
+    assert_equal 4, rating.aggregated_level
+    assert_equal 2, rating.evidence_count
+  end
+
+  test "canvas outcomes rows with HPMC learning outcomes are ignored" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Exam",
+          assessment_id: 111,
+          submission_score: 0,
+          learning_outcome_name: "HPMC 1",
+          outcome_score: 3
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    assert_no_difference -> { GradeCompetencyEvidence.count } do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "canvas_outcomes_hpmc.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    file = batch.reload.grade_import_files.first
+    assert_equal "completed", batch.status
+    assert_equal 0, file.error_rows
+    assert_equal 1, file.parsed_content.dig("grade_sheet_debug", "rows_skipped_hpmc")
+  end
+
+  test "canvas outcomes rows that are ungraded are skipped without creating evidence or errors" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Exam",
+          assessment_id: 222,
+          submission_score: 0,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 0,
+          rating: "Not able to assess"
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    assert_no_difference -> { GradeCompetencyEvidence.count } do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "canvas_outcomes_ungraded.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    file = batch.reload.grade_import_files.first
+    assert_equal "completed", batch.status
+    assert_equal 0, file.error_rows
+    assert_equal 1, file.parsed_content.dig("grade_sheet_debug", "rows_skipped_ungraded")
+  end
+
+  test "canvas outcomes rows with an unrecognized learning outcome name report a missing competency mapping" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Exam",
+          assessment_id: 333,
+          submission_score: 3,
+          learning_outcome_name: "Polciy Analysis",
+          outcome_score: 3
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "canvas_outcomes_unknown.xlsx") ],
+      dry_run: true
+    ).call
+
+    file = batch.reload.grade_import_files.first
+    mapping_issue = file.parse_errors.find { |error| error["type"] == "missing_competency_mapping" }
+
+    assert_equal "completed_with_errors", batch.status
+    assert_equal "missing_competency_mapping", mapping_issue["type"]
+    assert_equal "Policy Analysis", mapping_issue["suggested_canonical_competency_title"]
+  end
+
+  test "canvas outcomes rows for unmatched students create pending rows" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: "Nobody Here",
+          student_id: nil,
+          student_sis_id: nil,
+          assessment_title: "Exam",
+          assessment_id: 444,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 3
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeImportPendingRow.pending_student_match.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "canvas_outcomes_pending.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    pending_row = batch.reload.grade_import_pending_rows.first
+    assert_equal "student_name", pending_row.student_identifier_type
+    assert_equal "Nobody Here", pending_row.student_name
+    assert_equal "Systems Thinking", pending_row.competency_title
+  end
+
+  test "re-uploading the same canvas outcomes file suppresses duplicates" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Discussion blog # 8",
+          assessment_id: 555,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 3
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "canvas_outcomes_dup.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    assert_no_difference -> { GradeCompetencyEvidence.count } do
+      GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "canvas_outcomes_dup.xlsx") ],
+        dry_run: true
+      ).call
+    end
+
+    file = batch.reload.grade_import_files.order(:created_at).last
+    assert_equal 1, file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count")
+  end
+
+  test "a fingerprint collision race on insert is suppressed as a duplicate instead of failing the whole file" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: "Nobody Here",
+          student_id: nil,
+          student_sis_id: nil,
+          assessment_title: "Exam",
+          assessment_id: 999,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 3
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    # Simulate a genuine DB-level race: two concurrent requests both pass the
+    # in-app import_already_recorded? precheck (neither sees the other's row
+    # yet), then one insert wins and the other hits the unique index on
+    # import_fingerprint as a raw ActiveRecord::RecordNotUnique, bypassing
+    # the model's own uniqueness validation (which only a true race can do).
+    original_save = GradeImportPendingRow.instance_method(:save!)
+    raised = false
+    GradeImportPendingRow.define_method(:save!) do |*args, **kwargs|
+      if raised
+        original_save.bind(self).call(*args, **kwargs)
+      else
+        raised = true
+        raise ActiveRecord::RecordNotUnique, 'duplicate key value violates unique constraint "index_grade_import_pending_rows_on_import_fingerprint"'
+      end
+    end
+
+    begin
+      assert_no_difference -> { GradeImportPendingRow.count } do
+        GradeImports::BatchProcessor.new(
+          batch: batch,
+          files: [ uploaded_excel_file(path, "canvas_outcomes_race.xlsx") ],
+          dry_run: true
+        ).call
+      end
+    ensure
+      GradeImportPendingRow.define_method(:save!, original_save)
+    end
+
+    file = batch.reload.grade_import_files.first
+    assert_equal "completed", batch.status
+    assert_equal "processed", file.status
+    assert_equal 0, file.error_rows
+    assert_equal 1, file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count")
+  end
+
+  test "canvas outcomes course code is derived per row from section columns" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Exam",
+          assessment_id: 666,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 3,
+          section_name: "PHPM-636-699",
+          course_name: "26 SPRING PHPM 636 699: PROJ MGMT IN HLTH SYS"
+        ),
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Final Policy and Political Strategy Analysis",
+          assessment_id: 777,
+          submission_score: 5,
+          learning_outcome_name: "Policy Analysis",
+          outcome_score: 5,
+          section_name: "PHPM-640-700",
+          course_name: "26 SPRING PHPM 640 700: HEALTH POLICY POLITICS"
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "canvas_outcomes_multi_course.xlsx") ],
+      dry_run: true
+    ).call
+
+    evidences = batch.reload.grade_competency_evidences.order(:competency_title)
+    assert_equal [ "PHPM-640-700", "PHPM-636-699" ], evidences.map(&:course_code)
+  end
+
+  test "canvas outcomes resolves the singular Health Service Delivery alias" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Exam",
+          assessment_id: 888,
+          submission_score: 3,
+          learning_outcome_name: "Quantitative Methods for Health Service Delivery",
+          outcome_score: 3
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "canvas_outcomes_alias.xlsx") ],
+      dry_run: true
+    ).call
+
+    evidence = batch.reload.grade_competency_evidences.first
+    assert_equal "completed", batch.status
+    assert_equal "Quantitative Methods for Health Services Delivery", evidence.competency_title
+  end
+
   test "direct competency preview counts pending students separately from pending competency rows" do
     path = build_primary_direct_competency_workbook(
       sheet_name: "PHPM_633_700",
@@ -1991,6 +2402,80 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
       ],
       rows: rows
     )
+  end
+
+  def canvas_outcomes_headers
+    [
+      "student name",
+      "student id",
+      "student sis id",
+      "assessment title",
+      "assessment id",
+      "submission score",
+      "learning outcome name",
+      "attempt",
+      "outcome score",
+      "course name",
+      "course sis id",
+      "section name",
+      "section sis id",
+      "learning outcome points possible",
+      "learning outcome mastery score",
+      "learning outcome rating"
+    ]
+  end
+
+  def build_canvas_outcomes_csv(rows:)
+    build_direct_competency_csv(headers: canvas_outcomes_headers, rows: rows)
+  end
+
+  def build_canvas_outcomes_workbook(rows:)
+    path = temp_xlsx_path("canvas_outcomes")
+    package = Axlsx::Package.new
+    package.workbook.add_worksheet(name: "Raw Outcomes") do |sheet|
+      sheet.add_row canvas_outcomes_headers
+      rows.each { |row| sheet.add_row row }
+    end
+    package.serialize(path)
+    path
+  end
+
+  def canvas_outcomes_row(
+    student_name:,
+    student_id:,
+    student_sis_id:,
+    assessment_title:,
+    assessment_id:,
+    submission_score:,
+    learning_outcome_name:,
+    attempt: 1,
+    outcome_score:,
+    course_name: "26 SPRING PHPM 653 700: HEALTH ECON & INS",
+    course_sis_id: "PHPM.653.202611.700",
+    section_name: "PHPM-653-700",
+    section_sis_id: "58810.20261",
+    points_possible: 5,
+    mastery_score: 3,
+    rating: "Capable"
+  )
+    [
+      student_name,
+      student_id,
+      student_sis_id,
+      assessment_title,
+      assessment_id,
+      submission_score,
+      learning_outcome_name,
+      attempt,
+      outcome_score,
+      course_name,
+      course_sis_id,
+      section_name,
+      section_sis_id,
+      points_possible,
+      mastery_score,
+      rating
+    ]
   end
 
   def build_canvas_workbook(grade_sheet_name:, course_code:, rows:)
