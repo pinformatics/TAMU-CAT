@@ -27,5 +27,12 @@ module TamuCat
     #
     config.time_zone = ENV.fetch("APP_TIME_ZONE", "Central Time (US & Canada)")
     # config.eager_load_paths << Rails.root.join("extras")
+
+    # Routes Solid Queue's own models (SolidQueue::Job, etc.) to the queue
+    # database in every environment. This is separate from
+    # config.active_job.queue_adapter (which stays :inline app-wide) -- it
+    # only matters for job classes that explicitly opt into
+    # `self.queue_adapter = :solid_queue`.
+    config.solid_queue.connects_to = { database: { writing: :queue } }
   end
 end

@@ -211,7 +211,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_match "program semester", flash[:alert]
   end
 
-  test "upload records grade import audit activity" do
+  test "upload enqueues the import job with the batch and redirects immediately without processing synchronously" do
     upload = direct_competency_csv_upload(
       "audit-upload.csv",
       [
@@ -219,22 +219,63 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
       ]
     )
 
-    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
-      post admin_grade_import_batches_path, params: {
-        dry_run: "1",
-        program_semester_id: program_semesters(:fall_2025).id,
-        import_notes: "Audit upload test",
-        files: [ upload ]
-      }
+    assert_difference -> { SolidQueue::Job.where(class_name: "GradeImports::BatchImportJob").count }, 1 do
+      assert_no_difference -> { GradeCompetencyEvidence.count } do
+        post admin_grade_import_batches_path, params: {
+          dry_run: "1",
+          program_semester_id: program_semesters(:fall_2025).id,
+          import_notes: "Audit upload test",
+          files: [ upload ]
+        }
+      end
     end
 
     batch = GradeImportBatch.order(created_at: :desc).first
     assert_redirected_to admin_grade_import_batch_path(batch)
+    assert_equal "pending", batch.status
+
+    enqueued_job = SolidQueue::Job.where(class_name: "GradeImports::BatchImportJob").order(:id).last
+    arguments = enqueued_job.arguments["arguments"].first
+    assert_equal batch.id, arguments["batch_id"]
+    assert_equal @admin.id, arguments["uploaded_by_id"]
+    assert_equal true, arguments["dry_run"]
+    assert_equal [ "audit-upload.csv" ], arguments["files_payload"].map { |payload| payload["filename"] }
+  end
+
+  test "upload job processing records grade import audit activity" do
+    upload = direct_competency_csv_upload(
+      "audit-upload.csv",
+      [
+        [ @student.user.name, @student.student_id, @student.uin, 4, 3, 5, 4 ]
+      ]
+    )
+
+    post admin_grade_import_batches_path, params: {
+      dry_run: "1",
+      program_semester_id: program_semesters(:fall_2025).id,
+      import_notes: "Audit upload test",
+      files: [ upload ]
+    }
+
+    batch = GradeImportBatch.order(created_at: :desc).first
+    enqueued_job = SolidQueue::Job.where(class_name: "GradeImports::BatchImportJob").order(:id).last
+    arguments = enqueued_job.arguments["arguments"].first
+
+    assert_difference -> { AdminActivityLog.where(action: "grade_import_action").count }, 1 do
+      GradeImports::BatchImportJob.perform_now(
+        batch_id: arguments["batch_id"],
+        uploaded_by_id: arguments["uploaded_by_id"],
+        dry_run: arguments["dry_run"],
+        files_payload: arguments["files_payload"]
+      )
+    end
+
     activity = AdminActivityLog.where(action: "grade_import_action").order(created_at: :desc).first
     assert_equal "upload", activity.metadata["import_action"]
     assert_equal batch, activity.subject
     assert_equal [ "audit-upload.csv" ], activity.metadata["file_names"]
     assert_equal true, activity.metadata["dry_run"]
+    assert_equal "completed", batch.reload.status
   end
 
   test "commit flips a completed dry run into a reportable batch" do

@@ -13,6 +13,12 @@
   update_semester: "Apply the selected semester to this batch so semester filters include it correctly.",
   new_batch: "Start a new grade import batch upload."
 } %>
+<% batch_still_processing = @batch.status.in?(%w[pending processing]) %>
+<% if batch_still_processing %>
+  <% content_for :head do %>
+    <meta http-equiv="refresh" content="5">
+  <% end %>
+<% end %>
 <% target_review_required = @batch.dry_run? && @target_warning_summary[:requires_review] %>
 <% has_file_issues = @failed_row_count.positive? || @duplicate_upload_warnings.positive? || @duplicate_warnings.positive? || target_review_required %>
 <% has_pending_matches = @pending_row_count.positive? %>
@@ -415,6 +421,9 @@
         <div class="c-card c-card--tight c-stat">
           <span class="c-eyebrow">Status</span>
           <strong class="c-value c-value--xl"><%= @batch.status.humanize %></strong>
+          <% if batch_still_processing %>
+            <span class="c-help">Processing&hellip; this page refreshes automatically.</span>
+          <% end %>
         </div>
         <div class="c-card c-card--tight c-stat">
           <span class="c-eyebrow">Processed Rows</span>

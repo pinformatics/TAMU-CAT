@@ -49,15 +49,13 @@ Rails.application.configure do
   # Replace the default in-process memory cache store with a durable alternative.
   config.cache_store = :solid_cache_store
 
-  # Replace the default in-process and non-durable queuing backend for Active Job.
-  # Use inline in production temporarily to avoid dependency on SolidQueue and
-  # its separate queue DB while diagnosing Heroku failures. This makes jobs
-  # execute synchronously within the request lifecycle — acceptable as a
-  # short-term mitigation but not for long-term async workloads.
+  # Default Active Job adapter stays inline app-wide (most jobs have never
+  # been verified running genuinely async in production). Individual job
+  # classes can opt into Solid Queue via `self.queue_adapter = :solid_queue`
+  # -- see GradeImports::BatchImportJob. Requires SOLID_QUEUE_IN_PUMA=true
+  # (or a separate worker process) to actually dequeue jobs; see
+  # config/puma.rb.
   config.active_job.queue_adapter = :inline
-  # If you later re-enable SolidQueue, restore the following line and ensure
-  # the queue database is migrated and SolidQueue workers are running:
-  # config.solid_queue.connects_to = { database: { writing: :queue } }
 
   # Ignore bad email addresses and do not raise email delivery errors.
   # Set this to true and configure the email server for immediate delivery to raise delivery errors.

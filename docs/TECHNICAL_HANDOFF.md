@@ -43,9 +43,9 @@ This document summarizes the current operating state of TAMU Competency Assessme
 - No active release-blocking product bugs are known in the repository.
 - Direct competency imports with only `Student name` are staged as pending matches and can reconcile by exact name; `Student SIS ID` or `Student ID` is still preferred for reliable matching.
 - Course ratings shown in semester-filtered competency/report views use the import batch semester. Legacy batches without a semester can be repaired from the batch detail page.
-- Production currently sets `config.active_job.queue_adapter = :inline` in `config/environments/production.rb`. This avoids a separate queue dependency but means background jobs run synchronously in request flow.
-- `config/recurring.yml` defines a Solid Queue hourly cleanup task, but production is not currently wired to run Solid Queue as the Active Job adapter. Treat recurring Solid Queue behavior as inactive unless production queue configuration is restored.
-- `Procfile` only defines `release` and `web`; there is no Heroku worker process.
+- Production keeps `config.active_job.queue_adapter = :inline` app-wide in `config/environments/production.rb` -- most jobs still run synchronously in request flow, and none of the app's other `.perform_later` call sites have been verified running genuinely async in production. The Solid Queue database itself is now migrated (`db/queue_migrate/`), and `config.solid_queue.connects_to` is set globally in `config/application.rb`, so any job class can opt into real async processing individually via `self.queue_adapter = :solid_queue` (see `GradeImports::BatchImportJob`, used for grade-import uploads specifically because large files were exceeding Heroku's 30s router timeout when processed inline). `config/puma.rb` already runs the Solid Queue supervisor in-process when `SOLID_QUEUE_IN_PUMA=true` is set -- no separate worker dyno needed. **This env var must be set on each Heroku app (`heroku config:set SOLID_QUEUE_IN_PUMA=true`) or jobs using the Solid Queue adapter will sit unprocessed.**
+- `config/recurring.yml` defines a Solid Queue hourly cleanup task. It only runs once `SOLID_QUEUE_IN_PUMA` is set on that app.
+- `Procfile`'s `release` step now runs `db:prepare` (not `db:migrate`) specifically so a never-before-migrated database like `queue` gets its schema loaded on first deploy, not just pending migrations applied.
 - Production SMTP is configured through environment variables. Confirm `APP_HOST`, `APP_PROTOCOL`, `MAILER_FROM`, and the `SMTP_*` settings before relying on email delivery.
 - `config.active_storage.service = :local` in production. On Heroku this is not persistent across dyno restarts, so uploads should be moved to S3/GCS/Azure or another durable service before relying on long-term uploaded file retention.
 - `config/deploy.yml` is still a Kamal template with placeholder values such as `your-user`, `192.168.0.1`, and `app.example.com`. Do not treat it as production-ready without replacing those values.
@@ -221,7 +221,7 @@ For grade import data issues:
 
   Schedule: every hour at minute 12.
 
-- Important caveat: production currently uses the inline Active Job adapter, so Solid Queue recurring tasks will not run unless Solid Queue is re-enabled and a worker/supervisor is running.
+- Important caveat: recurring tasks only run while `SOLID_QUEUE_IN_PUMA=true` is set on that Heroku app (see "Known bugs / risks" above) -- the app-wide Active Job adapter itself stays inline.
 
 ### Routine checks
 
@@ -265,7 +265,7 @@ After rotating Google OAuth credentials:
 
 - `GradeImports::BatchProcessor` should be decomposed.
 - Legacy course-derived ratings without an import batch semester should be assigned a semester before relying on semester-filtered views.
-- Production background jobs need a deliberate decision: keep inline for simplicity or restore Solid Queue with worker capacity.
+- Production background jobs: decision made to keep the app-wide adapter `:inline` and opt individual job classes into Solid Queue (`self.queue_adapter = :solid_queue`) as they're found to need real async processing, rather than flipping every job to async at once with no incremental verification. `GradeImports::BatchImportJob` is the first job to do this. Revisit whether other `.perform_later` call sites (survey notifications, auto-assignment, etc.) should follow the same path.
 - Production Active Storage needs durable object storage or explicit persistent volume management.
 - Mailer host and SMTP settings should be confirmed in production before depending on email delivery.
 - Keep development OAuth credentials out of committed config; use local environment variables for developer-only sign-in testing.
