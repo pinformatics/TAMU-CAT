@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_05_20_160000) do
+ActiveRecord::Schema[8.0].define(version: 2026_08_07_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -108,8 +108,9 @@ ActiveRecord::Schema[8.0].define(version: 2026_05_20_160000) do
     t.integer "target_level", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "track"
     t.index ["competency_id"], name: "index_course_competency_targets_on_competency_id"
-    t.index ["course_offering_id", "competency_id"], name: "index_course_competency_targets_unique_offering_competency", unique: true
+    t.index ["course_offering_id", "competency_id", "track"], name: "index_cct_unique_offering_competency_track", unique: true
     t.index ["course_offering_id"], name: "index_course_competency_targets_on_course_offering_id"
   end
 

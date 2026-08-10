@@ -12,7 +12,8 @@ class CourseCompetencyTarget < ApplicationRecord
   validates :target_level,
             presence: true,
             numericality: { only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 5 }
-  validates :competency_id, uniqueness: { scope: :course_offering_id }
+  validates :competency_id, uniqueness: { scope: %i[course_offering_id track] }
+  validates :track, inclusion: { in: ->(_record) { ProgramTrack.names } }, allow_blank: true
 
   scope :ordered, -> {
     joins(course_offering: { course: :department })

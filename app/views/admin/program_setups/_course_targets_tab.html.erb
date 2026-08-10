@@ -45,6 +45,21 @@
     </div>
   <% end %>
 
+  <% if flash[:course_target_import_errors].present? %>
+    <div class="c-callout c-callout--warning">
+      <p class="c-callout__title">Some matrix rows need attention:</p>
+      <ul class="u-stack u-stack--xs">
+        <% flash[:course_target_import_errors].each do |error| %>
+          <li>
+            <% if error["sheet"].present? %><strong><%= error["sheet"] %></strong><% end %>
+            <% if error["row"].present? %> (row <%= error["row"] %>)<% end %>
+            &mdash; <%= error["message"] %>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
   <div class="c-management-layout">
     <div class="u-stack u-stack--md">
       <% if @course_competency_targets.blank? %>
@@ -59,6 +74,7 @@
                 <th>Course Name</th>
                 <th>Course Code</th>
                 <th>Course Title</th>
+                <th>Track</th>
                 <th>Competency</th>
                 <th>Course Target</th>
                 <th class="u-text-right">Actions</th>
@@ -71,6 +87,7 @@
                   <td><span class="c-table__title"><%= target.course_name.presence || target.course_code %></span></td>
                   <td><%= target.course_code %></td>
                   <td><%= target.course_title.presence || "—" %></td>
+                  <td><%= target.track.presence || "—" %></td>
                   <td><%= target.competency_title %></td>
                   <td><span class="c-score-pill c-score-pill--program">Target <%= target.target_level %>/5</span></td>
                   <td class="u-text-right">
@@ -88,17 +105,32 @@
                           <%= form_with url: admin_course_competency_target_path(target),
                                         method: :patch,
                                         local: true,
-                                        class: "u-stack u-stack--md" do %>
+                                        class: "u-stack u-stack--md",
+                                        data: { controller: "course-target-source" } do %>
                             <%= hidden_field_tag "course_competency_target[program_semester_id]", target.course_offering.program_semester_id %>
                             <div class="u-grid u-grid--2">
                               <div class="c-field">
-                                <%= label_tag "course_competency_target_#{target.id}_course_code", "Course code", class: "c-label" %>
-                                <%= text_field_tag "course_competency_target[course_code]", target.course_code, id: "course_competency_target_#{target.id}_course_code", required: true, class: "c-input" %>
+                                <%= label_tag "course_competency_target_#{target.id}_course_offering_id", "Course", class: "c-label" %>
+                                <div class="c-select-wrapper">
+                                  <%= select_tag "course_competency_target[course_offering_id]",
+                                                 options_for_select([ [ "+ Add a new course", "" ] ] + @course_target_offering_choices, target.course_offering_id),
+                                                 id: "course_competency_target_#{target.id}_course_offering_id",
+                                                 class: "c-select u-w-full",
+                                                 data: { "course-target-source-target": "select", action: "change->course-target-source#sync" } %>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="u-grid u-grid--2" data-course-target-source-target="newFields" hidden>
+                              <div class="c-field">
+                                <%= label_tag "course_competency_target_#{target.id}_course_code", "New course code", class: "c-label" %>
+                                <%= text_field_tag "course_competency_target[course_code]", target.course_code, id: "course_competency_target_#{target.id}_course_code", class: "c-input" %>
                               </div>
                               <div class="c-field">
                                 <%= label_tag "course_competency_target_#{target.id}_course_title", "Course title", class: "c-label" %>
                                 <%= text_field_tag "course_competency_target[course_title]", target.course_title, id: "course_competency_target_#{target.id}_course_title", class: "c-input" %>
                               </div>
+                            </div>
+                            <div class="u-grid u-grid--2">
                               <div class="c-field">
                                 <%= label_tag "course_competency_target_#{target.id}_competency_id", "Competency", class: "c-label" %>
                                 <div class="c-select-wrapper">
@@ -106,6 +138,15 @@
                                                  options_from_collection_for_select(@course_target_competencies, :id, :title, target.competency_id),
                                                  id: "course_competency_target_#{target.id}_competency_id",
                                                  required: true,
+                                                 class: "c-select u-w-full" %>
+                                </div>
+                              </div>
+                              <div class="c-field">
+                                <%= label_tag "course_competency_target_#{target.id}_track", "Track", class: "c-label" %>
+                                <div class="c-select-wrapper">
+                                  <%= select_tag "course_competency_target[track]",
+                                                 options_for_select([ [ "—", "" ] ] + ProgramTrack.names, target.track),
+                                                 id: "course_competency_target_#{target.id}_track",
                                                  class: "c-select u-w-full" %>
                                 </div>
                               </div>
@@ -146,24 +187,37 @@
 
     <aside class="c-card c-card--compact c-card--muted u-stack u-stack--md">
       <h3 class="c-panel-title">Add Course Target</h3>
-      <p class="c-panel-subtitle">Use a course code like PHPM-633 or PHPM-633-700. The title will be saved to the course catalog.</p>
+      <p class="c-panel-subtitle">Pick an existing course, or choose "Add a new course" and enter a code like PHPM-633 or PHPM-633-700.</p>
 
       <% if @course_target_competencies.blank? %>
         <div class="c-callout c-callout--warning">
           Add competencies before configuring course targets.
         </div>
       <% else %>
-        <%= form_with url: admin_course_competency_targets_path, local: true, class: "u-stack u-stack--md" do %>
+        <%= form_with url: admin_course_competency_targets_path, local: true, class: "u-stack u-stack--md", data: { controller: "course-target-source" } do %>
           <%= hidden_field_tag "course_competency_target[program_semester_id]", @selected_course_target_semester_id %>
 
           <div class="c-field">
-            <%= label_tag "new_course_competency_target_course_code", "Course code", class: "c-label" %>
-            <%= text_field_tag "course_competency_target[course_code]", nil, id: "new_course_competency_target_course_code", required: true, class: "c-input", placeholder: "PHPM-633-700" %>
+            <%= label_tag "new_course_competency_target_course_offering_id", "Course", class: "c-label" %>
+            <div class="c-select-wrapper">
+              <%= select_tag "course_competency_target[course_offering_id]",
+                             options_for_select([ [ "+ Add a new course", "" ] ] + @course_target_offering_choices),
+                             id: "new_course_competency_target_course_offering_id",
+                             class: "c-select u-w-full",
+                             data: { "course-target-source-target": "select", action: "change->course-target-source#sync" } %>
+            </div>
           </div>
 
-          <div class="c-field">
-            <%= label_tag "new_course_competency_target_course_title", "Course title", class: "c-label" %>
-            <%= text_field_tag "course_competency_target[course_title]", nil, id: "new_course_competency_target_course_title", class: "c-input", placeholder: "Health Law and Ethics" %>
+          <div class="u-stack u-stack--md" data-course-target-source-target="newFields">
+            <div class="c-field">
+              <%= label_tag "new_course_competency_target_course_code", "New course code", class: "c-label" %>
+              <%= text_field_tag "course_competency_target[course_code]", nil, id: "new_course_competency_target_course_code", class: "c-input", placeholder: "PHPM-633-700" %>
+            </div>
+
+            <div class="c-field">
+              <%= label_tag "new_course_competency_target_course_title", "Course title", class: "c-label" %>
+              <%= text_field_tag "course_competency_target[course_title]", nil, id: "new_course_competency_target_course_title", class: "c-input", placeholder: "Health Law and Ethics" %>
+            </div>
           </div>
 
           <div class="c-field">
@@ -173,6 +227,16 @@
                              options_from_collection_for_select(@course_target_competencies, :id, :title),
                              id: "new_course_competency_target_competency_id",
                              required: true,
+                             class: "c-select u-w-full" %>
+            </div>
+          </div>
+
+          <div class="c-field">
+            <%= label_tag "new_course_competency_target_track", "Track", class: "c-label" %>
+            <div class="c-select-wrapper">
+              <%= select_tag "course_competency_target[track]",
+                             options_for_select([ [ "—", "" ] ] + ProgramTrack.names),
+                             id: "new_course_competency_target_track",
                              class: "c-select u-w-full" %>
             </div>
           </div>
@@ -190,6 +254,31 @@
 
           <%= button_tag "Save course target", type: "submit", class: button_classes(:primary) %>
         <% end %>
+      <% end %>
+    </aside>
+
+    <aside class="c-card c-card--compact c-card--muted u-stack u-stack--md">
+      <h3 class="c-panel-title">Import Coverage Matrix</h3>
+      <p class="c-panel-subtitle">
+        Upload a Program Competency-Course Matrix workbook (one sheet per track, e.g.
+        "... Resident track" / "... Executive track") to bulk-set course targets for the
+        selected semester. Re-uploading a corrected file is safe — matching rows are updated,
+        not duplicated.
+      </p>
+
+      <%= form_with url: admin_import_course_competency_target_matrix_path,
+                    method: :post,
+                    local: true,
+                    multipart: true,
+                    class: "u-stack u-stack--md" do %>
+        <%= hidden_field_tag :program_semester_id, @selected_course_target_semester_id %>
+
+        <div class="c-field">
+          <%= label_tag :file, "Matrix workbook (.xlsx)", class: "c-label" %>
+          <%= file_field_tag :file, accept: ".xlsx,.xlsm", required: true, class: "c-input" %>
+        </div>
+
+        <%= button_tag "Import matrix", type: "submit", class: button_classes(:secondary) %>
       <% end %>
     </aside>
   </div>

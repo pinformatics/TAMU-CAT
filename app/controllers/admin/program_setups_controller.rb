@@ -53,6 +53,23 @@ class Admin::ProgramSetupsController < Admin::BaseController
 
     @course_competency_targets = scope.to_a
     @course_target_coverage = course_target_coverage(@course_competency_targets)
+    @course_target_offering_choices = course_target_offering_choices(@selected_course_target_semester_id)
+  end
+
+  def course_target_offering_choices(semester_id)
+    return [] if semester_id.blank?
+
+    CourseOffering
+      .where(program_semester_id: semester_id)
+      .includes(course: :department)
+      .to_a
+      .sort_by { |offering| offering.display_code.to_s }
+      .map { |offering| [ offering_choice_label(offering), offering.id ] }
+  end
+
+  def offering_choice_label(offering)
+    title = offering.course&.title
+    title.present? ? "#{offering.display_code} — #{title}" : offering.display_code
   end
 
   def course_target_coverage(targets)

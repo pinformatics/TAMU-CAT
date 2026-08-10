@@ -99,6 +99,7 @@ Rails.application.routes.draw do
     post "target_levels/fill_defaults", to: "target_levels#fill_defaults", as: :fill_default_target_levels
     post "target_levels/copy_to_current", to: "target_levels#copy_to_current", as: :copy_target_levels_to_current
     resources :course_competency_targets, only: %i[create update destroy]
+    post "course_competency_targets/import_matrix", to: "course_competency_targets#import_matrix", as: :import_course_competency_target_matrix
     resources :course_grade_release_dates, only: %i[index new create edit update destroy] do
       collection do
         patch :bulk_update

@@ -26,6 +26,53 @@ class CourseCompetencyTargetTest < ActiveSupport::TestCase
     assert_includes duplicate.errors[:competency_id], "has already been taken"
   end
 
+  test "allows the same course and competency for different tracks" do
+    semester = program_semesters(:fall_2025)
+    offering = CourseOffering.find_or_create_from_code!("PHPM-635-700", program_semester: semester)
+    competency = create_competency!("Track Scoped Course Target")
+
+    residential = CourseCompetencyTarget.create!(
+      course_offering: offering,
+      competency: competency,
+      target_level: 3,
+      track: "Residential"
+    )
+    executive = CourseCompetencyTarget.new(
+      course_offering: offering,
+      competency: competency,
+      target_level: 4,
+      track: "Executive"
+    )
+
+    assert residential.persisted?
+    assert executive.valid?
+    executive.save!
+
+    duplicate_residential = CourseCompetencyTarget.new(
+      course_offering: offering,
+      competency: competency,
+      target_level: 5,
+      track: "Residential"
+    )
+    refute duplicate_residential.valid?
+    assert_includes duplicate_residential.errors[:competency_id], "has already been taken"
+  end
+
+  test "rejects a track name that is not a configured program track" do
+    offering = CourseOffering.find_or_create_from_code!("PHPM-637-700", program_semester: program_semesters(:fall_2025))
+    competency = create_competency!("Invalid Track Course Target")
+
+    target = CourseCompetencyTarget.new(
+      course_offering: offering,
+      competency: competency,
+      target_level: 3,
+      track: "Not A Real Track"
+    )
+
+    refute target.valid?
+    assert_includes target.errors[:track], "is not included in the list"
+  end
+
   test "validates target level range" do
     offering = CourseOffering.find_or_create_from_code!("PHPM-634-700", program_semester: program_semesters(:fall_2025))
     competency = create_competency!("Configured Course Target Range")

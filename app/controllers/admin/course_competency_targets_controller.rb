@@ -8,7 +8,7 @@ class Admin::CourseCompetencyTargetsController < Admin::BaseController
 
     redirect_to course_targets_tab_path(target.course_offering.program_semester_id),
                 notice: "Course target saved."
-  rescue ActiveRecord::RecordInvalid, ArgumentError => e
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, ArgumentError => e
     redirect_to course_targets_tab_path(selected_semester_id),
                 alert: e.message
   end
@@ -18,7 +18,7 @@ class Admin::CourseCompetencyTargetsController < Admin::BaseController
 
     redirect_to course_targets_tab_path(@course_competency_target.course_offering.program_semester_id),
                 notice: "Course target updated."
-  rescue ActiveRecord::RecordInvalid, ArgumentError => e
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound, ArgumentError => e
     redirect_to course_targets_tab_path(selected_semester_id || @course_competency_target&.course_offering&.program_semester_id),
                 alert: e.message
   end
@@ -30,7 +30,37 @@ class Admin::CourseCompetencyTargetsController < Admin::BaseController
     redirect_to course_targets_tab_path(semester_id), notice: "Course target removed."
   end
 
+  def import_matrix
+    semester_id = matrix_import_params[:program_semester_id].presence
+    file = matrix_import_params[:file]
+
+    if semester_id.blank? || file.blank?
+      redirect_to course_targets_tab_path(semester_id), alert: "Choose a semester and a workbook to import."
+      return
+    end
+
+    semester = ProgramSemester.find(semester_id)
+    result = Admin::CourseCompetencyMatrixImporter.call(file: file, program_semester: semester)
+
+    flash[:notice] = import_matrix_summary(result)
+    flash[:course_target_import_errors] = result.errors.first(20) if result.errors.present?
+
+    redirect_to course_targets_tab_path(semester_id)
+  rescue StandardError => e
+    redirect_to course_targets_tab_path(semester_id), alert: "Could not read that workbook: #{e.message}"
+  end
+
   private
+
+  def import_matrix_summary(result)
+    "Imported #{result.sheets_processed} sheet(s): #{result.created} created, " \
+      "#{result.updated} updated, #{result.unchanged} unchanged" \
+      "#{result.errors.present? ? ", #{result.errors.size} row(s) need attention" : ""}."
+  end
+
+  def matrix_import_params
+    params.permit(:program_semester_id, :file)
+  end
 
   def ensure_course_targets_ready
     return if CourseCompetencyTarget.data_source_ready?
@@ -47,12 +77,17 @@ class Admin::CourseCompetencyTargetsController < Admin::BaseController
     {
       course_offering: resolved_course_offering,
       competency_id: target_params.fetch(:competency_id),
-      target_level: target_params.fetch(:target_level)
+      target_level: target_params.fetch(:target_level),
+      track: target_params[:track].presence
     }
   end
 
   def resolved_course_offering
     semester = ProgramSemester.find(selected_semester_id)
+    offering_id = target_params[:course_offering_id].presence
+
+    return existing_offering_for(offering_id, semester) if offering_id.present?
+
     course_code = target_params[:course_code].to_s.strip
     course_title = target_params[:course_title].to_s.strip
 
@@ -72,10 +107,17 @@ class Admin::CourseCompetencyTargetsController < Admin::BaseController
     offering
   end
 
+  def existing_offering_for(offering_id, semester)
+    offering = CourseOffering.find(offering_id)
+    raise ArgumentError, "Selected course does not belong to the chosen semester." unless offering.program_semester_id == semester.id
+
+    offering
+  end
+
   def target_params
     @target_params ||= params
       .require(:course_competency_target)
-      .permit(:program_semester_id, :course_code, :course_title, :competency_id, :target_level)
+      .permit(:program_semester_id, :course_offering_id, :course_code, :course_title, :competency_id, :target_level, :track)
   end
 
   def selected_semester_id

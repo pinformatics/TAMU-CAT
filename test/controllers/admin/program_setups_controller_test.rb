@@ -203,6 +203,61 @@ class Admin::ProgramSetupsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/course code/i, flash[:alert].to_s)
   end
 
+  test "course target tab lists existing course offerings for the semester in a dropdown" do
+    semester = program_semesters(:fall_2025)
+    create_test_competency!("Course Target Dropdown List")
+    offering = CourseOffering.find_or_create_from_code!("PHPM-636-700", program_semester: semester, source_name: "Operations Management")
+    offering.course.update!(title: "Operations Management")
+
+    get admin_program_setup_path(tab: "course_targets", course_target_program_semester_id: semester.id)
+
+    assert_response :success
+    assert_select "select[name='course_competency_target[course_offering_id]']" do
+      assert_select "option", text: "+ Add a new course"
+      assert_select "option", text: "PHPM-636-700 — Operations Management"
+    end
+  end
+
+  test "admin can create a course competency target by selecting an existing course offering" do
+    semester = program_semesters(:fall_2025)
+    competency = create_test_competency!("Course Target Dropdown")
+    offering = CourseOffering.find_or_create_from_code!("PHPM-637-700", program_semester: semester)
+
+    assert_difference "CourseCompetencyTarget.count", 1 do
+      post admin_course_competency_targets_path, params: {
+        course_competency_target: {
+          program_semester_id: semester.id,
+          course_offering_id: offering.id,
+          competency_id: competency.id,
+          target_level: "3"
+        }
+      }
+    end
+
+    target = CourseCompetencyTarget.order(:created_at).last
+    assert_equal offering.id, target.course_offering_id
+  end
+
+  test "course target create rejects a course offering from a different semester" do
+    semester = program_semesters(:fall_2025)
+    other_semester = program_semesters(:spring_2025)
+    competency = create_test_competency!("Course Target Cross Semester")
+    offering = CourseOffering.find_or_create_from_code!("PHPM-638-700", program_semester: other_semester)
+
+    assert_no_difference "CourseCompetencyTarget.count" do
+      post admin_course_competency_targets_path, params: {
+        course_competency_target: {
+          program_semester_id: semester.id,
+          course_offering_id: offering.id,
+          competency_id: competency.id,
+          target_level: "3"
+        }
+      }
+    end
+
+    assert_match(/does not belong to the chosen semester/i, flash[:alert].to_s)
+  end
+
   test "admin can delete course competency targets" do
     semester = program_semesters(:fall_2025)
     competency = create_test_competency!("Course Target Delete")
