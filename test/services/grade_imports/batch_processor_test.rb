@@ -452,6 +452,65 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal 1, file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count")
   end
 
+  test "course offering and competency lookups are cached per batch run instead of re-queried every row" do
+    domain = Domain.find_or_create_by!(name: "Cache Test Domain") { |d| d.position = 900 }
+    Competency.find_or_create_by!(title: "Systems Thinking") do |c|
+      c.domain = domain
+      c.position = 900
+    end
+
+    rows = 5.times.map do |i|
+      canvas_outcomes_row(
+        student_name: @student.user.name,
+        student_id: @student.student_id,
+        student_sis_id: @student.uin,
+        assessment_title: "Assessment #{i}",
+        assessment_id: 1000 + i,
+        submission_score: 3,
+        learning_outcome_name: "Systems Thinking",
+        outcome_score: 3,
+        section_name: "PHPM-653-700",
+        course_name: "26 SPRING PHPM 653 700: HEALTH ECON & INS"
+      )
+    end
+    path = build_canvas_outcomes_workbook(rows: rows)
+
+    batch = create_batch
+    course_offering_lookups = 0
+    competency_lookups = 0
+
+    original_offering_method = CourseOffering.method(:find_or_create_from_code!)
+    CourseOffering.define_singleton_method(:find_or_create_from_code!) do |*args, **kwargs|
+      course_offering_lookups += 1
+      original_offering_method.call(*args, **kwargs)
+    end
+
+    original_competency_method = Competency.method(:find_by_normalized_title)
+    Competency.define_singleton_method(:find_by_normalized_title) do |*args, **kwargs|
+      competency_lookups += 1
+      original_competency_method.call(*args, **kwargs)
+    end
+
+    begin
+      assert_difference -> { GradeCompetencyEvidence.count }, 5 do
+        GradeImports::BatchProcessor.new(
+          batch: batch,
+          files: [ uploaded_excel_file(path, "canvas_outcomes_cache.xlsx") ],
+          dry_run: true
+        ).call
+      end
+    ensure
+      CourseOffering.define_singleton_method(:find_or_create_from_code!, original_offering_method)
+      Competency.define_singleton_method(:find_by_normalized_title, original_competency_method)
+    end
+
+    assert_equal 1, course_offering_lookups, "expected the 5 identical-course rows to resolve the course offering only once"
+    assert_equal 1, competency_lookups, "expected the 5 identical-competency rows to resolve the competency only once"
+
+    evidences = batch.reload.grade_competency_evidences
+    assert_equal [ "PHPM-653-700" ], evidences.map(&:course_code).uniq
+  end
+
   test "canvas outcomes course code is derived per row from section columns" do
     path = build_canvas_outcomes_workbook(
       rows: [

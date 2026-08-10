@@ -50,6 +50,7 @@ class GradeImportPendingRow < ApplicationRecord
   def sync_competency_reference
     return unless self.class.column_names.include?("competency_id")
     return if competency_title.blank?
+    return if competency.present? && new_record?
     return if competency_id.present? && !will_save_change_to_competency_title?
 
     self.competency = Competency.find_by_normalized_title(competency_title)
@@ -59,6 +60,7 @@ class GradeImportPendingRow < ApplicationRecord
     return unless self.class.column_names.include?("course_offering_id")
     return unless CourseOffering.table_exists?
     return if course_code.blank?
+    return if course_offering.present? && new_record?
     return if course_offering_id.present? && !will_save_change_to_course_code? && !will_save_change_to_grade_import_batch_id?
 
     self.course_offering = CourseOffering.find_or_create_from_code!(

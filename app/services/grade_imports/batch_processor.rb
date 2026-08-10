@@ -120,6 +120,8 @@ module GradeImports
       @student_cache_by_uin = {}
       @student_cache_by_email = {}
       @student_cache_by_name = {}
+      @course_offering_cache = {}
+      @competency_cache = {}
     end
 
     def call
@@ -203,7 +205,8 @@ module GradeImports
 
     private
 
-    attr_reader :batch, :files, :student_cache_by_uin, :student_cache_by_email, :student_cache_by_name
+    attr_reader :batch, :files, :student_cache_by_uin, :student_cache_by_email, :student_cache_by_name,
+                :course_offering_cache, :competency_cache
 
     def dry_run?
       @dry_run == true
@@ -2312,7 +2315,7 @@ module GradeImports
 
     def create_evidence!(grade_file:, student:, source_key:, import_fingerprint:, assignment_name:, course_code:, raw_points:, mapped_level:, competency_title:, row_number:, score_for_mapping:, score_basis:, points_possible:, student_identifiers:, course_target_level: nil)
       course_offering = course_offering_for(course_code:, grade_file:)
-      competency = Competency.find_by_normalized_title(competency_title) if defined?(Competency)
+      competency = cached_competency_for(competency_title)
 
       attrs = {
         grade_import_file: grade_file,
@@ -2340,7 +2343,7 @@ module GradeImports
 
     def create_pending_row!(grade_file:, identifier:, identifier_type:, student_uin:, student_email:, student_name:, assignment_name:, course_code:, raw_points:, mapped_level:, competency_title:, row_number:, score_for_mapping:, score_basis:, points_possible:, source_key: nil, import_fingerprint:, course_target_level: nil)
       course_offering = course_offering_for(course_code:, grade_file:)
-      competency = Competency.find_by_normalized_title(competency_title) if defined?(Competency)
+      competency = cached_competency_for(competency_title)
 
       attrs = {
         grade_import_file: grade_file,
@@ -2381,13 +2384,25 @@ module GradeImports
       return if course_code.blank? || !defined?(CourseOffering)
       return unless CourseOffering.table_exists?
 
+      cache_key = normalize_key(course_code)
+      return course_offering_cache[cache_key] if course_offering_cache.key?(cache_key)
+
       offering = CourseOffering.find_or_create_from_code!(
         course_code,
         program_semester: batch.program_semester,
         source_name: grade_file.file_name
       )
       grade_file.update_column(:course_offering_id, offering.id) if offering.present? && GradeImportFile.column_names.include?("course_offering_id") && grade_file.course_offering_id.blank?
-      offering
+      course_offering_cache[cache_key] = offering
+    end
+
+    def cached_competency_for(competency_title)
+      return nil unless defined?(Competency)
+
+      cache_key = normalize_key(competency_title)
+      return competency_cache[cache_key] if competency_cache.key?(cache_key)
+
+      competency_cache[cache_key] = Competency.find_by_normalized_title(competency_title)
     end
 
     def find_student_by_uin(uin)
