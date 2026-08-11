@@ -136,32 +136,71 @@ module GradeImports
       @competency_cache = {}
     end
 
+    # Raised by the memory guard to unwind out of row processing without
+    # treating the file as failed. Carries whatever partial result was built
+    # up before the guard tripped, so the caller can record real progress
+    # instead of discarding it.
+    class MemoryGuardPause < StandardError
+      attr_reader :result
+
+      def initialize(result)
+        @result = result
+        super("Paused: process memory limit reached")
+      end
+    end
+
     def call
       replace_existing_batch_files! if replace_existing_files?
 
       batch.update!(
         status: "processing",
-        started_at: Time.current,
-        total_files: batch.grade_import_files.count + files.size,
+        started_at: batch.started_at || Time.current,
+        total_files: batch.total_files.positive? ? batch.total_files : (batch.grade_import_files.count + files.size),
         summary: batch.summary.merge("dry_run" => dry_run?)
       )
 
+      paused = false
+
       files.each do |uploaded_file|
+        break if paused
+
         file_checksum = Digest::SHA256.file(uploaded_file.path).hexdigest
-        duplicate_uploads = duplicate_uploads_for(file_checksum)
-        grade_file = batch.grade_import_files.create!(
-          file_name: uploaded_file.original_filename.to_s,
-          file_checksum: file_checksum,
-          content_type: uploaded_file.content_type.to_s,
-          status: "pending",
-          parsed_content: {
-            duplicate_file_uploads: duplicate_uploads,
-            duplicate_file_upload_count: duplicate_uploads.size
-          }
-        )
+        grade_file = resumable_grade_file_for(file_checksum)
+
+        if grade_file
+          next if grade_file.status == "processed"
+        else
+          duplicate_uploads = duplicate_uploads_for(file_checksum)
+          grade_file = batch.grade_import_files.create!(
+            file_name: uploaded_file.original_filename.to_s,
+            file_checksum: file_checksum,
+            content_type: uploaded_file.content_type.to_s,
+            status: "pending",
+            parsed_content: {
+              duplicate_file_uploads: duplicate_uploads,
+              duplicate_file_upload_count: duplicate_uploads.size
+            }
+          )
+        end
 
         begin
           process_file!(grade_file, uploaded_file)
+        rescue MemoryGuardPause => e
+          # Re-count from the database rather than trusting this attempt's
+          # in-memory counters -- rows already committed by an earlier,
+          # interrupted attempt on this same file were skipped as
+          # duplicates this time around, so the local counters only cover
+          # what happened since the last resume.
+          grade_file.update!(
+            status: "paused",
+            total_rows: e.result.fetch(:total_rows, grade_file.total_rows),
+            imported_rows: grade_file.grade_competency_evidences.count,
+            pending_rows: grade_file.grade_import_pending_rows.count,
+            error_rows: e.result.fetch(:error_rows, grade_file.error_rows),
+            parse_errors: Array(e.result[:parse_errors]).first(500),
+            parsed_content: grade_file.parsed_content.merge(e.result.fetch(:parsed_content, {}).deep_stringify_keys)
+          )
+          paused = true
         rescue StandardError => e
           grade_file.update!(
             status: "failed",
@@ -172,6 +211,13 @@ module GradeImports
           Rails.logger.error("[GradeImports::BatchProcessor] Failed file=#{grade_file.file_name}: #{e.class}: #{e.message}")
         end
       end
+
+      if paused
+        batch.update!(summary: batch.summary.merge("needs_continuation" => true))
+        return batch
+      end
+
+      batch.update!(summary: batch.summary.except("needs_continuation")) if batch.summary["needs_continuation"]
 
       rebuild_ratings!
 
@@ -376,13 +422,21 @@ module GradeImports
     end
 
     def update_grade_file_with_result!(grade_file:, result:)
-      parsed_content = grade_file.parsed_content.merge(result.fetch(:parsed_content, {}))
+      # deep_stringify_keys avoids literal duplicate JSON keys when a file
+      # was previously updated (e.g. paused then resumed): parsed_content
+      # loaded back from the DB has string keys, while a freshly-built
+      # result hash uses symbol keys.
+      parsed_content = grade_file.parsed_content.merge(result.fetch(:parsed_content, {}).deep_stringify_keys)
 
       grade_file.update!(
         status: result.fetch(:status, "processed"),
         total_rows: result.fetch(:total_rows, 0),
-        imported_rows: result.fetch(:imported_rows, 0),
-        pending_rows: result.fetch(:pending_rows, 0),
+        # Counted from the DB, not result[:imported_rows]/[:pending_rows] --
+        # if this file was paused and resumed, those in-memory counters only
+        # cover the current attempt (rows already committed by an earlier,
+        # interrupted attempt were skipped here as duplicates).
+        imported_rows: grade_file.grade_competency_evidences.count,
+        pending_rows: grade_file.grade_import_pending_rows.count,
         error_rows: result.fetch(:error_rows, 0),
         parse_errors: Array(result[:parse_errors]).first(500),
         parsed_content: parsed_content
@@ -690,22 +744,54 @@ module GradeImports
       rows_skipped_hpmc = 0
       rows_skipped_ungraded = 0
 
-      memory_limit_reached = false
+      build_result = lambda do |status:|
+        {
+          status: status,
+          total_rows: rows_scanned,
+          imported_rows: imported_rows,
+          pending_rows: pending_rows,
+          error_rows: error_rows,
+          parse_errors: errors,
+          parsed_content: {
+            mode: "canvas_outcomes",
+            selected_grade_sheet: fallback_source_name,
+            selected_mapping_sheet: nil,
+            grade_sheet_debug: {
+              mode: "canvas_outcomes",
+              rows_scanned: rows_scanned,
+              rows_skipped_blank: rows_skipped_blank,
+              rows_skipped_hpmc: rows_skipped_hpmc,
+              rows_skipped_ungraded: rows_skipped_ungraded,
+              matched_student_count: matched_students.size,
+              pending_student_count: pending_students.size,
+              pending_row_count: pending_rows,
+              duplicate_warning_count: duplicate_warnings.size,
+              duplicate_warnings_preview: duplicate_warnings.first(100),
+              ignored_prefixes: [ "HPMC" ]
+            }
+          }
+        }
+      end
 
       rows.each do |row_number, row|
         rows_scanned += 1
 
-        if rows_scanned % MEMORY_GUARD_CHECK_INTERVAL_ROWS == 0 && process_memory_limit_exceeded?
-          memory_limit_reached = true
-          errors << row_error(
-            row_number,
-            "Import paused after row #{row_number - 1} because the server's memory usage got too high. " \
-            "#{rows_scanned - 1} of this file's rows were processed before pausing; the remaining rows were not. " \
-            "Re-upload this same file to safely continue -- already-imported rows are skipped automatically.",
-            type: "memory_limit"
-          )
-          error_rows += 1
-          break
+        if rows_scanned % MEMORY_GUARD_CHECK_INTERVAL_ROWS == 0
+          # A heartbeat, independent of whether the guard actually trips
+          # below -- GradeImports::StaleBatchWatchdog uses how recently this
+          # row was touched to tell a slow-but-healthy run apart from one
+          # that's genuinely dead, and a big file can go a long time between
+          # the start-of-call and end-of-call updates otherwise.
+          grade_file.touch
+
+          # Reclaim whatever's actually garbage before deciding processing
+          # needs to stop -- a lot of what's resident at this point is
+          # AR objects from rows already saved and no longer needed.
+          GC.start
+          if process_memory_limit_exceeded?
+            Rails.logger.info("[GradeImports::BatchProcessor] Pausing at row #{row_number} (memory limit reached); will resume automatically.")
+            raise MemoryGuardPause, build_result.call(status: "paused")
+          end
         end
 
         if row.values.all?(&:blank?)
@@ -890,33 +976,7 @@ module GradeImports
         errors << row_error(row_number, e.record.errors.full_messages.to_sentence.presence || e.message)
       end
 
-      {
-        status: "processed",
-        total_rows: rows_scanned,
-        imported_rows: imported_rows,
-        pending_rows: pending_rows,
-        error_rows: error_rows,
-        parse_errors: errors,
-        parsed_content: {
-          mode: "canvas_outcomes",
-          selected_grade_sheet: fallback_source_name,
-          selected_mapping_sheet: nil,
-          grade_sheet_debug: {
-            mode: "canvas_outcomes",
-            rows_scanned: rows_scanned,
-            rows_skipped_blank: rows_skipped_blank,
-            rows_skipped_hpmc: rows_skipped_hpmc,
-            rows_skipped_ungraded: rows_skipped_ungraded,
-            matched_student_count: matched_students.size,
-            pending_student_count: pending_students.size,
-            pending_row_count: pending_rows,
-            duplicate_warning_count: duplicate_warnings.size,
-            duplicate_warnings_preview: duplicate_warnings.first(100),
-            ignored_prefixes: [ "HPMC" ],
-            memory_limit_reached: memory_limit_reached
-          }
-        }
-      }
+      build_result.call(status: "processed")
     end
 
     def canvas_outcome_ungraded?(outcome_score_value, rating_text)
@@ -2761,6 +2821,14 @@ module GradeImports
             batch_status: file.grade_import_batch&.status
           }
         end
+    end
+
+    # Finds a file from an earlier, memory-guard-interrupted attempt on this
+    # same batch, so a resumed run reuses its row/status bookkeeping instead
+    # of creating a duplicate GradeImportFile for content already in
+    # progress.
+    def resumable_grade_file_for(file_checksum)
+      batch.grade_import_files.find_by(file_checksum: file_checksum, status: "paused")
     end
 
     def preview_validation_summary(batch)

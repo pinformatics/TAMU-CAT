@@ -12,6 +12,7 @@ class GradeImports::StaleBatchWatchdogTest < ActiveSupport::TestCase
       started_at: 1.hour.ago,
       summary: { "dry_run" => true }
     )
+    batch.update_column(:updated_at, 1.hour.ago)
 
     assert_difference -> { Notification.count } do
       GradeImports::StaleBatchWatchdog.run!

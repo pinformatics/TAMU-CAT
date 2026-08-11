@@ -182,28 +182,73 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
 
     batch = create_batch
 
-    original_interval = GradeImports::BatchProcessor::MEMORY_GUARD_CHECK_INTERVAL_ROWS
-    GradeImports::BatchProcessor.send(:remove_const, :MEMORY_GUARD_CHECK_INTERVAL_ROWS)
-    GradeImports::BatchProcessor.const_set(:MEMORY_GUARD_CHECK_INTERVAL_ROWS, 1)
+    with_memory_guard_interval(1) do
+      processor = GradeImports::BatchProcessor.new(
+        batch: batch,
+        files: [ uploaded_excel_file(path, "canvas_outcomes.xlsx") ],
+        dry_run: true
+      )
+      processor.define_singleton_method(:process_memory_limit_exceeded?) { true }
 
-    processor = GradeImports::BatchProcessor.new(
-      batch: batch,
-      files: [ uploaded_excel_file(path, "canvas_outcomes.xlsx") ],
-      dry_run: true
-    )
-    processor.define_singleton_method(:process_memory_limit_exceeded?) { true }
-
-    assert_no_difference -> { GradeCompetencyEvidence.count } do
-      processor.call
+      assert_no_difference -> { GradeCompetencyEvidence.count } do
+        processor.call
+      end
     end
 
-    file = batch.reload.grade_import_files.first
-    assert_equal "completed_with_errors", batch.status
-    assert file.parse_errors.any? { |error| error["type"] == "memory_limit" }
-    assert file.parse_errors.any? { |error| error["message"].include?("Re-upload this same file") }
-  ensure
-    GradeImports::BatchProcessor.send(:remove_const, :MEMORY_GUARD_CHECK_INTERVAL_ROWS)
-    GradeImports::BatchProcessor.const_set(:MEMORY_GUARD_CHECK_INTERVAL_ROWS, original_interval)
+    batch.reload
+    file = batch.grade_import_files.first
+    assert_equal "processing", batch.status
+    assert batch.summary["needs_continuation"]
+    assert_equal "paused", file.status
+  end
+
+  test "canvas outcomes xlsx resumes automatically after a memory-guard pause and finishes cleanly" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Discussion blog # 8",
+          assessment_id: 2822346,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 3
+        ),
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Assignment # 4",
+          assessment_id: 2822359,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 4
+        )
+      ]
+    )
+
+    batch = create_batch
+    uploaded_file = uploaded_excel_file(path, "canvas_outcomes.xlsx")
+
+    with_memory_guard_interval(1) do
+      paused_processor = GradeImports::BatchProcessor.new(batch: batch, files: [ uploaded_file ], dry_run: true)
+      paused_processor.define_singleton_method(:process_memory_limit_exceeded?) { true }
+      paused_processor.call
+    end
+
+    assert_equal "processing", batch.reload.status
+    assert_equal "paused", batch.grade_import_files.first.status
+
+    assert_difference -> { GradeCompetencyEvidence.count }, 2 do
+      GradeImports::BatchProcessor.new(batch: batch, files: [ uploaded_file ], dry_run: true).call
+    end
+
+    batch.reload
+    assert_equal "completed", batch.status
+    assert_not batch.summary["needs_continuation"]
+    assert_equal "processed", batch.grade_import_files.first.status
+    assert_equal 1, batch.grade_import_files.count, "resuming should reuse the paused file, not create a duplicate"
   end
 
   test "canvas outcomes csv detects raw export headers and imports" do
@@ -2363,6 +2408,16 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
   end
 
   private
+
+  def with_memory_guard_interval(interval)
+    original_interval = GradeImports::BatchProcessor::MEMORY_GUARD_CHECK_INTERVAL_ROWS
+    GradeImports::BatchProcessor.send(:remove_const, :MEMORY_GUARD_CHECK_INTERVAL_ROWS)
+    GradeImports::BatchProcessor.const_set(:MEMORY_GUARD_CHECK_INTERVAL_ROWS, interval)
+    yield
+  ensure
+    GradeImports::BatchProcessor.send(:remove_const, :MEMORY_GUARD_CHECK_INTERVAL_ROWS)
+    GradeImports::BatchProcessor.const_set(:MEMORY_GUARD_CHECK_INTERVAL_ROWS, original_interval)
+  end
 
   def create_batch
     GradeImportBatch.create!(uploaded_by: @admin, status: "pending", summary: { "dry_run" => true })

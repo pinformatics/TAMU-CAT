@@ -25,7 +25,16 @@ module GradeImports
 
     UploadedFilePayload = Struct.new(:path, :original_filename, :content_type)
 
-    def perform(batch_id:, uploaded_by_id:, dry_run:, files_payload:)
+    # Safety valve for GradeImports::BatchProcessor's memory guard (see
+    # MemoryGuardPause there): caps how many times this job will
+    # automatically re-enqueue itself to continue a paused import, in case a
+    # file genuinely can never finish (e.g. the dyno's baseline memory alone
+    # already exceeds the guard's ceiling, so every attempt pauses at row 1
+    # without making progress).
+    MAX_RESUME_ATTEMPTS = 40
+    RESUME_DELAY = 20.seconds
+
+    def perform(batch_id:, uploaded_by_id:, dry_run:, files_payload:, resume_attempt: 0)
       batch = GradeImportBatch.find(batch_id)
       uploaded_by = User.find_by(id: uploaded_by_id)
       tempfiles = []
@@ -38,7 +47,8 @@ module GradeImports
         tempfiles << tempfile
         # Drop the (often multi-MB) base64 string as soon as it's decoded,
         # rather than keeping it alive in files_payload for the rest of the
-        # job's lifetime.
+        # job's lifetime. If this attempt pauses and needs to resume, the
+        # tempfile on disk is re-encoded fresh instead.
         payload["base64"] = nil
         UploadedFilePayload.new(tempfile.path, payload["filename"], payload["content_type"])
       end
@@ -46,6 +56,12 @@ module GradeImports
 
       GradeImports::BatchProcessor.new(batch: batch, files: files, dry_run: dry_run).call
       GC.start
+      batch.reload
+
+      if batch.summary["needs_continuation"]
+        resume_or_give_up!(batch: batch, uploaded_by_id: uploaded_by_id, dry_run: dry_run, files: files, resume_attempt: resume_attempt)
+        return
+      end
 
       notifier = GradeImports::BatchAuditNotifier.new(batch: batch, actor: uploaded_by)
       notifier.record_activity!(
@@ -67,6 +83,51 @@ module GradeImports
         tempfile.close
         tempfile.unlink
       end
+    end
+
+    private
+
+    # Re-enqueues this job to continue a paused import, as long as the last
+    # attempt actually made progress -- otherwise (e.g. the process's
+    # baseline memory alone already exceeds the guard's ceiling, so nothing
+    # can ever get processed) this gives up and notifies admins instead of
+    # looping forever without doing anything useful.
+    def resume_or_give_up!(batch:, uploaded_by_id:, dry_run:, files:, resume_attempt:)
+      progress = batch.grade_competency_evidences.count + batch.grade_import_pending_rows.count
+      made_progress = progress > batch.summary["last_resume_progress"].to_i
+
+      if !made_progress || resume_attempt >= MAX_RESUME_ATTEMPTS
+        message = "Import could not finish automatically after #{resume_attempt + 1} attempt(s) " \
+                  "(#{made_progress ? "attempt limit reached" : "stopped making progress"}). " \
+                  "Rows already imported are preserved. This needs manual attention."
+        batch.update!(
+          status: "failed",
+          completed_at: Time.current,
+          summary: batch.summary.merge("needs_continuation" => false, "error" => message)
+        )
+        GradeImports::BatchAuditNotifier
+          .new(batch: batch, actor: User.find_by(id: uploaded_by_id))
+          .notify_admins_of_grade_import_failure!(message)
+        return
+      end
+
+      batch.update!(summary: batch.summary.merge("last_resume_progress" => progress))
+
+      resumed_files_payload = files.map do |file|
+        {
+          "filename" => file.original_filename,
+          "content_type" => file.content_type,
+          "base64" => Base64.strict_encode64(File.binread(file.path))
+        }
+      end
+
+      self.class.set(wait: RESUME_DELAY).perform_later(
+        batch_id: batch.id,
+        uploaded_by_id: uploaded_by_id,
+        dry_run: dry_run,
+        files_payload: resumed_files_payload,
+        resume_attempt: resume_attempt + 1
+      )
     end
   end
 end
