@@ -38,6 +38,11 @@ gem "wicked_pdf"
 gem "caxlsx"
 gem "roo"
 
+# Streaming xlsx reader -- unlike Roo, doesn't load the whole workbook into
+# memory at once. Used for the largest grade-import files (see
+# GradeImports::BatchProcessor).
+gem "creek"
+
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
 

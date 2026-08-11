@@ -1,6 +1,7 @@
 # Processes one admin upload batch of faculty workbooks.
 #
 require "roo"
+require "creek"
 require "set"
 require "digest"
 require "csv"
@@ -238,26 +239,27 @@ module GradeImports
         return
       end
 
-      workbook = Roo::Spreadsheet.open(uploaded_file.path, extension: router.spreadsheet_extension)
-      if (outcomes_info = detect_canvas_outcomes_sheet(workbook))
-        sheet = workbook.sheet(outcomes_info[:sheet_name])
-        rows = extract_sheet_rows(grade_sheet: sheet, header_row_number: outcomes_info[:header_row_number], headers: outcomes_info[:headers])
-        # Roo parses the whole workbook into memory up front; large wide
-        # exports (many outcome columns) can hold hundreds of MB. Drop the
-        # reference and reclaim it before the row-write phase adds its own
-        # memory pressure, instead of letting both peaks stack.
-        workbook = nil
-        sheet = nil
-        GC.start
+      # Canvas outcomes exports are the largest files this pipeline sees (real
+      # ones run to thousands of rows x dozens of outcome columns) and the
+      # only format read top-to-bottom with no backtracking, so it's the one
+      # format worth reading via Creek's streaming SAX parser instead of
+      # Roo. Roo parses the entire workbook into an in-memory DOM before any
+      # row is available; Creek never holds more than the current row, which
+      # keeps memory flat regardless of file size. Detection alone (peeking
+      # the first ~12 rows of each sheet) never opens Roo at all, so files
+      # that turn out to be this format never pay Roo's full-parse cost.
+      if (outcomes_info = detect_canvas_outcomes_sheet_streaming(uploaded_file.path))
         result = process_canvas_outcomes_rows!(
           grade_file: grade_file,
-          rows: rows,
+          rows: canvas_outcomes_rows_streaming(uploaded_file.path, outcomes_info),
           headers: outcomes_info[:headers],
           fallback_source_name: outcomes_info[:sheet_name].presence || uploaded_file.original_filename.to_s
         )
         update_grade_file_with_result!(grade_file:, result:)
         return
       end
+
+      workbook = Roo::Spreadsheet.open(uploaded_file.path, extension: router.spreadsheet_extension)
 
       if (direct_info = detect_direct_competency_sheet(workbook))
         sheet = workbook.sheet(direct_info[:sheet_name])
@@ -863,7 +865,7 @@ module GradeImports
 
       {
         status: "processed",
-        total_rows: rows.size,
+        total_rows: rows_scanned,
         imported_rows: imported_rows,
         pending_rows: pending_rows,
         error_rows: error_rows,
@@ -910,15 +912,22 @@ module GradeImports
       normalize_course_code(fallback_source_name)
     end
 
-    def detect_canvas_outcomes_sheet(workbook)
-      workbook.sheets.each do |sheet_name|
-        sheet = workbook.sheet(sheet_name)
-        max_probe = [ sheet.last_row.to_i, 12 ].min
-        (1..max_probe).each do |row_number|
-          headers = sheet.row(row_number).map { |value| value.to_s.strip }
+    # Peeks the first ~12 rows of each sheet via Creek's streaming reader to
+    # look for Canvas outcomes headers, without ever materializing a full
+    # sheet (or the whole workbook) in memory. Breaking out of Creek's row
+    # enumerator once a header row is found (or the probe limit is hit) stops
+    # the underlying XML reader from parsing the rest of that sheet.
+    def detect_canvas_outcomes_sheet_streaming(path)
+      Creek::Book.new(path).sheets.each do |sheet|
+        row_number = 0
+        sheet.simple_rows.each do |row_hash|
+          row_number += 1
+          break if row_number > 12
+
+          headers = creek_row_values(row_hash).map { |value| value.to_s.strip }
           begin
             detect_canvas_outcomes_headers!(headers)
-            return { sheet_name: sheet_name.to_s, header_row_number: row_number, headers: headers }
+            return { sheet_name: sheet.name.to_s, header_row_number: row_number, headers: headers }
           rescue RuntimeError
             next
           end
@@ -926,6 +935,49 @@ module GradeImports
       end
 
       nil
+    end
+
+    # Returns a lazy Enumerator of [row_number, row_hash] pairs read directly
+    # from disk via Creek, one row at a time -- mirrors the shape
+    # extract_sheet_rows builds eagerly from Roo, so
+    # process_canvas_outcomes_rows! doesn't need to know which reader
+    # produced its rows.
+    def canvas_outcomes_rows_streaming(path, outcomes_info)
+      headers = outcomes_info[:headers]
+      header_row_number = outcomes_info[:header_row_number]
+
+      Enumerator.new do |yielder|
+        sheet = Creek::Book.new(path).sheets.find { |candidate| candidate.name.to_s == outcomes_info[:sheet_name] }
+        row_number = 0
+        sheet.simple_rows.each do |row_hash|
+          row_number += 1
+          next if row_number <= header_row_number
+
+          values = creek_row_values(row_hash)
+          row = headers.each_with_index.each_with_object({}) do |(header, index), out|
+            out[header] = values[index]
+          end
+          yielder << [ row_number, row ]
+        end
+      end
+    end
+
+    # Creek yields each row as a Hash keyed by column letter (e.g. "A", "C"),
+    # omitting keys for cells the XML never wrote -- not necessarily a
+    # contiguous 0..n range. Rebuild the positional array Roo's #row(n)
+    # would have returned, so header-index lookups (headers[i] <-> values[i])
+    # keep working unchanged.
+    def creek_row_values(row_hash)
+      return [] if row_hash.empty?
+
+      indexed = row_hash.each_with_object({}) do |(column_letter, value), acc|
+        acc[column_index_from_letter(column_letter)] = value
+      end
+      Array.new(indexed.keys.max + 1) { |index| indexed[index] }
+    end
+
+    def column_index_from_letter(letters)
+      letters.chars.reduce(0) { |acc, char| (acc * 26) + (char.ord - "A".ord + 1) } - 1
     end
 
     def detect_canvas_outcomes_headers!(headers)

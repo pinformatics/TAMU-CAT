@@ -111,6 +111,9 @@ GEM
       bigdecimal
       rexml
     crass (1.0.7)
+    creek (2.6.3)
+      nokogiri (>= 1.10.0)
+      rubyzip (>= 1.0.0)
     csv (3.3.5)
     date (3.5.1)
     debug (1.11.0)
@@ -491,6 +494,7 @@ DEPENDENCIES
   capybara
   caxlsx
   commonmarker
+  creek
   csv
   debug
   devise
