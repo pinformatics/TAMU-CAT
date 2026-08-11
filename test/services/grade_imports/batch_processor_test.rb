@@ -154,6 +154,58 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "canvas_outcomes", batch.grade_import_files.first.parsed_content["mode"]
   end
 
+  test "canvas outcomes xlsx pauses gracefully when the memory guard triggers" do
+    path = build_canvas_outcomes_workbook(
+      rows: [
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Discussion blog # 8",
+          assessment_id: 2822346,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 3
+        ),
+        canvas_outcomes_row(
+          student_name: @student.user.name,
+          student_id: @student.student_id,
+          student_sis_id: @student.uin,
+          assessment_title: "Assignment # 4",
+          assessment_id: 2822359,
+          submission_score: 3,
+          learning_outcome_name: "Systems Thinking",
+          outcome_score: 4
+        )
+      ]
+    )
+
+    batch = create_batch
+
+    original_interval = GradeImports::BatchProcessor::MEMORY_GUARD_CHECK_INTERVAL_ROWS
+    GradeImports::BatchProcessor.send(:remove_const, :MEMORY_GUARD_CHECK_INTERVAL_ROWS)
+    GradeImports::BatchProcessor.const_set(:MEMORY_GUARD_CHECK_INTERVAL_ROWS, 1)
+
+    processor = GradeImports::BatchProcessor.new(
+      batch: batch,
+      files: [ uploaded_excel_file(path, "canvas_outcomes.xlsx") ],
+      dry_run: true
+    )
+    processor.define_singleton_method(:process_memory_limit_exceeded?) { true }
+
+    assert_no_difference -> { GradeCompetencyEvidence.count } do
+      processor.call
+    end
+
+    file = batch.reload.grade_import_files.first
+    assert_equal "completed_with_errors", batch.status
+    assert file.parse_errors.any? { |error| error["type"] == "memory_limit" }
+    assert file.parse_errors.any? { |error| error["message"].include?("Re-upload this same file") }
+  ensure
+    GradeImports::BatchProcessor.send(:remove_const, :MEMORY_GUARD_CHECK_INTERVAL_ROWS)
+    GradeImports::BatchProcessor.const_set(:MEMORY_GUARD_CHECK_INTERVAL_ROWS, original_interval)
+  end
+
   test "canvas outcomes csv detects raw export headers and imports" do
     path = build_canvas_outcomes_csv(
       rows: [

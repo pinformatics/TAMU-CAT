@@ -113,6 +113,17 @@ module GradeImports
     }.freeze
     CANVAS_OUTCOME_NOT_ASSESSABLE_RATINGS = %w[not_able_to_assess].freeze
 
+    # How often (in rows) to check process memory during large imports, and
+    # the RSS ceiling that triggers a graceful pause. Default sits above the
+    # dyno's typical idle baseline (observed ~570-720MB on mha-dev's Basic
+    # 512MB dyno, mostly from Solid Queue's always-on supervisor threads) and
+    # below the point real crashes have been observed (~900MB-1.17GB), so it
+    # catches the run before Heroku's harder R15 kill does. Configurable
+    # since the right number depends on the dyno size and what else is
+    # resident in the same process.
+    MEMORY_GUARD_CHECK_INTERVAL_ROWS = 200
+    DEFAULT_MEMORY_GUARD_LIMIT_MB = 800
+
     def initialize(batch:, files:, dry_run: false, replace_existing_files: false)
       @batch = batch
       @files = Array(files)
@@ -679,8 +690,24 @@ module GradeImports
       rows_skipped_hpmc = 0
       rows_skipped_ungraded = 0
 
+      memory_limit_reached = false
+
       rows.each do |row_number, row|
         rows_scanned += 1
+
+        if rows_scanned % MEMORY_GUARD_CHECK_INTERVAL_ROWS == 0 && process_memory_limit_exceeded?
+          memory_limit_reached = true
+          errors << row_error(
+            row_number,
+            "Import paused after row #{row_number - 1} because the server's memory usage got too high. " \
+            "#{rows_scanned - 1} of this file's rows were processed before pausing; the remaining rows were not. " \
+            "Re-upload this same file to safely continue -- already-imported rows are skipped automatically.",
+            type: "memory_limit"
+          )
+          error_rows += 1
+          break
+        end
+
         if row.values.all?(&:blank?)
           rows_skipped_blank += 1
           next
@@ -885,7 +912,8 @@ module GradeImports
             pending_row_count: pending_rows,
             duplicate_warning_count: duplicate_warnings.size,
             duplicate_warnings_preview: duplicate_warnings.first(100),
-            ignored_prefixes: [ "HPMC" ]
+            ignored_prefixes: [ "HPMC" ],
+            memory_limit_reached: memory_limit_reached
           }
         }
       }
@@ -978,6 +1006,26 @@ module GradeImports
 
     def column_index_from_letter(letters)
       letters.chars.reduce(0) { |acc, char| (acc * 26) + (char.ord - "A".ord + 1) } - 1
+    end
+
+    def process_memory_limit_exceeded?
+      limit_mb = ENV.fetch("GRADE_IMPORT_MEMORY_LIMIT_MB", DEFAULT_MEMORY_GUARD_LIMIT_MB).to_i
+      return false if limit_mb <= 0
+
+      rss_kb = current_process_rss_kb
+      return false if rss_kb.nil?
+
+      rss_kb > limit_mb * 1024
+    end
+
+    # Linux-only (reads /proc), which covers every environment this actually
+    # runs in (Docker locally, Heroku dynos in production). Returns nil
+    # anywhere else so the memory guard just never triggers instead of
+    # raising.
+    def current_process_rss_kb
+      File.read("/proc/self/status")[/VmRSS:\s*(\d+) kB/, 1]&.to_i
+    rescue Errno::ENOENT, Errno::EACCES
+      nil
     end
 
     def detect_canvas_outcomes_headers!(headers)
