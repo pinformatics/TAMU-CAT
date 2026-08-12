@@ -72,6 +72,7 @@ class ActiveSupport::TestCase
   parallelize(workers: 1)
   fixtures :admins,
            :advisor_feedback_submissions,
+           :advisor_meeting_recaps,
            :advisors,
            :categories,
            :program_semesters,

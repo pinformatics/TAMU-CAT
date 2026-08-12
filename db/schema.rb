@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_07_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_11_150000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -44,6 +44,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_120000) do
     t.datetime "updated_at", null: false
     t.index ["student_id", "survey_id", "advisor_id"], name: "index_feedback_submissions_on_student_survey_advisor", unique: true
     t.index ["submitted_at"], name: "index_advisor_feedback_submissions_on_submitted_at"
+  end
+
+  create_table "advisor_meeting_recaps", force: :cascade do |t|
+    t.text "academic_advising_notes"
+    t.bigint "advisor_id", null: false
+    t.text "career_advising_notes"
+    t.datetime "created_at", null: false
+    t.text "general_notes"
+    t.string "meeting_type", null: false
+    t.bigint "program_semester_id", null: false
+    t.bigint "student_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["advisor_id"], name: "index_advisor_meeting_recaps_on_advisor_id"
+    t.index ["program_semester_id"], name: "index_advisor_meeting_recaps_on_program_semester_id"
+    t.index ["student_id", "program_semester_id", "meeting_type"], name: "index_meeting_recaps_on_student_semester_type", unique: true
+    t.index ["student_id"], name: "index_advisor_meeting_recaps_on_student_id"
   end
 
   create_table "advisors", primary_key: "advisor_id", force: :cascade do |t|
@@ -599,6 +615,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_120000) do
   add_foreign_key "advisor_feedback_submissions", "advisors", primary_key: "advisor_id", on_delete: :cascade
   add_foreign_key "advisor_feedback_submissions", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "advisor_feedback_submissions", "surveys", on_delete: :cascade
+  add_foreign_key "advisor_meeting_recaps", "advisors", primary_key: "advisor_id", on_delete: :cascade
+  add_foreign_key "advisor_meeting_recaps", "program_semesters", on_delete: :cascade
+  add_foreign_key "advisor_meeting_recaps", "students", primary_key: "student_id", on_delete: :cascade
   add_foreign_key "advisors", "users", column: "advisor_id", on_delete: :cascade
   add_foreign_key "categories", "survey_sections", on_delete: :nullify
   add_foreign_key "categories", "surveys"

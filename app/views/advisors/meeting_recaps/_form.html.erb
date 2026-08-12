@@ -1,0 +1,51 @@
+<%= form_with model: @recap,
+              url: @recap.persisted? ? advisors_student_meeting_recap_path(@student, @recap) : advisors_student_meeting_recaps_path(@student),
+              method: @recap.persisted? ? :patch : :post,
+              local: true, class: "u-stack u-stack--lg" do |f| %>
+  <% if @recap.errors.any? %>
+    <div class="c-callout c-callout--danger">
+      <%= @recap.errors.full_messages.to_sentence %>
+    </div>
+  <% end %>
+
+  <% if @recap.new_record? %>
+    <%= f.hidden_field :program_semester_id %>
+    <%= f.hidden_field :meeting_type %>
+  <% end %>
+
+  <p class="c-eyebrow"><%= @recap.program_semester&.name %> &mdash; <%= @recap.meeting_type_label %> meeting</p>
+
+  <p class="c-help">
+    Provide a recap of your meeting with your student following your review of the student's TAMU CAT and MHA
+    Portfolio. Include notes on what was discussed for each of the following:
+  </p>
+
+  <div class="c-field">
+    <label class="c-label" for="advisor_meeting_recap_academic_advising_notes">Academic Advising</label>
+    <p class="c-help">
+      Competency achievements/areas for focused development; progress in the curriculum; documenting your
+      progress/professional development; cohort experience; other questions or areas of concern.
+    </p>
+    <%= f.text_area :academic_advising_notes, rows: 5, class: "c-input u-w-full" %>
+  </div>
+
+  <div class="c-field">
+    <label class="c-label" for="advisor_meeting_recap_career_advising_notes">Career Advising</label>
+    <p class="c-help">
+      Discuss career options/direction, career strategies, career search skills (resume, interview,
+      networking/building your network, etc); other questions or areas of concern.
+    </p>
+    <%= f.text_area :career_advising_notes, rows: 5, class: "c-input u-w-full" %>
+  </div>
+
+  <div class="c-field">
+    <label class="c-label" for="advisor_meeting_recap_general_notes">General</label>
+    <p class="c-help">Other resource or support needs.</p>
+    <%= f.text_area :general_notes, rows: 3, class: "c-input u-w-full" %>
+  </div>
+
+  <div class="u-actions u-actions--end">
+    <%= link_to "Cancel", advisors_student_path(@student), class: button_classes(:secondary) %>
+    <%= f.submit "Save meeting recap", class: button_classes(:primary) %>
+  </div>
+<% end %>

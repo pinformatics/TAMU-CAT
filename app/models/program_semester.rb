@@ -25,6 +25,7 @@ class ProgramSemester < ApplicationRecord
   has_many :competency_target_levels, dependent: :destroy
   has_many :course_offerings, dependent: :nullify
   has_one :course_grade_release_date, dependent: :destroy
+  has_many :advisor_meeting_recaps, dependent: :destroy
 
   before_validation :normalize_name
   before_validation :sync_status_from_current_flag

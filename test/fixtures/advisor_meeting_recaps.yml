@@ -1,0 +1,10 @@
+student_initial_fall_2025:
+  student: student
+  advisor: advisor
+  program_semester: fall_2025
+  meeting_type: initial
+  academic_advising_notes: Discussed progress on core competencies.
+  career_advising_notes: Reviewed resume draft.
+  general_notes: No additional support needs at this time.
+  created_at: <%= Time.zone.now %>
+  updated_at: <%= Time.zone.now %>

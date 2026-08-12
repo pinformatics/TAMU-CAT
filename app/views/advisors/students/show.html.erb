@@ -1,15 +1,55 @@
-<div class="student-detail-panel">
-  <header>
-    <h1 class="c-page-title"><%= @student.user.name %></h1>
-    <p class="track-label"><%= @student.track.titleize %> Track</p>
-  </header>
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card u-stack u-stack--xl">
+      <header class="c-page-header">
+        <div>
+          <h1 class="c-page-title"><%= @student.user.name %></h1>
+          <p class="c-page-subtitle"><%= @student.track.titleize %> Track</p>
+        </div>
+      </header>
 
-  <section>
-    <dl>
-      <dt>Email</dt>
-      <dd><%= @student.user.email %></dd>
-      <dt>Advisor</dt>
-      <dd><%= @student.advisor&.name || "Unassigned" %></dd>
-    </dl>
-  </section>
-</div>
+      <dl class="u-stack u-stack--sm">
+        <dt class="c-eyebrow">Email</dt>
+        <dd><%= @student.user.email %></dd>
+        <dt class="c-eyebrow">Advisor</dt>
+        <dd><%= @student.advisor&.name || "Unassigned" %></dd>
+      </dl>
+    </section>
+
+    <section class="c-card u-stack u-stack--lg">
+      <header class="c-panel-header">
+        <div>
+          <p class="c-eyebrow">Advisor only</p>
+          <h2 class="c-section-title">Meeting Recaps</h2>
+          <p class="c-help">Recap notes from advising meetings, visible only to advisors and admins.</p>
+        </div>
+      </header>
+
+      <% recaps_by_semester_and_type = @student.advisor_meeting_recaps.index_by { |recap| [ recap.program_semester_id, recap.meeting_type ] } %>
+      <% semesters = ProgramSemester.where.not(status: "archived").ordered.to_a.reverse %>
+      <% if semesters.none? %>
+        <p class="c-help">No program semesters are configured yet.</p>
+      <% else %>
+        <% semesters.each do |semester| %>
+          <div class="c-card c-card--tight u-stack u-stack--sm">
+            <p class="c-eyebrow"><%= semester.name %></p>
+            <div class="u-actions">
+              <% AdvisorMeetingRecap::MEETING_TYPES.each do |meeting_type| %>
+                <% recap = recaps_by_semester_and_type[[ semester.id, meeting_type ]] %>
+                <% if recap %>
+                  <%= link_to "#{AdvisorMeetingRecap::MEETING_TYPE_LABELS.fetch(meeting_type)} — saved",
+                        edit_advisors_student_meeting_recap_path(@student, recap),
+                        class: button_classes(:secondary) %>
+                <% else %>
+                  <%= link_to "Add #{AdvisorMeetingRecap::MEETING_TYPE_LABELS.fetch(meeting_type)} recap",
+                        new_advisors_student_meeting_recap_path(@student, program_semester_id: semester.id, meeting_type: meeting_type),
+                        class: button_classes(:secondary) %>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+    </section>
+  </div>
+</main>

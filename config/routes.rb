@@ -221,7 +221,9 @@ Rails.application.routes.draw do
     # Kept for backwards-compatible bookmarks.
     get "surveys", to: redirect("/assignments/surveys")
     get "surveys/:id", to: redirect("/assignments/surveys/%{id}")
-    resources :students, only: %i[show update]
+    resources :students, only: %i[show update] do
+      resources :meeting_recaps, only: %i[new create edit update]
+    end
   end
 
   namespace :api do

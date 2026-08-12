@@ -19,6 +19,7 @@ class Student < ApplicationRecord
   has_many :advisor_assignments, class_name: "StudentAdvisorAssignment", foreign_key: :student_id, primary_key: :student_id, inverse_of: :student, dependent: :destroy
   has_one :current_advisor_assignment, -> { current }, class_name: "StudentAdvisorAssignment", foreign_key: :student_id, primary_key: :student_id, inverse_of: :student
   has_many :reconciled_grade_import_pending_rows, class_name: "GradeImportPendingRow", foreign_key: :matched_student_id, primary_key: :student_id, dependent: :nullify
+  has_many :advisor_meeting_recaps, foreign_key: :student_id, primary_key: :student_id, dependent: :destroy
 
   delegate :email, :email=, :name, :name=, :avatar_url, :avatar_url=, to: :user
 

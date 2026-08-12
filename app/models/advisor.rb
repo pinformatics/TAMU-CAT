@@ -9,6 +9,7 @@ class Advisor < ApplicationRecord
   has_many :student_questions, foreign_key: :advisor_id, dependent: :nullify
   has_many :feedbacks, foreign_key: :advisor_id
   has_many :survey_assignments, foreign_key: :advisor_id, primary_key: :advisor_id, dependent: :nullify
+  has_many :advisor_meeting_recaps, foreign_key: :advisor_id, primary_key: :advisor_id, dependent: :destroy
   delegate :email, :email=, :name, :name=, :avatar_url, :avatar_url=, to: :user
 
   # @return [String] a friendly name with email fallback

@@ -1,0 +1,17 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-page">
+    <section class="c-card u-stack u-stack--xl">
+      <header class="c-page-header">
+        <div>
+          <p class="c-eyebrow">Advisor only</p>
+          <h1 class="c-page-title">New meeting recap for <%= @student.user.name %></h1>
+        </div>
+        <div class="u-actions">
+          <%= link_to "Back to student", advisors_student_path(@student), class: button_classes(:secondary) %>
+        </div>
+      </header>
+
+      <%= render "form" %>
+    </section>
+  </div>
+</main>
