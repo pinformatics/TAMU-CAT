@@ -1,0 +1,53 @@
+<main class="c-main c-main--dashboard">
+  <div class="c-container c-container--wide">
+    <div class="c-page u-stack u-stack--xl">
+      <section class="c-card c-card--brand">
+        <header class="c-page-header">
+          <div>
+            <p class="c-eyebrow">Advisor only</p>
+            <h1 class="c-page-title c-page-title--brand">Meeting Recaps</h1>
+            <p class="c-page-subtitle">Pick a student to add or review their advising meeting recaps.</p>
+          </div>
+
+          <div class="u-actions">
+            <%= link_to "Back", advisor_dashboard_path, class: button_classes(:secondary) %>
+          </div>
+        </header>
+      </section>
+
+      <section class="c-card c-card--spacious">
+        <% if @students.none? %>
+          <p class="c-help">No advisees are assigned to you yet.</p>
+        <% else %>
+          <div class="c-table-wrapper">
+            <table class="c-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Track</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @students.each do |student| %>
+                  <tr>
+                    <td>
+                      <span class="c-table__title"><%= student.user&.display_name || student.student_id %></span>
+                      <% if student.user&.email.present? %>
+                        <span class="c-table__meta"><%= student.user.email %></span>
+                      <% end %>
+                    </td>
+                    <td><%= student.track %></td>
+                    <td>
+                      <%= link_to "View recaps", advisors_student_path(student), class: button_classes(:secondary) %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
+      </section>
+    </div>
+  </div>
+</main>

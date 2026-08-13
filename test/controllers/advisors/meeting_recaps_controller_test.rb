@@ -10,6 +10,33 @@ class Advisors::MeetingRecapsControllerTest < ActionDispatch::IntegrationTest
     @program_semester = program_semesters(:spring_2025)
   end
 
+  test "index lists only the signed-in advisor's advisees" do
+    sign_in @assigned_advisor_user
+
+    get advisors_meeting_recaps_path
+
+    assert_response :success
+    assert_select "body", /#{@student.user.name}/
+    assert_select "body", text: /#{students(:other_student).user.name}/, count: 0
+  end
+
+  test "index lists all students for admins" do
+    sign_in @admin_user
+
+    get advisors_meeting_recaps_path
+
+    assert_response :success
+    assert_select "body", /#{@student.user.name}/
+    assert_select "body", /#{students(:other_student).user.name}/
+  end
+
+  test "index redirects non-advisor non-admin users" do
+    sign_in @student_user
+
+    get advisors_meeting_recaps_path
+    assert_redirected_to dashboard_path
+  end
+
   test "assigned advisor can create a meeting recap" do
     sign_in @assigned_advisor_user
 

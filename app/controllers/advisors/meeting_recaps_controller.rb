@@ -3,9 +3,13 @@ module Advisors
   # advising meeting (initial/midpoint/final) for a student in a given
   # program semester. Never exposed to students.
   class MeetingRecapsController < BaseController
-    before_action :set_student
-    before_action :ensure_student_access!
+    before_action :set_student, except: :index
+    before_action :ensure_student_access!, except: :index
     before_action :set_recap, only: %i[edit update]
+
+    def index
+      @students = accessible_students
+    end
 
     def new
       @program_semester = ProgramSemester.find_by(id: params[:program_semester_id])
@@ -50,6 +54,18 @@ module Advisors
     end
 
     private
+
+    def accessible_students
+      scope = if current_user&.role_admin?
+        Student.all
+      elsif current_user&.role_advisor?
+        current_advisor_profile&.advisees || Student.none
+      else
+        Student.none
+      end
+
+      scope.current_records.includes(:user).left_outer_joins(:user).order(Arel.sql("LOWER(COALESCE(users.name, users.email, '')) ASC"))
+    end
 
     def set_student
       @student = Student.find(params[:student_id])

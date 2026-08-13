@@ -86,6 +86,21 @@
           <div class="c-tile__description">Compare self, advisor, and course competency scores.</div>
         <% end %>
       </div>
+
+      <div class="c-card c-card--interactive c-card--hover c-card--lift c-tile c-tile--compact">
+        <%= link_to advisors_meeting_recaps_path, class: "c-tile__link" do %>
+          <div class="c-tile__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" focusable="false">
+              <path d="M14 3v5a2 2 0 0 0 2 2h5" />
+              <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" />
+              <path d="M9 13h6" />
+              <path d="M9 17h4" />
+            </svg>
+          </div>
+          <div class="c-tile__title">Meeting Recaps</div>
+          <div class="c-tile__description">Record initial, midpoint, and final advising meeting notes.</div>
+        <% end %>
+      </div>
     </div>
   </section>
 
