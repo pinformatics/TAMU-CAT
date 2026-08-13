@@ -761,6 +761,26 @@
   filter: brightness(0.92);
 }
 
+.btn-success {
+  background-color: var(--success-color);
+  color: var(--white);
+  border-color: var(--success-color);
+}
+
+.btn-success:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.btn-warning {
+  background-color: var(--warning-color);
+  color: var(--white);
+  border-color: var(--warning-color);
+}
+
+.btn-warning:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
 .btn-ghost {
   background-color: transparent;
   color: var(--gray-600);

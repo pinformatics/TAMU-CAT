@@ -39,11 +39,11 @@
                 <% if recap %>
                   <%= link_to "#{AdvisorMeetingRecap::MEETING_TYPE_LABELS.fetch(meeting_type)} — saved",
                         edit_advisors_student_meeting_recap_path(@student, recap),
-                        class: button_classes(:secondary) %>
+                        class: button_classes(:success) %>
                 <% else %>
                   <%= link_to "Add #{AdvisorMeetingRecap::MEETING_TYPE_LABELS.fetch(meeting_type)} recap",
                         new_advisors_student_meeting_recap_path(@student, program_semester_id: semester.id, meeting_type: meeting_type),
-                        class: button_classes(:secondary) %>
+                        class: button_classes(:warning) %>
                 <% end %>
               <% end %>
             </div>

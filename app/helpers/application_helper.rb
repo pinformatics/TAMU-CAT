@@ -170,6 +170,10 @@ module ApplicationHelper
       "btn-subtle"
     when :danger
       "btn-danger"
+    when :success
+      "btn-success"
+    when :warning
+      "btn-warning"
     else
       "btn-secondary"
     end
