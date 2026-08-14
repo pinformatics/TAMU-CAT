@@ -228,6 +228,58 @@
         display: block;
         width: 100%;
       }
+
+      /*
+        wkhtmltopdf renders with a very old WebKit that doesn't support the
+        CSS flexbox `gap` property -- flex rows using `gap` for spacing
+        collapse their spacing entirely, causing labels/bars/values to
+        overlap. Use table/table-cell display instead (like
+        .chart-horizontal above), which renders reliably.
+      */
+      .chart-metric-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .chart-metric-card__title {
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+        color: #0f172a;
+      }
+
+      .chart-metric-row {
+        display: table;
+        width: 100%;
+        table-layout: fixed;
+        margin-bottom: 0.35rem;
+      }
+
+      .chart-metric-row__label {
+        display: table-cell;
+        width: 110px;
+        font-size: 0.85rem;
+        color: #475569;
+        vertical-align: middle;
+        padding-right: 0.5rem;
+      }
+
+      .chart-metric-row__track {
+        display: table-cell;
+        background-color: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+        vertical-align: middle;
+      }
+
+      .chart-metric-row__fill {
+        display: block;
+        color: #fff;
+        padding: 0.15rem 0.6rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
+      }
     </style>
   </head>
   <body>

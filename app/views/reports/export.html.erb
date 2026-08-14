@@ -118,37 +118,9 @@
             <% advisor_width = [[advisor_width, 0.0].max, 100.0].min %>
             <% course_width = [[course_width, 0.0].max, 100.0].min %>
 
-              <div style="border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 0.75rem;">
-                <div style="font-weight: 600; margin-bottom: 0.35rem; color: #0f172a;">
-                  <%= entry[:name] %>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Student %" : "Student Avg" %></span>
-                    <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                      <div style="background-color: #500000; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', student_width) %>%; min-width: 2rem;">
-                        <%= percent_mode ? number_to_percentage(student_value, precision: 1) : number_with_precision(student_value, precision: 2) %>
-                      </div>
-                    </div>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Advisor %" : "Advisor Avg" %></span>
-                    <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                      <div style="background-color: #2563eb; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', advisor_width) %>%; min-width: 2rem;">
-                        <%= percent_mode ? number_to_percentage(advisor_value, precision: 1) : number_with_precision(advisor_value, precision: 2) %>
-                      </div>
-                    </div>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Course %" : "Course Avg" %></span>
-                    <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                      <div style="background-color: #c2410c; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', course_width) %>%; min-width: 2rem;">
-                        <%= percent_mode ? number_to_percentage(course_value, precision: 1) : number_with_precision(entry[:course_average], precision: 2) %>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <%= render "reports/metric_bar_card", title: entry[:name], percent_mode:,
+                  student_value:, advisor_value:, course_value:,
+                  student_width:, advisor_width:, course_width: %>
             <% end %>
           </div>
         </div>
@@ -243,37 +215,9 @@
             <% advisor_width = [[advisor_width, 0.0].max, 100.0].min %>
             <% course_width = [[course_width, 0.0].max, 100.0].min %>
 
-            <div style="border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 0.75rem;">
-              <div style="font-weight: 600; margin-bottom: 0.35rem; color: #0f172a;">
-                <%= item[:name] %>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Student %" : "Student Avg" %></span>
-                  <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                    <div style="background-color: #500000; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', student_width) %>%; min-width: 2rem;">
-                      <%= percent_mode ? number_to_percentage(student_value, precision: 1) : number_with_precision(student_value, precision: 2) %>
-                    </div>
-                  </div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Advisor %" : "Advisor Avg" %></span>
-                  <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                    <div style="background-color: #2563eb; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', advisor_width) %>%; min-width: 2rem;">
-                      <%= percent_mode ? number_to_percentage(advisor_value, precision: 1) : number_with_precision(advisor_value, precision: 2) %>
-                    </div>
-                  </div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Course %" : "Course Avg" %></span>
-                  <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                    <div style="background-color: #c2410c; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', course_width) %>%; min-width: 2rem;">
-                      <%= percent_mode ? number_to_percentage(course_value, precision: 1) : number_with_precision(item[:course_average], precision: 2) %>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <%= render "reports/metric_bar_card", title: item[:name], percent_mode:,
+                  student_value:, advisor_value:, course_value:,
+                  student_width:, advisor_width:, course_width: %>
           <% end %>
         </div>
       </div>
@@ -620,37 +564,9 @@
               <% advisor_width = [[advisor_width, 0.0].max, 100.0].min %>
               <% course_width = [[course_width, 0.0].max, 100.0].min %>
 
-              <div style="border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 0.75rem;">
-                <div style="font-weight: 600; margin-bottom: 0.35rem; color: #0f172a;">
-                  <%= point[:label] %>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Student %" : "Student Avg" %></span>
-                    <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                      <div style="background-color: #500000; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', student_width) %>%; min-width: 2rem;">
-                        <%= percent_mode ? number_to_percentage(student_value, precision: 1) : number_with_precision(student_value, precision: 2) %>
-                      </div>
-                    </div>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Advisor %" : "Advisor Avg" %></span>
-                    <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                      <div style="background-color: #2563eb; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', advisor_width) %>%; min-width: 2rem;">
-                        <%= percent_mode ? number_to_percentage(advisor_value, precision: 1) : number_with_precision(advisor_value, precision: 2) %>
-                      </div>
-                    </div>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="flex: 0 0 110px; font-size: 0.85rem; color: #475569;"><%= percent_mode ? "Course %" : "Course Avg" %></span>
-                    <div style="flex: 1; background-color: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                      <div style="background-color: #c2410c; color: #fff; padding: 0.15rem 0.6rem; font-size: 0.85rem; width: <%= format('%.2f', course_width) %>%; min-width: 2rem;">
-                        <%= percent_mode ? number_to_percentage(course_value, precision: 1) : number_with_precision(course_value, precision: 2) %>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <%= render "reports/metric_bar_card", title: point[:label], percent_mode:,
+                    student_value:, advisor_value:, course_value:,
+                    student_width:, advisor_width:, course_width: %>
             <% end %>
           </div>
         </div>
