@@ -98,10 +98,6 @@
             <%= percent_mode ? "Student %" : "Student Avg" %>
           </span>
           <span class="chart-legend__item">
-            <span class="chart-legend__swatch" style="background-color: #2563eb"></span>
-            <%= percent_mode ? "Advisor %" : "Advisor Avg" %>
-          </span>
-          <span class="chart-legend__item">
             <span class="chart-legend__swatch" style="background-color: #c2410c"></span>
             <%= percent_mode ? "Course %" : "Course Avg" %>
           </span>
@@ -109,18 +105,15 @@
         <div class="space-y-3">
           <% competencies.each do |entry| %>
             <% student_value = percent_mode ? entry[:student_target_percent].to_f : entry[:student_average].to_f %>
-            <% advisor_value = percent_mode ? entry[:advisor_target_percent].to_f : entry[:advisor_average].to_f %>
             <% course_value = percent_mode ? entry[:course_target_percent].to_f : entry[:course_average].to_f %>
             <% student_width = score_scale.positive? ? (student_value / score_scale * 100.0) : 0.0 %>
-            <% advisor_width = score_scale.positive? ? (advisor_value / score_scale * 100.0) : 0.0 %>
             <% course_width = score_scale.positive? ? (course_value / score_scale * 100.0) : 0.0 %>
             <% student_width = [[student_width, 0.0].max, 100.0].min %>
-            <% advisor_width = [[advisor_width, 0.0].max, 100.0].min %>
             <% course_width = [[course_width, 0.0].max, 100.0].min %>
 
             <%= render "reports/metric_bar_card", title: entry[:name], percent_mode:,
-                  student_value:, advisor_value:, course_value:,
-                  student_width:, advisor_width:, course_width: %>
+                  student_value:, course_value:,
+                  student_width:, course_width: %>
             <% end %>
           </div>
         </div>
@@ -133,12 +126,9 @@
           <tr>
             <th>Competency</th>
             <th>Student Avg</th>
-            <th>Advisor Avg</th>
             <th>Course Avg</th>
             <th>Student % Meeting Target</th>
-            <th>Advisor % Meeting Target</th>
             <th>Course % Meeting Target</th>
-            <th>Gap</th>
             <th>Trend %</th>
             <th>Status</th>
             <th>Achieved</th>
@@ -154,12 +144,9 @@
             <tr>
               <td><%= entry[:name] %></td>
               <td><%= number_with_precision(entry[:student_average], precision: 2) %></td>
-              <td><%= number_with_precision(entry[:advisor_average], precision: 2) %></td>
               <td><%= number_with_precision(entry[:course_average], precision: 2) %></td>
               <td><%= entry[:student_target_percent].present? ? number_to_percentage(entry[:student_target_percent], precision: 1) : "—" %></td>
-              <td><%= entry[:advisor_target_percent].present? ? number_to_percentage(entry[:advisor_target_percent], precision: 1) : "—" %></td>
               <td><%= entry[:course_target_percent].present? ? number_to_percentage(entry[:course_target_percent], precision: 1) : "—" %></td>
-              <td><%= number_with_precision(entry[:gap], precision: 2) %></td>
               <td><%= entry[:change].present? ? number_to_percentage(entry[:change], precision: 1) : "—" %></td>
               <td><%= entry[:status].to_s.titleize %></td>
               <td><%= entry[:achieved_count] %></td>
@@ -195,10 +182,6 @@
             <%= percent_mode ? "Student %" : "Student Avg" %>
           </span>
           <span class="chart-legend__item">
-            <span class="chart-legend__swatch" style="background-color: #2563eb"></span>
-            <%= percent_mode ? "Advisor %" : "Advisor Avg" %>
-          </span>
-          <span class="chart-legend__item">
             <span class="chart-legend__swatch" style="background-color: #c2410c"></span>
             <%= percent_mode ? "Course %" : "Course Avg" %>
           </span>
@@ -206,18 +189,15 @@
         <div class="space-y-3">
           <% competency_items.each do |item| %>
             <% student_value = percent_mode ? item[:student_target_percent].to_f : item[:student_average].to_f %>
-            <% advisor_value = percent_mode ? item[:advisor_target_percent].to_f : item[:advisor_average].to_f %>
             <% course_value = percent_mode ? item[:course_target_percent].to_f : item[:course_average].to_f %>
             <% student_width = score_scale.positive? ? (student_value / score_scale * 100.0) : 0.0 %>
-            <% advisor_width = score_scale.positive? ? (advisor_value / score_scale * 100.0) : 0.0 %>
             <% course_width = score_scale.positive? ? (course_value / score_scale * 100.0) : 0.0 %>
             <% student_width = [[student_width, 0.0].max, 100.0].min %>
-            <% advisor_width = [[advisor_width, 0.0].max, 100.0].min %>
             <% course_width = [[course_width, 0.0].max, 100.0].min %>
 
             <%= render "reports/metric_bar_card", title: item[:name], percent_mode:,
-                  student_value:, advisor_value:, course_value:,
-                  student_width:, advisor_width:, course_width: %>
+                  student_value:, course_value:,
+                  student_width:, course_width: %>
           <% end %>
         </div>
       </div>
@@ -229,12 +209,9 @@
             <th>Competency</th>
             <th>Domain</th>
             <th>Student Avg</th>
-            <th>Advisor Avg</th>
             <th>Course Avg</th>
             <th>Student % Meeting Target</th>
-            <th>Advisor % Meeting Target</th>
             <th>Course % Meeting Target</th>
-            <th>Gap</th>
             <th>Achieved</th>
             <th>Not Met</th>
             <th>Not Assessed</th>
@@ -249,12 +226,9 @@
               <td><%= item[:name] %></td>
               <td><%= item[:domain_name] %></td>
               <td><%= number_with_precision(item[:student_average], precision: 2) %></td>
-              <td><%= number_with_precision(item[:advisor_average], precision: 2) %></td>
               <td><%= number_with_precision(item[:course_average], precision: 2) %></td>
               <td><%= item[:student_target_percent].present? ? number_to_percentage(item[:student_target_percent], precision: 1) : "—" %></td>
-              <td><%= item[:advisor_target_percent].present? ? number_to_percentage(item[:advisor_target_percent], precision: 1) : "—" %></td>
               <td><%= item[:course_target_percent].present? ? number_to_percentage(item[:course_target_percent], precision: 1) : "—" %></td>
-              <td><%= number_with_precision(item[:gap], precision: 2) %></td>
               <td><%= item[:achieved_count] %></td>
               <td><%= item[:not_met_count] %></td>
               <td><%= item[:not_assessed_count] %></td>
@@ -334,8 +308,6 @@
             <tr>
               <th>Track</th>
               <th>Student Avg</th>
-              <th>Advisor Avg</th>
-              <th>Gap</th>
               <th>On Track %</th>
               <th>Submissions</th>
               <th>Achieved</th>
@@ -351,8 +323,6 @@
               <tr>
                 <td><%= entry[:track] %></td>
                 <td><%= number_with_precision(entry[:student_average], precision: 2) %></td>
-                <td><%= number_with_precision(entry[:advisor_average], precision: 2) %></td>
-                <td><%= number_with_precision(entry[:gap], precision: 2) %></td>
                 <td><%= entry[:achieved_percent].present? ? number_to_percentage(entry[:achieved_percent], precision: 1) : "—" %></td>
                 <td><%= entry[:submissions] %></td>
                 <td><%= entry[:achieved_count] %></td>
@@ -543,10 +513,6 @@
               <%= percent_mode ? "Student %" : "Student Avg" %>
             </span>
             <span class="chart-legend__item">
-              <span class="chart-legend__swatch" style="background-color: #2563eb"></span>
-              <%= percent_mode ? "Advisor %" : "Advisor Avg" %>
-            </span>
-            <span class="chart-legend__item">
               <span class="chart-legend__swatch" style="background-color: #c2410c"></span>
               <%= percent_mode ? "Course %" : "Course Avg" %>
             </span>
@@ -555,18 +521,15 @@
           <div class="space-y-3">
             <% timeline_points.each do |point| %>
               <% student_value = percent_mode ? point[:student_target_percent].to_f : point[:student].to_f %>
-              <% advisor_value = percent_mode ? point[:advisor_target_percent].to_f : point[:advisor].to_f %>
               <% course_value = percent_mode ? point[:course_target_percent].to_f : point[:course].to_f %>
               <% student_width = score_scale.positive? ? (student_value / score_scale * 100.0) : 0.0 %>
-              <% advisor_width = score_scale.positive? ? (advisor_value / score_scale * 100.0) : 0.0 %>
               <% course_width = score_scale.positive? ? (course_value / score_scale * 100.0) : 0.0 %>
               <% student_width = [[student_width, 0.0].max, 100.0].min %>
-              <% advisor_width = [[advisor_width, 0.0].max, 100.0].min %>
               <% course_width = [[course_width, 0.0].max, 100.0].min %>
 
               <%= render "reports/metric_bar_card", title: point[:label], percent_mode:,
-                    student_value:, advisor_value:, course_value:,
-                    student_width:, advisor_width:, course_width: %>
+                    student_value:, course_value:,
+                    student_width:, course_width: %>
             <% end %>
           </div>
         </div>
@@ -578,7 +541,6 @@
           <tr>
             <th>Month</th>
             <th>Student % Meeting Target</th>
-            <th>Advisor % Meeting Target</th>
             <th>Course % Meeting Target</th>
           </tr>
         </thead>
@@ -587,7 +549,6 @@
             <tr>
               <td><%= point[:label] %></td>
               <td><%= point[:student_target_percent].present? ? number_to_percentage(point[:student_target_percent], precision: 1) : "—" %></td>
-              <td><%= point[:advisor_target_percent].present? ? number_to_percentage(point[:advisor_target_percent], precision: 1) : "—" %></td>
               <td><%= point[:course_target_percent].present? ? number_to_percentage(point[:course_target_percent], precision: 1) : "—" %></td>
             </tr>
           <% end %>

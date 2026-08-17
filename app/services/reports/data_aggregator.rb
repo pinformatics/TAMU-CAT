@@ -514,11 +514,30 @@ module Reports
       end
     end
 
+    # Sections whose questions aren't 1-5 competency scores, so their answers
+    # must never flow into score averaging (see base_scope).
+    NON_COMPETENCY_SECTION_TITLES = [ "Professional Snapshot", "Portfolio Review", "Evidence" ].freeze
+
     def base_scope
+      # Excludes non-competency sections. Without this, answers sharing the
+      # same StudentQuestion table (e.g. "Professional Snapshot" section
+      # questions like "how many hours per week do you work", answered as a
+      # plain integer) get parsed as a 1-5 competency score by
+      # build_dataset_row and inflate averages well past the real 1-5 scale,
+      # particularly in the Monthly Trend chart which averages dataset_rows
+      # without any further category filtering. Categories with no section
+      # at all (nil) are left alone rather than excluded, since that's not
+      # a signal that a category is non-competency -- just that it predates
+      # (or, in tests, never bothered to set) the survey_sections feature.
       StudentQuestion
         .joins(:student)
         .merge(accessible_student_relation)
         .joins(question: { category: { survey: :program_semester } })
+        .joins("LEFT OUTER JOIN survey_sections ON survey_sections.id = categories.survey_section_id")
+        .where(
+          "survey_sections.title IS NULL OR LOWER(survey_sections.title) NOT IN (?)",
+          NON_COMPETENCY_SECTION_TITLES.map(&:downcase)
+        )
         .where.not(response_value: [ nil, "" ])
     end
 

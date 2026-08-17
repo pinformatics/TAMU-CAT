@@ -11,15 +11,6 @@
   </div>
 
   <div class="chart-metric-row">
-    <div class="chart-metric-row__label"><%= percent_mode ? "Advisor %" : "Advisor Avg" %></div>
-    <div class="chart-metric-row__track">
-      <div class="chart-metric-row__fill" style="background-color: #2563eb; width: <%= format('%.2f', advisor_width) %>%; min-width: 2rem;">
-        <%= percent_mode ? number_to_percentage(advisor_value, precision: 1) : number_with_precision(advisor_value, precision: 2) %>
-      </div>
-    </div>
-  </div>
-
-  <div class="chart-metric-row">
     <div class="chart-metric-row__label"><%= percent_mode ? "Course %" : "Course Avg" %></div>
     <div class="chart-metric-row__track">
       <div class="chart-metric-row__fill" style="background-color: #c2410c; width: <%= format('%.2f', course_width) %>%; min-width: 2rem;">
