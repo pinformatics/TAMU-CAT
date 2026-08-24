@@ -1,5 +1,7 @@
 require "test_helper"
 require "base64"
+require "digest"
+require "stringio"
 
 module GradeImports
   class BatchImportJobTest < ActiveJob::TestCase
@@ -37,6 +39,28 @@ module GradeImports
       activity = AdminActivityLog.order(:created_at).last
       assert_equal "grade_import_action", activity.action
       assert_equal @admin, activity.admin
+    end
+
+    test "perform_now processes a stored upload id and creates evidence" do
+      grade_file = stored_direct_competency_file
+
+      assert_difference -> { GradeCompetencyEvidence.count }, 1 do
+        assert_difference -> { AdminActivityLog.count }, 1 do
+          GradeImports::BatchImportJob.perform_now(
+            batch_id: @batch.id,
+            uploaded_by_id: @admin.id,
+            dry_run: true,
+            grade_import_file_ids: [ grade_file.id ]
+          )
+        end
+      end
+
+      @batch.reload
+      assert_equal "completed", @batch.status
+      assert_equal "processed", grade_file.reload.status
+      evidence = @batch.grade_competency_evidences.first
+      assert_equal 5, evidence.mapped_level
+      assert_equal 3, evidence.course_target_level
     end
 
     test "failure path marks the batch failed and notifies admins" do
@@ -98,6 +122,39 @@ module GradeImports
       assert_equal 1, scheduled_job.arguments["arguments"].first["resume_attempt"]
     end
 
+    test "a paused stored upload resumes with file ids instead of a base64 payload" do
+      grade_file = stored_direct_competency_file
+      batch = @batch
+      student_id = @student.student_id
+
+      processor_double = Object.new
+      processor_double.define_singleton_method(:call) do
+        grade_file.update!(status: "paused")
+        GradeCompetencyEvidence.create!(
+          grade_import_batch: batch, grade_import_file: grade_file, student_id: student_id,
+          competency_title: "Systems Thinking", raw_grade: 3, mapped_level: 3,
+          source_key: "stored-fp-a", import_fingerprint: "stored-fp-a"
+        )
+        batch.update!(status: "processing", summary: batch.summary.merge("needs_continuation" => true))
+      end
+
+      GradeImports::BatchProcessor.stub(:new, ->(*_args, **_kwargs) { processor_double }) do
+        assert_difference -> { SolidQueue::Job.where(class_name: "GradeImports::BatchImportJob").count }, 1 do
+          GradeImports::BatchImportJob.perform_now(
+            batch_id: batch.id,
+            uploaded_by_id: @admin.id,
+            dry_run: true,
+            grade_import_file_ids: [ grade_file.id ]
+          )
+        end
+      end
+
+      scheduled_job = SolidQueue::Job.where(class_name: "GradeImports::BatchImportJob").order(:id).last
+      arguments = scheduled_job.arguments["arguments"].first
+      assert_equal [ grade_file.id ], arguments["grade_import_file_ids"]
+      refute arguments.key?("files_payload")
+    end
+
     test "gives up and notifies admins when a paused attempt makes no further progress" do
       files_payload = [ direct_competency_csv_payload ]
       batch = @batch
@@ -139,16 +196,34 @@ module GradeImports
     private
 
     def direct_competency_csv_payload
-      csv_content = <<~CSV
-        Student name,Student ID,Student SIS ID,EMHA competencies > Legal & Ethical Bases for Health Services and Health Systems result,EMHA competencies > Legal & Ethical Bases for Health Services and Health Systems mastery points
-        #{@student.user.name},#{@student.student_id},#{@student.uin},5,3
-      CSV
-
       {
         "filename" => "PHPM_790_001.csv",
         "content_type" => "text/csv",
-        "base64" => Base64.strict_encode64(csv_content)
+        "base64" => Base64.strict_encode64(direct_competency_csv_content)
       }
+    end
+
+    def stored_direct_competency_file
+      csv_content = direct_competency_csv_content
+      grade_file = @batch.grade_import_files.create!(
+        file_name: "PHPM_790_001.csv",
+        file_checksum: Digest::SHA256.hexdigest(csv_content),
+        content_type: "text/csv",
+        status: "pending"
+      )
+      grade_file.source_file.attach(
+        io: StringIO.new(csv_content),
+        filename: "PHPM_790_001.csv",
+        content_type: "text/csv"
+      )
+      grade_file
+    end
+
+    def direct_competency_csv_content
+      <<~CSV
+        Student name,Student ID,Student SIS ID,EMHA competencies > Legal & Ethical Bases for Health Services and Health Systems result,EMHA competencies > Legal & Ethical Bases for Health Services and Health Systems mastery points
+        #{@student.user.name},#{@student.student_id},#{@student.uin},5,3
+      CSV
     end
   end
 end

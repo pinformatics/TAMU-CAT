@@ -43,8 +43,14 @@
 /config/deploy*.yml
 /.kamal
 
-# Ignore development files
+# Ignore development and local tool files
 /.devcontainer
+/.codex
+/.claude
+/.cursor
+/.windsurf
+/.ruby-lsp
+/coverage
 
 # Ignore Docker-related files
 /.dockerignore

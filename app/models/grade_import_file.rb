@@ -1,8 +1,10 @@
 class GradeImportFile < ApplicationRecord
-  STATUSES = %w[pending processed failed paused].freeze
+  STATUSES = %w[pending processing processed failed paused].freeze
 
   belongs_to :grade_import_batch
   belongs_to :course_offering, optional: true
+  has_one_attached :source_file
+
   has_many :grade_competency_evidences, dependent: :destroy
   has_many :grade_import_pending_rows, dependent: :destroy
 

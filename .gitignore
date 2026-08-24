@@ -10,6 +10,9 @@
 # Ignore all environment files.
 /.env*
 
+# Local Docker overrides.
+/docker-compose.override.yml
+
 # Ignore all logfiles and tempfiles.
 /log/*
 /tmp/*
@@ -27,10 +30,15 @@
 /tmp/storage/*
 !/tmp/storage/
 !/tmp/storage/.keep
+/db/*.sqlite3
+/db/*.sqlite3-*
 
 # Additional tmp artifacts created by tests or tooling.
 /tmp/cache
 /tmp/screenshots/
+*.tmp
+*.bak
+*.orig
 
 # Rails asset pipeline output (generated during deployment)
 /public/assets
@@ -44,7 +52,8 @@
 /vendor/cache/
 
 # Front-end build outputs
-/app/assets/builds/
+/app/assets/builds/*
+!/app/assets/builds/
 !/app/assets/builds/.keep
 /app/javascript/packs/
 /node_modules/
@@ -62,12 +71,26 @@ doc/
 
 # Editor and OS cruft
 .DS_Store
+Thumbs.db
+desktop.ini
 /.idea/
 /.vscode/
+/.ruby-lsp/
 /.byebug_history
+
+# Local AI assistant state. Repo skills are intentionally commit-able.
+/.codex/*
+!/.codex/skills/
+!/.codex/skills/**
+/.claude/*
+!/.claude/skills/
+!/.claude/skills/**
+/.cursor/
+/.windsurf/
 
 # Development CA certificates (environment-specific)
 mkcert_development_CA_*.crt
+!mkcert_development_CA_placeholder.crt
 
 .copilot-instructions.md
 

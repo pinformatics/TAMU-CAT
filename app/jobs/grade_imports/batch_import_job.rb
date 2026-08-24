@@ -9,11 +9,12 @@ module GradeImports
   # in the app has ever been verified running genuinely async in production.
   #
   # Uploaded files can't be passed as ActionDispatch::Http::UploadedFile
-  # objects (their Tempfiles are deleted when the request ends, and Heroku
-  # dynos don't share a filesystem), so the controller reads each file's
-  # bytes into `files_payload` before enqueuing, and this job reconstructs
-  # local Tempfiles that satisfy the same duck-type BatchProcessor already
-  # expects (.path, .original_filename, .content_type).
+  # objects because their Tempfiles are deleted when the request ends. The
+  # controller stores uploads on GradeImportFile#source_file first, then this
+  # job streams those blobs into local Tempfiles that satisfy the same
+  # duck-type BatchProcessor already expects (.path, .original_filename,
+  # .content_type). Legacy base64 payloads are still accepted so already
+  # queued jobs from an older deployment can drain safely.
   class BatchImportJob < ApplicationJob
     self.queue_adapter = :solid_queue
 
@@ -23,7 +24,7 @@ module GradeImports
     # megabytes of encoded bytes for every import.
     self.log_arguments = false
 
-    UploadedFilePayload = Struct.new(:path, :original_filename, :content_type)
+    UploadedFilePayload = Struct.new(:path, :original_filename, :content_type, :grade_import_file_id)
 
     # Safety valve for GradeImports::BatchProcessor's memory guard (see
     # MemoryGuardPause there): caps how many times this job will
@@ -34,23 +35,15 @@ module GradeImports
     MAX_RESUME_ATTEMPTS = 40
     RESUME_DELAY = 20.seconds
 
-    def perform(batch_id:, uploaded_by_id:, dry_run:, files_payload:, resume_attempt: 0)
+    def perform(batch_id:, uploaded_by_id:, dry_run:, files_payload: nil, grade_import_file_ids: nil, resume_attempt: 0)
       batch = GradeImportBatch.find(batch_id)
       uploaded_by = User.find_by(id: uploaded_by_id)
       tempfiles = []
 
-      files = files_payload.map do |payload|
-        tempfile = Tempfile.new([ "grade_import", File.extname(payload["filename"].to_s) ])
-        tempfile.binmode
-        tempfile.write(Base64.decode64(payload["base64"]))
-        tempfile.flush
-        tempfiles << tempfile
-        # Drop the (often multi-MB) base64 string as soon as it's decoded,
-        # rather than keeping it alive in files_payload for the rest of the
-        # job's lifetime. If this attempt pauses and needs to resume, the
-        # tempfile on disk is re-encoded fresh instead.
-        payload["base64"] = nil
-        UploadedFilePayload.new(tempfile.path, payload["filename"], payload["content_type"])
+      files = if grade_import_file_ids.present?
+        files_from_stored_uploads(batch: batch, grade_import_file_ids: grade_import_file_ids, tempfiles: tempfiles)
+      else
+        files_from_legacy_payload(files_payload: files_payload, tempfiles: tempfiles)
       end
       GC.start
 
@@ -87,6 +80,38 @@ module GradeImports
 
     private
 
+    def files_from_stored_uploads(batch:, grade_import_file_ids:, tempfiles:)
+      files_by_id = batch.grade_import_files.where(id: grade_import_file_ids).index_by(&:id)
+
+      grade_import_file_ids.map do |file_id|
+        grade_file = files_by_id.fetch(file_id.to_i)
+        raise "Stored upload is missing for #{grade_file.file_name}" unless grade_file.source_file.attached?
+
+        tempfile = Tempfile.new([ "grade_import", File.extname(grade_file.file_name.to_s) ])
+        tempfile.binmode
+        grade_file.source_file.download { |chunk| tempfile.write(chunk) }
+        tempfile.flush
+        tempfiles << tempfile
+        UploadedFilePayload.new(tempfile.path, grade_file.file_name, grade_file.content_type, grade_file.id)
+      end
+    end
+
+    def files_from_legacy_payload(files_payload:, tempfiles:)
+      Array(files_payload).map do |payload|
+        tempfile = Tempfile.new([ "grade_import", File.extname(payload["filename"].to_s) ])
+        tempfile.binmode
+        tempfile.write(Base64.decode64(payload["base64"]))
+        tempfile.flush
+        tempfiles << tempfile
+        # Drop the (often multi-MB) base64 string as soon as it's decoded,
+        # rather than keeping it alive in files_payload for the rest of the
+        # job's lifetime. If this attempt pauses and needs to resume, the
+        # tempfile on disk is re-encoded fresh instead.
+        payload["base64"] = nil
+        UploadedFilePayload.new(tempfile.path, payload["filename"], payload["content_type"])
+      end
+    end
+
     # Re-enqueues this job to continue a paused import, as long as the last
     # attempt actually made progress -- otherwise (e.g. the process's
     # baseline memory alone already exceeds the guard's ceiling, so nothing
@@ -112,6 +137,17 @@ module GradeImports
       end
 
       batch.update!(summary: batch.summary.merge("last_resume_progress" => progress))
+
+      if files.all? { |file| file.grade_import_file_id.present? }
+        self.class.set(wait: RESUME_DELAY).perform_later(
+          batch_id: batch.id,
+          uploaded_by_id: uploaded_by_id,
+          dry_run: dry_run,
+          grade_import_file_ids: files.map(&:grade_import_file_id),
+          resume_attempt: resume_attempt + 1
+        )
+        return
+      end
 
       resumed_files_payload = files.map do |file|
         {

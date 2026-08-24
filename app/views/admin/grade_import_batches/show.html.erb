@@ -13,9 +13,9 @@
   update_semester: "Apply the selected semester to this batch so semester filters include it correctly.",
   new_batch: "Start a new grade import batch upload."
 } %>
-<% batch_still_processing = @batch.status.in?(%w[pending processing]) %>
+<% batch_still_processing = @batch_still_processing %>
 <% if batch_still_processing %>
-  <div data-controller="auto-refresh" data-auto-refresh-interval-value="5000" hidden></div>
+  <div data-controller="auto-refresh" data-auto-refresh-interval-value="3000" hidden></div>
 <% end %>
 <% target_review_required = @batch.dry_run? && @target_warning_summary[:requires_review] %>
 <% has_file_issues = @failed_row_count.positive? || @duplicate_upload_warnings.positive? || @duplicate_warnings.positive? || target_review_required %>
@@ -49,6 +49,9 @@
     </section>
 
     <section class="c-card u-stack u-stack--xl">
+      <% if batch_still_processing %>
+        <%= render "processing_progress", batch: @batch, files: @files, import_progress: @import_progress %>
+      <% else %>
       <% if @batch.summary["rolled_back_at"].present? %>
         <div class="c-callout">
           Rolled back at <%= @batch.summary["rolled_back_at"] %>.
@@ -442,7 +445,7 @@
         <div class="c-card c-card--tight c-stat">
           <span class="c-eyebrow">Derived Ratings</span>
           <strong class="c-value c-value--xl"><%= @batch.rating_count %></strong>
-          <p class="c-help"><%= pluralize(@duplicate_warnings, "duplicate suppressed row") %></p>
+          <p class="c-help"><%= pluralize(@duplicate_warnings, "duplicate value warning") %></p>
         </div>
         <div class="c-card c-card--tight c-stat">
           <span class="c-eyebrow">Duplicate Files</span>
@@ -582,11 +585,23 @@
                 <% duplicate_warning_count = debug["duplicate_warning_count"].to_i + parsed["duplicate_file_upload_count"].to_i %>
                 <% pending_count = file.pending_rows.to_i %>
                 <% attention_count = parse_error_count + mapping_warning_count + duplicate_warning_count + pending_count %>
+                <% row_course_codes = @course_codes_by_file.fetch(file.id, []) %>
+                <% row_course_label = if parsed["direct_course_code"].present?
+                  parsed["direct_course_code"]
+                elsif row_course_codes.one?
+                  row_course_codes.first
+                elsif row_course_codes.any?
+                  more_course_count = row_course_codes.size - 3
+                  more_course_label = more_course_count.positive? ? " +#{more_course_count} more" : ""
+                  "#{row_course_codes.first(3).join(', ')}#{more_course_label}"
+                else
+                  file.course_offering&.display_code
+                end %>
                 <tr>
                   <td>
                     <span class="c-table__title"><%= file.file_name %></span>
-                    <% if parsed["direct_course_code"].present? || file.course_offering&.display_code.present? %>
-                      <span class="c-table__meta"><%= parsed["direct_course_code"].presence || file.course_offering&.display_code %></span>
+                    <% if row_course_label.present? %>
+                      <span class="c-table__meta"><%= row_course_label %></span>
                     <% end %>
                   </td>
                   <td><%= format_label %></td>
@@ -633,7 +648,13 @@
             <% mappings = Array(parsed["mapping_rows_preview"]) %>
             <% direct_competencies = Array(parsed["direct_competencies_preview"] || debug["direct_competencies_preview"]) %>
             <% mapping_course_codes = mappings.filter_map { |mapping| mapping["course_code"] || mapping[:course_code] }.compact_blank.uniq.sort %>
-            <% course_label = parsed["direct_course_code"].presence || file.course_offering&.display_code || (mapping_course_codes.one? ? mapping_course_codes.first : nil) || (mapping_course_codes.any? ? mapping_course_codes.to_sentence : "Detected from file, section, or mapping rows") %>
+            <% row_course_codes = @course_codes_by_file.fetch(file.id, []) %>
+            <% course_label = parsed["direct_course_code"].presence ||
+                              (row_course_codes.one? ? row_course_codes.first : nil) ||
+                              (row_course_codes.any? ? row_course_codes.to_sentence : nil) ||
+                              file.course_offering&.display_code ||
+                              (mapping_course_codes.one? ? mapping_course_codes.first : nil) ||
+                              (mapping_course_codes.any? ? mapping_course_codes.to_sentence : "Detected from file, section, or mapping rows") %>
             <% identifier_column = debug["student_identifier_column"] %>
             <% student_identifier_label = if mode == "direct_competency"
               "Student SIS ID, Student ID, then student name"
@@ -666,7 +687,7 @@
             <% Array(debug["duplicate_warnings_preview"]).each do |warning| %>
               <% review_items << {
                 issue: "Duplicate values",
-                type: "Duplicate suppressed",
+                type: "Duplicate warning",
                 row: warning["row"].presence || "-",
                 message: warning["message"] || warning
               } %>
@@ -738,7 +759,7 @@
                   <p class="c-table__title"><%= file.error_rows %></p>
                 </div>
                 <div class="c-review-step">
-                  <p class="c-eyebrow">Duplicate values suppressed</p>
+                  <p class="c-eyebrow">Duplicate value warnings</p>
                   <p class="c-table__title"><%= debug["duplicate_warning_count"].presence || 0 %></p>
                 </div>
               </div>
@@ -1298,6 +1319,7 @@
               title: button_help[:new_batch],
               aria: { label: button_help[:new_batch] } %>
       </div>
+      <% end %>
     </section>
   </div>
 </main>

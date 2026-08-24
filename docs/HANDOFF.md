@@ -33,11 +33,11 @@ The most operationally important admin areas are:
 
 ## Recommended first read order
 
-1. [README.md](../README.md)
-2. [docs/TECHNICAL_HANDOFF.md](TECHNICAL_HANDOFF.md)
-3. [docs/ADMIN_WALKTHROUGH.md](ADMIN_WALKTHROUGH.md)
-4. [docs/ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md)
-5. [docs/GRADE_IMPORTS.md](GRADE_IMPORTS.md)
+1. [docs/AGENT_BRIEF.md](AGENT_BRIEF.md)
+2. [README.md](../README.md)
+3. [docs/ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md)
+4. [docs/GRADE_IMPORTS.md](GRADE_IMPORTS.md)
+5. [docs/TECHNICAL_HANDOFF.md](TECHNICAL_HANDOFF.md)
 6. [docs/PERMISSIONS_AUDIT.md](PERMISSIONS_AUDIT.md)
 7. [docs/KNOWN_ISSUES.md](KNOWN_ISSUES.md)
 8. [docs/NEXT_STEPS.md](NEXT_STEPS.md)

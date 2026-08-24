@@ -1,6 +1,6 @@
 require "csv"
 require "axlsx"
-require "base64"
+require "digest"
 
 class Admin::GradeImportBatchesController < Admin::BaseController
   IMPORT_EXTENSIONS = GradeImports::FileUploadRouter::SUPPORTED_EXTENSIONS
@@ -72,19 +72,13 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       }.compact
     )
 
-    files_payload = files.map do |file|
-      {
-        "filename" => file.original_filename.to_s,
-        "content_type" => file.content_type.to_s,
-        "base64" => Base64.strict_encode64(file.read)
-      }
-    end
+    grade_files = persist_grade_import_uploads!(batch: @batch, files: files)
 
     GradeImports::BatchImportJob.perform_later(
       batch_id: @batch.id,
       uploaded_by_id: current_user.id,
       dry_run: dry_run_requested?,
-      files_payload: files_payload
+      grade_import_file_ids: grade_files.map(&:id)
     )
 
     notice = "Import started. This page will refresh automatically while it processes."
@@ -107,6 +101,9 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @duplicate_warnings = @files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
     @duplicate_upload_warnings = @files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i }
     @validation_summary = validation_summary_for(@files)
+    @import_progress = import_progress_for(@batch, @files)
+    @course_codes_by_file = course_codes_by_file(@batch, @files)
+    @batch_still_processing = import_processing?(@batch, @files)
 
     # While the background import job is still writing rows, none of the
     # per-row review data below is meaningful yet (nothing can be approved,
@@ -116,14 +113,14 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     # auto-refreshes every 5s while pending/processing, so that cost was
     # repeatedly competing with the background job for the same dyno's
     # CPU/GVL time and measurably slowing imports down.
-    if @batch.status.in?(%w[pending processing])
+    if @batch_still_processing
       @ratings = GradeCompetencyRating.none
       @evidences = GradeCompetencyEvidence.none
       @pending_rows = GradeImportPendingRow.none
       @pending_competency_counts_by_file = {}
       @pending_student_counts_by_file = {}
-      @match_rate = nil
-      @pending_row_count = 0
+      @match_rate = match_rate_for(@files)
+      @pending_row_count = @files.sum(&:pending_rows)
       @target_warning_summary = { requires_review: false }
       @target_attainment_by_course = []
       @target_attainment_by_course_and_competency = []
@@ -135,7 +132,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
     @ratings = @batch.grade_competency_ratings.includes(student: :user).order(:competency_title, :student_id).limit(500)
     @evidences = @batch.grade_competency_evidences
-                     .includes(:grade_import_file)
+                     .includes(:grade_import_file, student: :user)
                      .order(:grade_import_file_id, :row_number, :id)
                      .limit(2_000)
     @pending_rows = @batch.grade_import_pending_rows
@@ -680,6 +677,61 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     files.select { |file| IMPORT_EXTENSIONS.include?(File.extname(file.original_filename.to_s).downcase) }
   end
 
+  def persist_grade_import_uploads!(batch:, files:)
+    files.map do |file|
+      file_path = uploaded_file_path(file)
+      file_checksum = Digest::SHA256.file(file_path).hexdigest
+      duplicate_uploads = duplicate_uploads_for_upload(file_checksum)
+      grade_file = batch.grade_import_files.create!(
+        file_name: file.original_filename.to_s,
+        file_checksum: file_checksum,
+        content_type: file.content_type.to_s,
+        status: "pending",
+        parsed_content: {
+          duplicate_file_uploads: duplicate_uploads,
+          duplicate_file_upload_count: duplicate_uploads.size
+        }
+      )
+
+      attach_source_file!(grade_file: grade_file, file: file, file_path: file_path)
+      grade_file
+    end
+  end
+
+  def attach_source_file!(grade_file:, file:, file_path:)
+    File.open(file_path, "rb") do |io|
+      grade_file.source_file.attach(
+        io: io,
+        filename: file.original_filename.to_s,
+        content_type: file.content_type.to_s
+      )
+    end
+  end
+
+  def uploaded_file_path(file)
+    return file.path if file.respond_to?(:path) && file.path.present?
+    return file.tempfile.path if file.respond_to?(:tempfile) && file.tempfile.respond_to?(:path)
+
+    raise "Upload #{file.original_filename} is missing a readable tempfile."
+  end
+
+  def duplicate_uploads_for_upload(file_checksum)
+    GradeImportFile
+      .where(file_checksum: file_checksum)
+      .includes(:grade_import_batch)
+      .order(created_at: :desc)
+      .limit(10)
+      .map do |file|
+        {
+          batch_id: file.grade_import_batch_id,
+          file_id: file.id,
+          file_name: file.file_name,
+          uploaded_at: file.created_at&.iso8601,
+          batch_status: file.grade_import_batch&.status
+        }
+      end
+  end
+
   def reupload_review_reset_summary
     @batch.summary.except(
       "admin_approved_at",
@@ -1199,6 +1251,159 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       duplicate_file_uploads: files.sum { |file| file.parsed_content["duplicate_file_upload_count"].to_i },
       duplicate_rows: files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "duplicate_warning_count").to_i }
     }
+  end
+
+  def import_progress_for(batch, files)
+    files = files.to_a
+    total_files = [ batch.total_files.to_i, files.size ].max
+    finished_files = files.count { |file| file.status.in?(%w[processed failed]) }
+    active_file = files.find { |file| file.status == "processing" } ||
+                  files.find { |file| file.status.in?(%w[pending paused]) }
+    rows_scanned = files.sum { |file| file.parsed_content.dig("grade_sheet_debug", "rows_scanned").to_i }
+    recorded_rows = files.sum { |file| file.imported_rows.to_i + file.pending_rows.to_i + file.error_rows.to_i }
+    processing = import_processing?(batch, files)
+    progress_state = import_progress_state(
+      batch: batch,
+      active_file: active_file,
+      processing: processing,
+      rows_scanned: rows_scanned,
+      recorded_rows: recorded_rows
+    )
+    percent = import_progress_percent(
+      processing: processing,
+      total_files: total_files,
+      finished_files: finished_files,
+      active_file: active_file,
+      rows_scanned: rows_scanned
+    )
+
+    {
+      active_file: active_file,
+      finished_files: finished_files,
+      total_files: total_files,
+      percent: percent,
+      processing: processing,
+      rows_scanned: rows_scanned,
+      recorded_rows: recorded_rows,
+      imported_rows: files.sum(&:imported_rows),
+      pending_rows: files.sum(&:pending_rows),
+      failed_rows: files.sum(&:error_rows),
+      status_label: progress_state[:label],
+      status_message: progress_state[:message],
+      detail_items: progress_state[:detail_items],
+      file_status_counts: files.group_by(&:status).transform_values(&:size),
+      latest_activity_at: ([ batch.updated_at ] + files.map(&:updated_at)).compact.max
+    }
+  end
+
+  def import_processing?(batch, files)
+    batch.status.in?(%w[pending processing]) ||
+      files.any? { |file| file.status.in?(%w[pending processing paused]) }
+  end
+
+  def import_progress_percent(processing:, total_files:, finished_files:, active_file:, rows_scanned:)
+    return 100 unless processing
+    return 8 if total_files.zero?
+
+    completed_share = (finished_files.to_f / total_files) * 100
+    active_share = 100.0 / total_files
+    active_fraction = if active_file&.status == "processing" && rows_scanned.positive?
+      0.65
+    elsif active_file.present?
+      0.25
+    else
+      0.1
+    end
+
+    [ (completed_share + (active_share * active_fraction)).round, 95 ].min
+  end
+
+  def processing_status_label(active_file)
+    return "Processing #{active_file.file_name}" if active_file&.status == "processing"
+    return "Queued" if active_file&.status == "pending"
+    return "Paused, waiting to resume" if active_file&.status == "paused"
+
+    "Processing"
+  end
+
+  def import_progress_state(batch:, active_file:, processing:, rows_scanned:, recorded_rows:)
+    return {
+      label: batch.status.humanize,
+      message: "Import processing has finished.",
+      detail_items: []
+    } unless processing
+
+    case active_file&.status
+    when "pending"
+      {
+        label: "Queued for background worker",
+        message: "The upload is saved. The background worker has not started reading this file yet.",
+        detail_items: [
+          "The raw file is attached to this batch, so refreshing will not re-upload it.",
+          "Rows scanned will stay at 0 until the worker picks up the job.",
+          "If this stays queued in local development, make sure the Solid Queue worker is running."
+        ]
+      }
+    when "processing"
+      if rows_scanned.positive? || recorded_rows.positive?
+        {
+          label: "Reading and matching rows",
+          message: "The worker is scanning the workbook, matching students, and saving imported or pending rows.",
+          detail_items: [
+            "Rows scanned updates in batches during large Canvas outcomes imports.",
+            "Pending matches are rows saved for later student reconciliation.",
+            "The final report tables appear after every file reaches a terminal status."
+          ]
+        }
+      else
+        {
+          label: "Opening workbook",
+          message: "The worker has started. It is detecting the workbook format and locating the import headers.",
+          detail_items: [
+            "Large Excel files can spend time here before row counters appear.",
+            "The page will switch to row counts after the first progress heartbeat."
+          ]
+        }
+      end
+    when "paused"
+      {
+        label: "Paused, waiting to resume",
+        message: "The importer paused to avoid exceeding memory limits and should enqueue a continuation.",
+        detail_items: [
+          "Already saved rows are kept and skipped on resume.",
+          "If this does not resume, check the background worker logs."
+        ]
+      }
+    else
+      {
+        label: processing_status_label(active_file),
+        message: "The import is preparing in the background.",
+        detail_items: [
+          "The review tables stay hidden until every file finishes processing."
+        ]
+      }
+    end
+  end
+
+  def course_codes_by_file(batch, files)
+    file_ids = files.map(&:id)
+    return {} if file_ids.blank?
+
+    rows = batch.grade_competency_evidences
+                .where(grade_import_file_id: file_ids)
+                .distinct
+                .pluck(:grade_import_file_id, :course_code)
+    rows += batch.grade_import_pending_rows
+                 .where(grade_import_file_id: file_ids)
+                 .distinct
+                 .pluck(:grade_import_file_id, :course_code)
+
+    rows.each_with_object({}) do |(file_id, course_code), grouped|
+      next if course_code.blank?
+
+      grouped[file_id] ||= []
+      grouped[file_id] << course_code
+    end.transform_values { |course_codes| course_codes.uniq.sort }
   end
 
   def target_warning_summary

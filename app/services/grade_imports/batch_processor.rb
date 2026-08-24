@@ -155,7 +155,7 @@ module GradeImports
       batch.update!(
         status: "processing",
         started_at: batch.started_at || Time.current,
-        total_files: batch.total_files.positive? ? batch.total_files : (batch.grade_import_files.count + files.size),
+        total_files: batch.total_files.positive? ? batch.total_files : [ batch.grade_import_files.count, files.size ].max,
         summary: batch.summary.merge("dry_run" => dry_run?)
       )
 
@@ -165,7 +165,7 @@ module GradeImports
         break if paused
 
         file_checksum = Digest::SHA256.file(uploaded_file.path).hexdigest
-        grade_file = resumable_grade_file_for(file_checksum)
+        grade_file = grade_file_for_upload(uploaded_file, file_checksum)
 
         if grade_file
           next if grade_file.status == "processed"
@@ -182,6 +182,8 @@ module GradeImports
             }
           )
         end
+
+        grade_file.update!(status: "processing") unless grade_file.status == "processing"
 
         begin
           process_file!(grade_file, uploaded_file)
@@ -438,6 +440,20 @@ module GradeImports
         imported_rows: grade_file.grade_competency_evidences.count,
         pending_rows: grade_file.grade_import_pending_rows.count,
         error_rows: result.fetch(:error_rows, 0),
+        parse_errors: Array(result[:parse_errors]).first(500),
+        parsed_content: parsed_content
+      )
+    end
+
+    def record_processing_progress!(grade_file:, result:)
+      parsed_content = grade_file.parsed_content.merge(result.fetch(:parsed_content, {}).deep_stringify_keys)
+
+      grade_file.update!(
+        status: "processing",
+        total_rows: result.fetch(:total_rows, grade_file.total_rows),
+        imported_rows: grade_file.grade_competency_evidences.count,
+        pending_rows: grade_file.grade_import_pending_rows.count,
+        error_rows: result.fetch(:error_rows, grade_file.error_rows),
         parse_errors: Array(result[:parse_errors]).first(500),
         parsed_content: parsed_content
       )
@@ -782,7 +798,7 @@ module GradeImports
           # row was touched to tell a slow-but-healthy run apart from one
           # that's genuinely dead, and a big file can go a long time between
           # the start-of-call and end-of-call updates otherwise.
-          grade_file.touch
+          record_processing_progress!(grade_file:, result: build_result.call(status: "processing"))
 
           # Reclaim whatever's actually garbage before deciding processing
           # needs to stop -- a lot of what's resident at this point is
@@ -2807,20 +2823,46 @@ module GradeImports
     end
 
     def duplicate_uploads_for(file_checksum)
-      GradeImportFile
+      duplicate_uploads_for_checksum(file_checksum)
+    end
+
+    def duplicate_uploads_for_checksum(file_checksum, excluding_file_id: nil)
+      scope = GradeImportFile
         .where(file_checksum: file_checksum)
         .includes(:grade_import_batch)
         .order(created_at: :desc)
         .limit(10)
-        .map do |file|
+      scope = scope.where.not(id: excluding_file_id) if excluding_file_id.present?
+
+      scope.map do |file|
+        {
+          batch_id: file.grade_import_batch_id,
+          file_id: file.id,
+          file_name: file.file_name,
+          uploaded_at: file.created_at&.iso8601,
+          batch_status: file.grade_import_batch&.status
+        }
+      end
+    end
+
+    def grade_file_for_upload(uploaded_file, file_checksum)
+      existing_id = uploaded_file.respond_to?(:grade_import_file_id) ? uploaded_file.grade_import_file_id : nil
+      return resumable_grade_file_for(file_checksum) if existing_id.blank?
+
+      grade_file = batch.grade_import_files.find(existing_id)
+      duplicate_uploads = duplicate_uploads_for_checksum(file_checksum, excluding_file_id: grade_file.id)
+      grade_file.update!(
+        file_name: uploaded_file.original_filename.to_s,
+        file_checksum: file_checksum,
+        content_type: uploaded_file.content_type.to_s,
+        parsed_content: grade_file.parsed_content.merge(
           {
-            batch_id: file.grade_import_batch_id,
-            file_id: file.id,
-            file_name: file.file_name,
-            uploaded_at: file.created_at&.iso8601,
-            batch_status: file.grade_import_batch&.status
-          }
-        end
+            duplicate_file_uploads: duplicate_uploads,
+            duplicate_file_upload_count: duplicate_uploads.size
+          }.deep_stringify_keys
+        )
+      )
+      grade_file
     end
 
     # Finds a file from an earlier, memory-guard-interrupted attempt on this

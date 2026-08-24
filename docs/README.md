@@ -2,6 +2,7 @@
 
 Repo-local handoff and operational docs:
 
+- [Agent Brief](AGENT_BRIEF.md)
 - [Handoff Guide](HANDOFF.md)
 - [Technical Handoff](TECHNICAL_HANDOFF.md)
 - [Data Model Audit](DATA_MODEL_AUDIT.md)
@@ -21,5 +22,3 @@ Repo-local handoff and operational docs:
 Existing related docs:
 
 - [README.md](../README.md)
-- [TEST_DOCUMENTATION.md](../TEST_DOCUMENTATION.md)
-- [STYLE_MIGRATION.md](../STYLE_MIGRATION.md)

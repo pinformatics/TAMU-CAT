@@ -236,10 +236,15 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
 
     enqueued_job = SolidQueue::Job.where(class_name: "GradeImports::BatchImportJob").order(:id).last
     arguments = enqueued_job.arguments["arguments"].first
+    grade_files = batch.grade_import_files.order(:id)
+
     assert_equal batch.id, arguments["batch_id"]
     assert_equal @admin.id, arguments["uploaded_by_id"]
     assert_equal true, arguments["dry_run"]
-    assert_equal [ "audit-upload.csv" ], arguments["files_payload"].map { |payload| payload["filename"] }
+    assert_equal [ "audit-upload.csv" ], grade_files.map(&:file_name)
+    assert_equal grade_files.map(&:id), arguments["grade_import_file_ids"]
+    assert grade_files.first.source_file.attached?
+    refute arguments.key?("files_payload")
   end
 
   test "upload job processing records grade import audit activity" do
@@ -266,7 +271,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
         batch_id: arguments["batch_id"],
         uploaded_by_id: arguments["uploaded_by_id"],
         dry_run: arguments["dry_run"],
-        files_payload: arguments["files_payload"]
+        grade_import_file_ids: arguments["grade_import_file_ids"]
       )
     end
 
@@ -276,6 +281,74 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "audit-upload.csv" ], activity.metadata["file_names"]
     assert_equal true, activity.metadata["dry_run"]
     assert_equal "completed", batch.reload.status
+  end
+
+  test "show renders processing progress while background import is running" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "processing",
+      total_files: 1,
+      summary: { "dry_run" => true }
+    )
+    batch.grade_import_files.create!(
+      file_name: "SP26 EMHA Outcomes.xlsx",
+      file_checksum: "checksum-processing-progress",
+      status: "processing",
+      imported_rows: 200,
+      pending_rows: 25,
+      parsed_content: {
+        "mode" => "canvas_outcomes",
+        "grade_sheet_debug" => {
+          "mode" => "canvas_outcomes",
+          "rows_scanned" => 240
+        }
+      }
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "Import processing"
+    assert_includes response.body, "Reading and matching rows"
+    assert_includes response.body, "The worker is scanning the workbook"
+    assert_includes response.body, "Estimated phase progress"
+    assert_includes response.body, "Rows Scanned"
+    assert_includes response.body, "240"
+    refute_includes response.body, "Batch actions"
+    refute_includes response.body, "Batch semester"
+    refute_includes response.body, "1. File Summary and Diagnostics"
+    refute_includes response.body, "Commit preview"
+    refute_includes response.body, "Approve preview"
+  end
+
+  test "show stays in processing mode until every file reaches a terminal status" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      total_files: 2,
+      summary: { "dry_run" => true }
+    )
+    batch.grade_import_files.create!(
+      file_name: "done.csv",
+      file_checksum: "checksum-terminal-file",
+      status: "processed"
+    )
+    batch.grade_import_files.create!(
+      file_name: "waiting.csv",
+      file_checksum: "checksum-pending-file",
+      status: "pending"
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "Import processing"
+    assert_includes response.body, "Queued for background worker"
+    assert_includes response.body, "The upload is saved"
+    assert_includes response.body, "Rows scanned will stay at 0"
+    refute_includes response.body, "1. File Summary and Diagnostics"
   end
 
   test "commit flips a completed dry run into a reportable batch" do

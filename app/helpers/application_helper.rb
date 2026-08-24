@@ -387,7 +387,7 @@ module ApplicationHelper
     text = value.to_s.downcase.squish
 
     return :success if text.in?([ "completed", "submitted", "active" ])
-    return :warning if text.in?([ "assigned", "draft", "closed", "late", "overdue", "in progress" ])
+    return :warning if text.in?([ "assigned", "draft", "closed", "late", "overdue", "in progress", "pending", "processing" ])
     return :danger if text.in?([ "unassigned" ])
 
     :neutral

@@ -200,6 +200,8 @@ class GradeImports::BatchProcessorTest < ActiveSupport::TestCase
     assert_equal "processing", batch.status
     assert batch.summary["needs_continuation"]
     assert_equal "paused", file.status
+    assert_equal 1, file.total_rows
+    assert_equal 1, file.parsed_content.dig("grade_sheet_debug", "rows_scanned")
   end
 
   test "canvas outcomes xlsx resumes automatically after a memory-guard pause and finishes cleanly" do

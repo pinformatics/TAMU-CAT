@@ -1,0 +1,88 @@
+<% active_file = import_progress[:active_file] %>
+<% progress_percent = import_progress[:percent].to_i %>
+<% latest_activity_at = import_progress[:latest_activity_at] %>
+<% file_status_counts = import_progress[:file_status_counts] || {} %>
+
+<section class="c-card c-card--tight c-import-progress" aria-labelledby="grade-import-processing-title">
+  <div class="u-responsive-split">
+    <div>
+      <p class="c-eyebrow">Import processing</p>
+      <h2 id="grade-import-processing-title" class="c-section-title c-heading-inline"><%= import_progress[:status_label] %></h2>
+      <p class="c-help">
+        <%= import_progress[:status_message] %>
+      </p>
+    </div>
+    <%= status_badge(batch.status.humanize, value: batch.status) %>
+  </div>
+
+  <div class="c-import-progress__message">
+    <ul class="c-import-progress__details">
+      <% Array(import_progress[:detail_items]).each do |item| %>
+        <li><%= item %></li>
+      <% end %>
+      <% if Rails.env.development? && active_file&.status == "pending" %>
+        <li>Local development worker command: <code>docker compose exec web bin/jobs</code></li>
+      <% end %>
+    </ul>
+  </div>
+
+  <div class="c-import-progress__meter">
+    <div class="c-progress-summary__row">
+      <span>
+        Estimated phase progress · <%= import_progress[:finished_files] %> of <%= import_progress[:total_files] %> files finished
+        <% if active_file.present? %>
+          · <%= active_file.file_name %>
+        <% end %>
+      </span>
+      <strong><%= progress_percent %>%</strong>
+    </div>
+    <%= tag.div(
+          class: "c-progress-track c-progress-track--lg c-progress-track--animated",
+          role: "progressbar",
+          aria: {
+            label: "Grade import processing progress",
+            valuemin: 0,
+            valuemax: 100,
+            valuenow: progress_percent
+          }
+        ) do %>
+      <div class="c-progress-bar" style="width: <%= progress_percent %>%"></div>
+    <% end %>
+  </div>
+
+  <div class="c-import-progress__meta">
+    <span>
+      File states:
+      <%= file_status_counts.map { |status, count| "#{count} #{status}" }.join(", ").presence || "none yet" %>
+    </span>
+    <% if latest_activity_at.present? %>
+      <span>
+        Last activity <%= time_ago_in_words(latest_activity_at) %> ago
+        (<%= l(latest_activity_at, format: :short) %>)
+      </span>
+    <% end %>
+  </div>
+
+  <div class="c-stats-grid c-stats-grid--compact c-import-progress__stats">
+    <div class="c-stat">
+      <span class="c-eyebrow">Rows Scanned</span>
+      <strong class="c-value c-value--xl"><%= number_with_delimiter(import_progress[:rows_scanned]) %></strong>
+    </div>
+    <div class="c-stat">
+      <span class="c-eyebrow">Rows Recorded</span>
+      <strong class="c-value c-value--xl"><%= number_with_delimiter(import_progress[:recorded_rows]) %></strong>
+    </div>
+    <div class="c-stat">
+      <span class="c-eyebrow">Imported</span>
+      <strong class="c-value c-value--xl"><%= number_with_delimiter(import_progress[:imported_rows]) %></strong>
+    </div>
+    <div class="c-stat">
+      <span class="c-eyebrow">Pending Matches</span>
+      <strong class="c-value c-value--xl"><%= number_with_delimiter(import_progress[:pending_rows]) %></strong>
+    </div>
+    <div class="c-stat">
+      <span class="c-eyebrow">Failed Rows</span>
+      <strong class="c-value c-value--xl"><%= number_with_delimiter(import_progress[:failed_rows]) %></strong>
+    </div>
+  </div>
+</section>
