@@ -25,6 +25,9 @@
 <% competencies = Array(payload[:competency_summary]) %>
 <% competency_detail = payload[:competency_detail] || {} %>
 <% competency_items = Array(competency_detail[:items]) %>
+<% rating_level_distribution = payload[:rating_level_distribution] || {} %>
+<% rating_levels = rating_level_distribution[:levels] || {} %>
+<% rating_level_items = Array(rating_level_distribution[:items]) %>
 <% employment = payload[:employment_summary] || {} %>
 
 <section class="report-export">
@@ -337,6 +340,51 @@
           </table>
         </div>
       <% end %>
+    </section>
+  <% end %>
+
+  <% if show_competency_detail && rating_level_items.any? %>
+    <section class="report-export__section">
+      <h2 class="c-section-title">Program-level Competency Attainment</h2>
+      <p class="report-export__note">
+        Proficiency scale: <%= rating_levels.map { |level, label| "#{level} = #{label}" }.join(", ") %>.
+        Program-level target: at least <%= number_to_percentage(rating_level_distribution[:program_target_met_percent], precision: 0) %>
+        of students meet or exceed each competency&rsquo;s configured target level.
+      </p>
+      <div class="c-table-wrapper">
+        <table class="c-table report-export__table">
+        <thead>
+          <tr>
+            <th>Competency</th>
+            <% rating_levels.each do |level, label| %>
+              <th><%= level %> <%= label %></th>
+            <% end %>
+            <th>Total Students</th>
+            <th>Program Level Outcome</th>
+            <th>Target Met</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% rating_level_items.each do |item| %>
+            <tr>
+              <td><%= item[:name] %></td>
+              <% rating_levels.each_key do |level| %>
+                <td><%= item[:level_counts][level] || 0 %></td>
+              <% end %>
+              <td><%= item[:total_students] %></td>
+              <td>
+                <% if item[:target_met_percent].present? %>
+                  <%= number_to_percentage(item[:target_met_percent], precision: 1) %> at target or higher
+                <% else %>
+                  —
+                <% end %>
+              </td>
+              <td><%= item[:target_met_percent].present? ? (item[:target_met] ? "Met" : "Not Met") : "—" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+        </table>
+      </div>
     </section>
   <% end %>
 

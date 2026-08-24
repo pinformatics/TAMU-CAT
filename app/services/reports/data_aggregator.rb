@@ -37,6 +37,23 @@ module Reports
       "Management Skills",
       "Analytic and Technical Skills"
     ].freeze
+
+    # The self-assessment rating scale students choose from (see
+    # composite_reports_helper.rb's DEFAULT_PROFICIENCY_OPTION_PAIRS). Level 0
+    # ("Not able to assess") is advisor-only and excluded here.
+    RATING_LEVEL_LABELS = {
+      1 => "Beginner",
+      2 => "Emerging",
+      3 => "Capable",
+      4 => "Experienced",
+      5 => "Mastery"
+    }.freeze
+
+    # Program-level target used by accreditation exhibits (e.g. CAHME
+    # Exhibit 2.2.1): the share of students expected to meet or exceed each
+    # competency's own configured target level.
+    RATING_LEVEL_TARGET_MET_PERCENT = 85.0
+
     RECENT_WINDOW = 90.days
     DATASET_SELECT = [
       "student_questions.id",
@@ -119,6 +136,12 @@ module Reports
       @track_summary ||= build_track_summary
     end
 
+    # Program-level competency attainment by rating level (Beginner..Mastery),
+    # for accreditation exhibits (e.g. CAHME Exhibit 2.2.1).
+    def rating_level_distribution
+      @rating_level_distribution ||= build_rating_level_distribution
+    end
+
     # Cards for quick overview tiles (alias for convenience).
     def summary_cards
       benchmark[:cards]
@@ -133,6 +156,7 @@ module Reports
         competency_summary: competency_summary,
         competency_detail: competency_detail,
         track_summary: track_summary,
+        rating_level_distribution: rating_level_distribution,
         employment_summary: employment_summary,
         raw_data: raw_data
       }
@@ -1264,13 +1288,76 @@ module Reports
       detail
     end
 
+    # Per-competency counts of students at each self-assessment rating level
+    # (Beginner..Mastery), plus the share meeting or exceeding that
+    # competency's own target level. Built for accreditation exhibits that
+    # want a level-by-level breakdown rather than a binary achieved/not-met
+    # count (e.g. CAHME Exhibit 2.2.1).
+    def build_rating_level_distribution
+      buckets = Hash.new { |hash, key| hash[key] = [] }
+
+      dataset_rows.each do |row|
+        next if row[:advisor_entry]
+
+        slug = competency_slug(row[:question_text])
+        next unless slug && competency_lookup.key?(slug)
+
+        buckets[slug] << row
+      end
+
+      items = COMPETENCY_TITLES.map do |title|
+        slug = competency_slug(title)
+        rows = buckets[slug] || []
+        student_group = group_student_rows(rows)
+
+        level_counts = RATING_LEVEL_LABELS.keys.index_with { 0 }
+        target_met_count = 0
+        assessed_count = 0
+
+        student_group.each_value do |entries|
+          score_avg = average(entries.map { |row| row[:score] })
+          next if score_avg.nil?
+
+          level = score_avg.round.clamp(RATING_LEVEL_LABELS.keys.min, RATING_LEVEL_LABELS.keys.max)
+          level_counts[level] += 1
+          assessed_count += 1
+
+          target_avg = average(entries.map { |row| row[:program_target_level] }.compact.map(&:to_f))
+          target_met_count += 1 if target_avg && score_avg >= target_avg
+        end
+
+        target_met_percent = assessed_count.positive? ? safe_percent(target_met_count, assessed_count) : nil
+
+        {
+          id: slug,
+          name: title,
+          level_counts: level_counts,
+          total_students: assessed_count,
+          target_met_count: target_met_count,
+          target_met_percent: target_met_percent,
+          target_met: target_met_percent.present? && target_met_percent >= RATING_LEVEL_TARGET_MET_PERCENT
+        }
+      end
+
+      {
+        levels: RATING_LEVEL_LABELS,
+        program_target_met_percent: RATING_LEVEL_TARGET_MET_PERCENT,
+        items: items
+      }
+    end
+
     def build_track_summary
+      # dataset_rows[:track] and the students.track column both store the
+      # canonical key (e.g. "residential"), while program_track_names returns
+      # display labels (e.g. "Residential") -- group/query by key, not by the
+      # display label, or every track bucket comes back empty.
       rows_by_track = dataset_rows
-                       .group_by { |row| row[:track].to_s.strip }
+                       .group_by { |row| ProgramTrack.canonical_key(row[:track]) }
 
       program_track_names.map do |track_name|
-        rows = rows_by_track[track_name] || []
-        track_total_students = assigned_student_count_for_track(track_name)
+        track_key = ProgramTrack.canonical_key(track_name)
+        rows = rows_by_track[track_key] || []
+        track_total_students = assigned_student_count_for_track(track_key)
 
         student_rows = rows.reject { |row| row[:advisor_entry] }
         advisor_rows = rows.select { |row| row[:advisor_entry] }
@@ -1283,7 +1370,7 @@ module Reports
         attainment_percentages = attainment_percentages(attainment_counts)
 
         {
-          id: ProgramTrack.canonical_key(track_name).presence || track_name.parameterize(separator: "_").presence || "track_#{track_name.object_id}",
+          id: track_key.presence || track_name.parameterize(separator: "_").presence || "track_#{track_name.object_id}",
           track: track_name,
           student_average: student_avg,
           advisor_average: advisor_avg,
@@ -1996,6 +2083,7 @@ module Reports
               .where(student_id: accessible_student_relation.select(:student_id))
 
       scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+      scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
       scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
       scope = scope.where(student_id: filters[:student_id]) if filters[:student_id]
       scope = scope.where(surveys: { id: filters[:survey_id] }) if filters[:survey_id]
@@ -2042,9 +2130,9 @@ module Reports
         .count(:student_id)
     end
 
-    def assigned_student_count_for_track(track_name)
+    def assigned_student_count_for_track(track_key)
       scoped_assignment_scope
-        .where(students: { track: track_name })
+        .where(students: { track: track_key })
         .distinct
         .count(:student_id)
     end
