@@ -15,6 +15,7 @@ class ReportsController < ApplicationController
 
   def export_pdf
     payload = aggregator.export_payload
+    course_report = Reports::CourseCompetencyReport.new(user: current_user, params: reports_filter_params).call
     section = normalize_export_section(reports_params[:section])
     y_axis_mode = normalize_y_axis_mode(reports_params[:y_axis])
 
@@ -32,7 +33,7 @@ class ReportsController < ApplicationController
     html = render_to_string(
       template: "reports/export",
       layout: "report_pdf",
-      locals: { payload: payload, export_section: section, y_axis_mode: y_axis_mode }
+      locals: { payload: payload, course_report: course_report, export_section: section, y_axis_mode: y_axis_mode }
     )
 
     pdf = WickedPdf.new.pdf_from_string(html, page_size: "Letter", orientation: "Landscape")
@@ -41,6 +42,54 @@ class ReportsController < ApplicationController
               filename: "health-reports-#{Time.current.strftime('%Y%m%d-%H%M')}.pdf",
               disposition: "attachment",
               type: "application/pdf"
+  end
+
+  # Generates one PDF per (track, program year) cohort combination the
+  # current user can see, and bundles them into a single zip download.
+  # Each track's students have their own program target levels, so cohorts
+  # are never combined into one report -- see CAHME feedback that drove this.
+  def export_by_cohort
+    unless defined?(WickedPdf)
+      render plain: "PDF export unavailable. WickedPdf is not configured.", status: :service_unavailable
+      return
+    end
+
+    base_params = reports_filter_params.to_h.except("track", "program_year")
+    combinations = Reports::DataAggregator.new(user: current_user, params: base_params).available_track_year_combinations
+
+    if combinations.empty?
+      redirect_to reports_path, alert: "No cohort data is available to export."
+      return
+    end
+
+    record_export_audit!(
+      export_type: "reports_pdf_by_cohort",
+      description: "Exported program reports PDF bundle by track/cohort.",
+      metadata: { cohorts: combinations }
+    )
+
+    zip_buffer = Zip::OutputStream.write_buffer do |zip|
+      combinations.each do |combo|
+        cohort_params = base_params.merge("track" => combo[:track_key], "program_year" => combo[:program_year].to_s)
+        cohort_payload = Reports::DataAggregator.new(user: current_user, params: cohort_params).export_payload
+        cohort_course_report = Reports::CourseCompetencyReport.new(user: current_user, params: cohort_params).call
+
+        html = render_to_string(
+          template: "reports/export",
+          layout: "report_pdf",
+          locals: { payload: cohort_payload, course_report: cohort_course_report, export_section: nil, y_axis_mode: nil }
+        )
+        pdf = WickedPdf.new.pdf_from_string(html, page_size: "Letter", orientation: "Landscape")
+
+        zip.put_next_entry("mha-program-analytics-#{combo[:track_key]}-#{combo[:program_year]}.pdf")
+        zip.write(pdf)
+      end
+    end
+
+    send_data zip_buffer.string,
+              filename: "mha-program-analytics-by-cohort-#{Time.current.strftime('%Y%m%d-%H%M')}.zip",
+              disposition: "attachment",
+              type: "application/zip"
   end
 
   def export_excel

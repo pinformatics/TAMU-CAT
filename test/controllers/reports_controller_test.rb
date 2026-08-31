@@ -619,6 +619,49 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
+  # Access Control Tests - export_by_cohort action
+  test "export_by_cohort requires authentication" do
+    get export_reports_by_cohort_path
+
+    assert_redirected_to new_user_session_path
+  end
+
+  test "export_by_cohort denies student access" do
+    sign_in @student
+
+    get export_reports_by_cohort_path
+
+    assert_redirected_to dashboard_path
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
+  end
+
+  test "export_by_cohort bundles one PDF per track/cohort into a zip" do
+    sign_in @admin
+
+    combinations = Reports::DataAggregator.new(user: @admin, params: {}).available_track_year_combinations
+    assert combinations.any?, "fixtures must include at least one track/program_year combination for this test"
+
+    assert_difference -> { AdminActivityLog.where(action: "student_data_export").count }, 1 do
+      get export_reports_by_cohort_path
+    end
+
+    assert_response :success
+    assert_equal "application/zip", @response.media_type
+    assert_match(/attachment/, @response.headers["Content-Disposition"])
+
+    entries = []
+    Zip::InputStream.open(StringIO.new(@response.body)) do |zip|
+      while (entry = zip.get_next_entry)
+        entries << entry.name
+      end
+    end
+
+    assert_equal combinations.size, entries.size
+    combinations.each do |combo|
+      assert_includes entries, "mha-program-analytics-#{combo[:track_key]}-#{combo[:program_year]}.pdf"
+    end
+  end
+
   # PDF Export Tests
   test "export_pdf generates PDF with correct content type" do
     sign_in @admin

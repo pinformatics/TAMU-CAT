@@ -67,6 +67,11 @@
         path: export_reports_pdf_path(report_download_params.merge(section: "dashboard", y_axis: "percent")),
         confirm: ferpa_export_confirmation("student-level dashboard charts")
       },
+      {
+        label: "Export by Cohort (ZIP)",
+        path: export_reports_by_cohort_path(report_download_params.except(:track, :program_year)),
+        confirm: ferpa_export_confirmation("student-level dashboard charts for every track and cohort year")
+      },
       active_download
     ] %>
     <% dashboard_initial_filters = report_download_params.stringify_keys.slice(
@@ -96,14 +101,15 @@
         <div class="u-actions u-actions--start">
           <% (active_report_tab == "dashboard" ? dashboard_downloads : [active_download]).each do |download| %>
             <% dashboard_pdf = active_report_tab == "dashboard" && download[:label] == "Download PDF" %>
+            <% is_dashboard_chart_download = active_report_tab == "dashboard" && download[:label] != "Export by Cohort (ZIP)" %>
             <%= link_to download[:label],
                   download[:path],
                   class: button_classes(:secondary),
                   data: {
                     turbo: false,
                     turbo_confirm: download[:confirm],
-                    report_primary_download: active_report_tab == "dashboard",
-                    report_download_base_url: if active_report_tab == "dashboard"
+                    report_primary_download: is_dashboard_chart_download,
+                    report_download_base_url: if is_dashboard_chart_download
                       dashboard_pdf ? export_reports_pdf_path(section: "dashboard", y_axis: "percent") : export_reports_excel_path(section: "dashboard")
                     end
                   }.compact %>

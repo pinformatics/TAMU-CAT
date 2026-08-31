@@ -39,9 +39,9 @@ module Reports
     ].freeze
 
     # The self-assessment rating scale students choose from (see
-    # composite_reports_helper.rb's DEFAULT_PROFICIENCY_OPTION_PAIRS). Level 0
-    # ("Not able to assess") is advisor-only and excluded here.
+    # composite_reports_helper.rb's DEFAULT_PROFICIENCY_OPTION_PAIRS).
     RATING_LEVEL_LABELS = {
+      0 => "Not able to assess",
       1 => "Beginner",
       2 => "Emerging",
       3 => "Capable",
@@ -52,7 +52,7 @@ module Reports
     # Program-level target used by accreditation exhibits (e.g. CAHME
     # Exhibit 2.2.1): the share of students expected to meet or exceed each
     # competency's own configured target level.
-    RATING_LEVEL_TARGET_MET_PERCENT = 85.0
+    RATING_LEVEL_TARGET_MET_PERCENT = 75.0
 
     RECENT_WINDOW = 90.days
     DATASET_SELECT = [
@@ -140,6 +140,32 @@ module Reports
     # for accreditation exhibits (e.g. CAHME Exhibit 2.2.1).
     def rating_level_distribution
       @rating_level_distribution ||= build_rating_level_distribution
+    end
+
+    # Every (track, program year) cohort combination this user can see at
+    # least one student in, ignoring the track/program_year filters on this
+    # particular instance. Used to enumerate which per-cohort reports to
+    # generate (see ReportsController#export_by_cohort).
+    #
+    # @return [Array<Hash>] each entry: { track_key:, track_name:, program_year: }
+    def available_track_year_combinations
+      accessible_student_relation
+        .where.not(track: [ nil, "" ])
+        .where.not(program_year: nil)
+        .distinct
+        .pluck(:track, :program_year)
+        .filter_map do |raw_track, program_year|
+          track_key = ProgramTrack.canonical_key(raw_track) || raw_track.to_s.strip.downcase.presence
+          next unless track_key
+
+          {
+            track_key: track_key,
+            track_name: ProgramTrack.name_for_key(track_key) || raw_track.to_s.titleize,
+            program_year: program_year
+          }
+        end
+        .uniq { |entry| [ entry[:track_key], entry[:program_year] ] }
+        .sort_by { |entry| [ entry[:track_name], entry[:program_year] ] }
     end
 
     # Cards for quick overview tiles (alias for convenience).
@@ -718,7 +744,7 @@ module Reports
 
       benchmark_thresholds = {
         students_goal_percent: 80.0,
-        competencies_goal_percent: 85.0
+        competencies_goal_percent: 75.0
       }
 
       benchmark_attainment = benchmark_attainment_stats(
@@ -743,7 +769,7 @@ module Reports
         unit: "percent",
         precision: 0,
         change: nil,
-        description: "Percent of students meeting target in at least #{benchmark_thresholds[:competencies_goal_percent].to_i}% of competencies.",
+        description: "At least #{benchmark_thresholds[:competencies_goal_percent].to_i}% of the MHA track cohort will achieve the MHA competency at the program target level by the end of their degree program.",
         sample_size: benchmark_attainment[:overall][:total_students],
         meta: overall_meta
       )
@@ -755,7 +781,7 @@ module Reports
         unit: "percent",
         precision: 0,
         change: nil,
-        description: "Percent of students below the benchmark threshold.",
+        description: "Less than #{benchmark_thresholds[:competencies_goal_percent].to_i}% of the MHA track cohort achieved the MHA competency at the program target level by the end of their degree program.",
         sample_size: benchmark_attainment[:overall][:total_students]
       )
 
@@ -1326,7 +1352,9 @@ module Reports
           target_met_count += 1 if target_avg && score_avg >= target_avg
         end
 
+        not_met_count = assessed_count - target_met_count
         target_met_percent = assessed_count.positive? ? safe_percent(target_met_count, assessed_count) : nil
+        not_met_percent = assessed_count.positive? ? safe_percent(not_met_count, assessed_count) : nil
 
         {
           id: slug,
@@ -1335,6 +1363,8 @@ module Reports
           total_students: assessed_count,
           target_met_count: target_met_count,
           target_met_percent: target_met_percent,
+          not_met_count: not_met_count,
+          not_met_percent: not_met_percent,
           target_met: target_met_percent.present? && target_met_percent >= RATING_LEVEL_TARGET_MET_PERCENT
         }
       end

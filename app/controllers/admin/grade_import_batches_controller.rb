@@ -122,6 +122,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
       @match_rate = match_rate_for(@files)
       @pending_row_count = @files.sum(&:pending_rows)
       @target_warning_summary = { requires_review: false }
+      @missing_assessments_summary = { requires_review: false, groups: [], counts: {} }
       @target_attainment_by_course = []
       @target_attainment_by_course_and_competency = []
       @student_match_options = []
@@ -145,6 +146,7 @@ class Admin::GradeImportBatchesController < Admin::BaseController
     @match_rate = match_rate_for(@files)
     @pending_row_count = @batch.grade_import_pending_rows.pending_student_match.count
     @target_warning_summary = target_warning_summary
+    @missing_assessments_summary = missing_assessments_summary
     @target_attainment_by_course = target_attainment_by_course
     @target_attainment_by_course_and_competency = target_attainment_by_course_and_competency
     @student_match_options = student_match_options
@@ -1408,6 +1410,10 @@ class Admin::GradeImportBatchesController < Admin::BaseController
 
   def target_warning_summary
     @target_warning_summary ||= GradeImports::TargetWarningAnalyzer.call(batch: @batch)
+  end
+
+  def missing_assessments_summary
+    @missing_assessments_summary ||= GradeImports::MissingAssessmentsAnalyzer.call(batch: @batch)
   end
 
   def course_code_issues_present?

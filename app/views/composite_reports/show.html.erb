@@ -10,10 +10,14 @@
 <% latest_advisor = feedback_summary[:latest_feedback_at] %>
 <% status_label = survey_response.status.to_s.presence&.titleize || "In Progress" %>
 
+<% cohort_program_abbreviation = student.track_key == "executive" ? "EMHA" : "RMHA" %>
+<% cohort_label = [ cohort_program_abbreviation, student.program_year.present? ? "Class of #{student.program_year}" : nil ].compact.join(", ") %>
+
 <section class="pdf-title-card">
   <div class="pdf-title-kicker">Survey Response Report</div>
   <h1 class="c-item-title"><%= survey.title %></h1>
   <p class="pdf-title-subtext">
+    <%= cohort_label %> &middot;
     Student-level competency record. Handle and distribute according to FERPA and program review access rules.
   </p>
 </section>
@@ -122,17 +126,17 @@
   <% avg_grade_derived = grade_derived_values.any? ? (grade_derived_values.sum / grade_derived_values.size) : nil %>
 
   <section class="pdf-section">
-    <h2 class="c-section-title c-heading-inline">Competency Summary</h2>
+    <h2 class="c-section-title c-heading-inline">Competency Achievement Summary</h2>
     <table class="competency-table">
       <thead>
         <tr>
           <th>Competency</th>
           <th>End of Program Target Level</th>
-          <th>Student Rating</th>
+          <th>Student Self-Assessment</th>
           <% if show_advisor_rating_column %>
             <th>Advisor Rating</th>
           <% end %>
-          <th>Grade-Derived Rating</th>
+          <th>Course-Derived Rating</th>
         </tr>
       </thead>
       <tbody>
@@ -140,7 +144,7 @@
           <% if row[:grade_derived_provenance].any? %>
             <tr>
               <td colspan="<%= competency_summary_colspan %>">
-                <strong>Grade provenance:</strong>
+                <strong>Course:</strong>
                 <%= row[:grade_derived_provenance].map { |item| [item[:course_code], item[:assignment_name]].reject(&:blank?).join(" · ") }.join(" | ") %>
               </td>
             </tr>
@@ -155,7 +159,7 @@
             <td class="numeric">
               <% if row[:grade_derived_rating].present? %>
                 <%= row[:grade_derived_rating] %>
-                <div class="c-muted"><%= row[:grade_derived_evidence_count] %> contributing grades</div>
+                <div class="c-muted"><%= row[:grade_derived_evidence_count] %> contributing courses</div>
                 <% if row[:grade_derived_latest_at].present? %>
                   <div class="c-muted"><%= row[:grade_derived_latest_at].strftime("%Y-%m-%d") %></div>
                 <% end %>
@@ -175,6 +179,33 @@
           <% end %>
           <td class="numeric"><%= avg_grade_derived ? format("%.2f", avg_grade_derived) : "—" %></td>
         </tr>
+      </tbody>
+    </table>
+  </section>
+<% end %>
+
+<% if checkpoint_progress.present? %>
+  <section class="pdf-section">
+    <h2 class="c-section-title c-heading-inline">Progress Over Time</h2>
+    <p class="c-help">Self-assessment rating at each program checkpoint completed so far.</p>
+    <table class="competency-table">
+      <thead>
+        <tr>
+          <th>Competency</th>
+          <% checkpoint_progress[:checkpoints].each do |checkpoint| %>
+            <th><%= checkpoint %></th>
+          <% end %>
+        </tr>
+      </thead>
+      <tbody>
+        <% checkpoint_progress[:rows].each do |row| %>
+          <tr>
+            <td><%= row[:competency] %></td>
+            <% checkpoint_progress[:checkpoints].each do |checkpoint| %>
+              <td class="numeric"><%= row[:scores][checkpoint] || "—" %></td>
+            <% end %>
+          </tr>
+        <% end %>
       </tbody>
     </table>
   </section>
@@ -252,7 +283,7 @@
                 <div class="c-question-body"><%= render_question_prompt(question) %></div>
                 <% if question.question_type == "dropdown" && effective_target_level.present? %>
                   <div class="target-level-wrap">
-                    <span class="c-level-badge">End of Program Target Level: <%= effective_target_level %>/5</span>
+                    <span class="c-level-badge">End of Program Target Level: <%= effective_target_level %></span>
                   </div>
                 <% end %>
               </div>

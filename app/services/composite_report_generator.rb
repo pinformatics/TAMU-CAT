@@ -10,7 +10,16 @@ class CompositeReportGenerator
 
   CACHE_TTL = 6.hours
   MAX_EVIDENCE_HISTORY = Integer(ENV.fetch("COMPOSITE_REPORT_MAX_EVIDENCE_HISTORY", 5))
-  PDF_RENDER_VERSION = 4
+  PDF_RENDER_VERSION = 5
+
+  # Survey titles follow "<RMHA|EMHA> <Checkpoint> Competency Survey" (see
+  # SurveyAssignments::AutoAssigner). No dedicated checkpoint column exists,
+  # so the checkpoint is inferred from the title.
+  CHECKPOINT_PATTERNS = {
+    "Initial" => /\binitial\b/i,
+    "Mid-point" => /\bmid.?point\b/i,
+    "Final" => /\bfinal\b/i
+  }.freeze
   # Lightweight value object so callers can ensure temporary files are cleaned up.
   class Result
     attr_reader :path, :size_bytes
@@ -225,6 +234,7 @@ class CompositeReportGenerator
       feedback_summary: feedback_summary,
       evidence_history_by_category: evidence_history_by_category,
       grade_derived_competencies: GradeImports::DerivedScorebook.for_student(student),
+      checkpoint_progress: checkpoint_progress,
       generated_at: generated_at,
       answered_count: answered_count,
       total_questions: total_questions,
@@ -232,6 +242,70 @@ class CompositeReportGenerator
       required_total_questions: required_total_questions,
       progress_summary: progress_summary
     }
+  end
+
+  # Self-assessment scores for this student across every checkpoint survey
+  # in the same program family (e.g. "RMHA Initial/Mid-point/Final
+  # Competency Survey"), so the report can show growth over time rather
+  # than just a single point-in-time snapshot.
+  #
+  # @return [Hash, nil] { checkpoints: [...], rows: [{ competency:, scores: {...} }] },
+  #   or nil when fewer than two checkpoints have any self-assessment data.
+  def checkpoint_progress
+    return @checkpoint_progress if defined?(@checkpoint_progress)
+
+    checkpoint_surveys = checkpoint_family_surveys
+    scores_by_checkpoint = checkpoint_surveys.transform_values { |s| competency_self_assessment_scores(s) }
+    present_checkpoints = CHECKPOINT_PATTERNS.keys.select { |label| scores_by_checkpoint[label].present? }
+
+    if present_checkpoints.size < 2
+      return @checkpoint_progress = nil
+    end
+
+    rows = Reports::DataAggregator::COMPETENCY_TITLES.filter_map do |title|
+      scores = present_checkpoints.index_with { |label| scores_by_checkpoint[label][title] }
+      next if scores.values.all?(&:nil?)
+
+      { competency: title, scores: scores }
+    end
+
+    @checkpoint_progress = rows.any? ? { checkpoints: present_checkpoints, rows: rows } : nil
+  end
+
+  # @return [Hash{String => Survey}] checkpoint label ("Initial"/"Mid-point"/"Final") => Survey
+  def checkpoint_family_surveys
+    prefix = survey.title.to_s[/\A(RMHA|EMHA)/i]
+    candidates = prefix ? Survey.where("title LIKE ?", "#{prefix}%") : [ survey ]
+
+    candidates.each_with_object({}) do |candidate_survey, memo|
+      label = checkpoint_label_for(candidate_survey.title)
+      memo[label] = candidate_survey if label
+    end
+  end
+
+  def checkpoint_label_for(title)
+    CHECKPOINT_PATTERNS.find { |_label, pattern| title.to_s.match?(pattern) }&.first
+  end
+
+  # @return [Hash{String => Integer}] competency title => self-assessment score, for one survey
+  def competency_self_assessment_scores(survey_for_checkpoint)
+    survey_response = SurveyResponse.build(student: student, survey: survey_for_checkpoint)
+    answers = survey_response.answers
+    return {} if answers.blank?
+
+    questions = Question.joins(:category).where(categories: { survey_id: survey_for_checkpoint.id }, question_type: "dropdown").includes(category: :section)
+
+    questions.each_with_object({}) do |question, scores|
+      next unless question.category&.section&.mha_competency?
+      next unless Reports::DataAggregator::COMPETENCY_TITLES.include?(question.question_text)
+
+      raw_answer = answers[question.id] || answers[question.id.to_s]
+      next if raw_answer.blank?
+
+      value = raw_answer.is_a?(Hash) ? (raw_answer["answer"] || raw_answer[:answer] || raw_answer["value"] || raw_answer[:value]) : raw_answer
+      numeric = value.to_s[/\d+/]
+      scores[question.question_text] = numeric.to_i if numeric
+    end
   end
 
   def student

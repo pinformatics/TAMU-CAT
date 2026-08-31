@@ -59,6 +59,7 @@ Rails.application.routes.draw do
   get "reports/export_tab", to: "reports#export_tab_csv", as: :export_report_tab
   get "reports/profile_export.xlsx", to: "reports#export_portfolio", as: :export_reports_portfolio
   get "reports/course_competencies.csv", to: "reports#export_course_competencies", as: :export_course_competency_reports
+  get "reports/export_by_cohort", to: "reports#export_by_cohort", as: :export_reports_by_cohort
   get "reports/:section/export_pdf", to: "reports#export_pdf", as: :export_reports_pdf
 
   # Competency matrix shared by admins and advisors. The admin-prefixed route

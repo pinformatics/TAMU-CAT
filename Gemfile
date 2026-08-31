@@ -43,6 +43,11 @@ gem "roo"
 # GradeImports::BatchProcessor).
 gem "creek"
 
+# Bundles multiple generated PDFs into one download (see
+# ReportsController#export_by_cohort). Already present transitively via
+# caxlsx/active_storage; pinned here since we call it directly.
+gem "rubyzip", require: "zip"
+
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
 

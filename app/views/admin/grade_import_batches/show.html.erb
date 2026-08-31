@@ -400,6 +400,60 @@
         </details>
       <% end %>
 
+      <% if @missing_assessments_summary[:requires_review] %>
+        <details class="c-card c-card--flush c-section-group">
+          <summary class="c-section-group__header">
+            <h2 class="c-section-title">Students Missing a Competency Assessment</h2>
+            <span>
+              <%= pluralize(@missing_assessments_summary.dig(:counts, :students_affected).to_i, "student") %> across
+              <%= pluralize(@missing_assessments_summary.dig(:counts, :courses_affected).to_i, "course") %>
+            </span>
+          </summary>
+
+          <div class="u-stack u-stack--md u-p-md">
+            <div class="c-callout c-callout--warning">
+              For each course below, other students received a grade-derived rating for the listed competency but these
+              students did not. This usually means the instructor did not assess them on it &mdash; contact the instructor
+              to complete the missing grades.
+            </div>
+
+            <div class="c-table-wrapper">
+              <table class="c-table c-table--sm">
+                <thead>
+                  <tr>
+                    <th>Course</th>
+                    <th>Competency</th>
+                    <th>Assessed</th>
+                    <th>Missing Students</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @missing_assessments_summary[:groups].each do |group| %>
+                    <tr>
+                      <td><%= group[:course_code] %></td>
+                      <td class="c-table__title"><%= group[:competency_title] %></td>
+                      <td><%= "#{group[:assessed_count]} / #{group[:roster_count]}" %></td>
+                      <td>
+                        <ul class="u-stack u-stack--xs">
+                          <% group[:missing_students].each do |student| %>
+                            <li>
+                              <%= student[:name] %>
+                              <% if student[:email].present? %>
+                                &middot; <%= mail_to student[:email] %>
+                              <% end %>
+                            </li>
+                          <% end %>
+                        </ul>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      <% end %>
+
       <section class="c-card c-card--tight">
         <%= form_with url: semester_admin_grade_import_batch_path(@batch), method: :patch, local: true, data: { turbo: false }, class: "c-filter-bar" do %>
           <div class="c-filter-bar__field">

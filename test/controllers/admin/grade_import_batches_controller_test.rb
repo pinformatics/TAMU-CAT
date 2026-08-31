@@ -1339,6 +1339,69 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert batch.reload.reportable?
   end
 
+  test "show lists students missing a competency assessment other students in the course received" do
+    batch = GradeImportBatch.create!(
+      uploaded_by: @admin,
+      program_semester: program_semesters(:fall_2025),
+      status: "completed",
+      summary: { "dry_run" => true }
+    )
+    file = batch.grade_import_files.create!(
+      file_name: "missing-assessments.csv",
+      file_checksum: "checksum-missing-assessments",
+      status: "processed",
+      imported_rows: 1
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Final Project",
+      course_code: "PHPM-651-700",
+      competency_title: "Communication",
+      raw_grade: 91,
+      mapped_level: 4,
+      course_target_level: 4,
+      row_number: 2,
+      source_key: "source-missing-assessments-1",
+      import_fingerprint: "fingerprint-missing-assessments-1"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: @student,
+      assignment_name: "Final Project",
+      course_code: "PHPM-651-700",
+      competency_title: "Ethics",
+      raw_grade: 91,
+      mapped_level: 4,
+      course_target_level: 4,
+      row_number: 3,
+      source_key: "source-missing-assessments-2",
+      import_fingerprint: "fingerprint-missing-assessments-2"
+    )
+    batch.grade_competency_evidences.create!(
+      grade_import_file: file,
+      student: students(:other_student),
+      assignment_name: "Final Project",
+      course_code: "PHPM-651-700",
+      competency_title: "Ethics",
+      raw_grade: 88,
+      mapped_level: 3,
+      course_target_level: 4,
+      row_number: 4,
+      source_key: "source-missing-assessments-3",
+      import_fingerprint: "fingerprint-missing-assessments-3"
+    )
+
+    get admin_grade_import_batch_path(batch)
+
+    assert_response :success
+    assert_includes response.body, "Students Missing a Competency Assessment"
+    missing_section = response.body[/<h2 class="c-section-title">Students Missing a Competency Assessment<\/h2>.*?<\/details>/m]
+    assert_includes missing_section, "PHPM-651-700"
+    assert_includes missing_section, "Communication"
+    assert_includes missing_section, students(:other_student).user.name
+  end
+
   test "course code issues block approval and commit until fixed on evidence rows" do
     competency_title = "Policy Analysis"
     batch = GradeImportBatch.create!(
