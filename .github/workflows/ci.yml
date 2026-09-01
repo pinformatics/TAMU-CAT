@@ -58,7 +58,7 @@ jobs:
           pg_isready -h localhost -p 5432 -U postgres
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
