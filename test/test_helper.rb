@@ -10,11 +10,12 @@ if ENV["COVERAGE"] == "1"
   begin
     require "simplecov"
     # Use the Rails profile and enable branch coverage for more accuracy.
+    SimpleCov.command_name "Rails Tests"
     SimpleCov.start "rails" do
       enable_coverage :branch
       minimum_coverage 95
-      add_filter "/test/"
-      add_group "Services", "app/services"
+      skip "/test/"
+      group "Services", "app/services"
     end
     puts "📊 SimpleCov: coverage enabled"
   rescue LoadError
