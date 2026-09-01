@@ -77,6 +77,25 @@ class Advisors::MeetingRecapsControllerTest < ActionDispatch::IntegrationTest
     assert_match "Choose a semester and meeting type", flash[:alert]
   end
 
+  test "new renders Carla's advisor recap fields" do
+    sign_in @assigned_advisor_user
+
+    get new_advisors_student_meeting_recap_path(
+      @student,
+      program_semester_id: @program_semester.id,
+      meeting_type: "midpoint"
+    )
+
+    assert_response :success
+    assert_includes response.body, "Provide a recap of your meeting with your student"
+    assert_select "label", text: "Academic Advising"
+    assert_select "label", text: "Career Advising"
+    assert_select "label", text: "General"
+    assert_includes response.body, "Competency achievements/areas for focused development"
+    assert_includes response.body, "career search skills"
+    assert_includes response.body, "Other resource or support needs."
+  end
+
   test "creating a duplicate recap redirects with an alert instead of raising" do
     sign_in @assigned_advisor_user
     existing = advisor_meeting_recaps(:student_initial_fall_2025)

@@ -10,7 +10,7 @@ class CompositeReportGenerator
 
   CACHE_TTL = 6.hours
   MAX_EVIDENCE_HISTORY = Integer(ENV.fetch("COMPOSITE_REPORT_MAX_EVIDENCE_HISTORY", 5))
-  PDF_RENDER_VERSION = 5
+  PDF_RENDER_VERSION = 6
 
   # Survey titles follow "<RMHA|EMHA> <Checkpoint> Competency Survey" (see
   # SurveyAssignments::AutoAssigner). No dedicated checkpoint column exists,
@@ -20,6 +20,7 @@ class CompositeReportGenerator
     "Mid-point" => /\bmid.?point\b/i,
     "Final" => /\bfinal\b/i
   }.freeze
+
   # Lightweight value object so callers can ensure temporary files are cleaned up.
   class Result
     attr_reader :path, :size_bytes

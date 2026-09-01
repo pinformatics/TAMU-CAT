@@ -6,10 +6,10 @@ module Reports
   # Builds an Excel workbook summarizing the analytics dataset for offline review.
   class ExcelExporter
     WORKBOOK_SHEETS = %i[
-      add_trend_sheet
-      add_domain_sheet
-      add_competency_sheet
+      add_key_metrics_sheet
       add_track_sheet
+      add_program_attainment_sheet
+      add_course_target_summary_sheet
       add_employment_sheet
       add_raw_survey_sheet
       add_raw_advisor_sheet
@@ -37,13 +37,12 @@ module Reports
 
     attr_reader :payload, :formatter
 
-    def add_trend_sheet(workbook)
+    def add_key_metrics_sheet(workbook)
       benchmark = payload[:benchmark] || {}
       cards = Array(benchmark[:cards])
       filters = payload[:filters] || {}
-      timeline = Array(benchmark[:timeline])
 
-      workbook.add_worksheet(name: "Trend") do |sheet|
+      workbook.add_worksheet(name: "Key Metrics") do |sheet|
         formatter.add_meta_row(sheet, "Generated At", format_timestamp(payload[:generated_at]))
         sheet.add_row []
         formatter.add_title_row(sheet, [ "Active Filters" ])
@@ -61,24 +60,18 @@ module Reports
             card[:description],
             card[:sample_size]
           ])
+          Array(card.dig(:meta, :tracks)).each do |track|
+            formatter.add_data_row(sheet, [
+              track[:label],
+              format_number(track[:percent], 1, suffix: "%"),
+              nil,
+              "#{track[:competencies_met_goal].to_i} competencies met benchmark; #{track[:competencies_below_goal].to_i} below benchmark",
+              track[:sample_size]
+            ])
+          end
         end
 
         formatter.finish_table(sheet, header_row: metric_header_row, column_count: 5, widths: [ 28, 14, 14, 42, 16 ])
-
-        next if timeline.blank?
-
-        sheet.add_row []
-        formatter.add_title_row(sheet, [ "Timeline" ])
-        timeline_header_row = formatter.add_header_row(sheet, [ "Month", "Student % Meeting Target", "Advisor % Meeting Target", "Course % Meeting Target" ])
-        timeline.each do |point|
-          formatter.add_data_row(sheet, [
-            point[:label],
-            format_number(point[:student_target_percent], 1, suffix: "%"),
-            format_number(point[:advisor_target_percent], 1, suffix: "%"),
-            format_number(point[:course_target_percent], 1, suffix: "%")
-          ])
-        end
-        formatter.finish_table(sheet, header_row: timeline_header_row, column_count: 4, widths: [ 18, 24, 24, 24 ], freeze: false, auto_filter: false)
       end
     end
 
@@ -92,19 +85,19 @@ module Reports
           "Student Avg",
           "Advisor Avg",
           "Course Avg",
-          "Student % Meeting Target",
-          "Advisor % Meeting Target",
-          "Course % Meeting Target",
+          "Student % Meeting Program Target",
+          "Advisor % Meeting Program Target",
+          "Student % Meeting Course Target",
           "Trend %",
           "Status",
           "Student Sample",
           "Advisor Sample",
-          "Achieved",
-          "Not Met",
-          "Not Assessed",
-          "Achieved %",
-          "Not Met %",
-          "Not Assessed %"
+          "# Achieved Program Target",
+          "# Not Met Program Target",
+          "# Not Assessed Program Target",
+          "% Achieved Program Target",
+          "% Not Met Program Target",
+          "% Not Assessed Program Target"
         ]
         header_row = formatter.add_header_row(sheet, headers)
 
@@ -150,15 +143,15 @@ module Reports
           "Student Avg",
           "Advisor Avg",
           "Course Avg",
-          "Student % Meeting Target",
-          "Advisor % Meeting Target",
-          "Course % Meeting Target",
-          "Achieved",
-          "Not Met",
-          "Not Assessed",
-          "Achieved %",
-          "Not Met %",
-          "Not Assessed %"
+          "Student % Meeting Program Target",
+          "Advisor % Meeting Program Target",
+          "Student % Meeting Course Target",
+          "# Achieved Program Target",
+          "# Not Met Program Target",
+          "# Not Assessed Program Target",
+          "% Achieved Program Target",
+          "% Not Met Program Target",
+          "% Not Assessed Program Target"
         ]
         header_row = formatter.add_header_row(sheet, headers)
 
@@ -196,14 +189,13 @@ module Reports
       workbook.add_worksheet(name: "Track") do |sheet|
         headers = [
           "Track",
-          "On Track %",
+          "Class",
+          "Students",
           "Submissions",
-          "Achieved",
-          "Not Met",
-          "Not Assessed",
-          "Achieved %",
-          "Not Met %",
-          "Not Assessed %"
+          "# Achieved Program Target",
+          "# Not Met Program Target",
+          "% Achieved Program Target",
+          "% Not Met Program Target"
         ]
         header_row = formatter.add_header_row(sheet, headers)
 
@@ -214,14 +206,91 @@ module Reports
         tracks.each do |entry|
           formatter.add_data_row(sheet, [
             entry[:track],
-            format_number(entry[:achieved_percent], 1, suffix: "%"),
+            entry[:class_of].present? ? "Class of #{entry[:class_of]}" : "Class Unassigned",
+            entry[:total_students],
             entry[:submissions],
             entry[:achieved_count],
             entry[:not_met_count],
-            entry[:not_assessed_count],
             format_number(entry[:achieved_percent], 1, suffix: "%"),
-            format_number(entry[:not_met_percent], 1, suffix: "%"),
-            format_number(entry[:not_assessed_percent], 1, suffix: "%")
+            format_number(entry[:not_met_percent], 1, suffix: "%")
+          ])
+        end
+
+        formatter.finish_table(sheet, header_row: header_row, column_count: headers.size)
+      end
+    end
+
+    def add_program_attainment_sheet(workbook)
+      distribution = payload[:rating_level_distribution] || {}
+      levels = (distribution[:levels] || {}).sort_by { |level, _label| level.to_i }
+      rows = Array(distribution[:items])
+
+      workbook.add_worksheet(name: "Program Attainment") do |sheet|
+        headers = [
+          "Track",
+          "Class",
+          "Competency",
+          *levels.map { |level, label| rating_level_label(level, label) },
+          "Students",
+          "% Achieved Program Target",
+          "% Not Achieved Program Target",
+          "Benchmark Outcome"
+        ]
+        header_row = formatter.add_header_row(sheet, headers)
+
+        if rows.blank?
+          formatter.add_note_row(sheet, [ "No program-level attainment data available" ])
+        end
+
+        rows.each do |entry|
+          formatter.add_data_row(sheet, [
+            entry[:track],
+            entry[:class_of].present? ? "Class of #{entry[:class_of]}" : "Class Unassigned",
+            entry[:name],
+            *levels.map { |level, _label| entry.dig(:level_counts, level) || entry.dig(:level_counts, level.to_s) || 0 },
+            entry[:total_students],
+            format_number(entry[:target_met_percent], 1, suffix: "%"),
+            format_number(entry[:target_not_met_percent], 1, suffix: "%"),
+            entry[:target_met_percent].nil? ? nil : (entry[:target_met] ? "Met" : "Not Met")
+          ])
+        end
+
+        formatter.finish_table(sheet, header_row: header_row, column_count: headers.size)
+      end
+    end
+
+    def add_course_target_summary_sheet(workbook)
+      rows = Array(payload[:course_target_summary])
+
+      workbook.add_worksheet(name: "Course Level") do |sheet|
+        headers = [
+          "Track",
+          "Class",
+          "Students",
+          "Evidence Rows",
+          "# Achieved Course Target",
+          "# Not Met Course Target",
+          "% Achieved Course Target",
+          "% Not Met Course Target",
+          "No Course Target"
+        ]
+        header_row = formatter.add_header_row(sheet, headers)
+
+        if rows.blank?
+          formatter.add_note_row(sheet, [ "No course-level competency achievement data available" ])
+        end
+
+        rows.each do |entry|
+          formatter.add_data_row(sheet, [
+            entry[:track],
+            entry[:class_of].present? ? "Class of #{entry[:class_of]}" : "Class Unassigned",
+            entry[:student_count],
+            entry[:evidence_count],
+            entry[:met_count],
+            entry[:below_count],
+            format_number(entry[:met_percent], 1, suffix: "%"),
+            format_number(entry[:below_percent], 1, suffix: "%"),
+            entry[:no_target_count]
           ])
         end
 
@@ -232,6 +301,7 @@ module Reports
     def add_employment_sheet(workbook)
       employment = payload[:employment_summary] || {}
       status_counts = Array(employment[:status_counts])
+      cohorts = Array(employment[:cohorts])
       hours = employment[:hours_distribution] || {}
       flexibility = employment[:flexibility_distribution] || {}
 
@@ -246,6 +316,24 @@ module Reports
         formatter.add_note_row(sheet, [ "No employment status data available", nil ]) if status_counts.blank?
         status_counts.each do |entry|
           formatter.add_data_row(sheet, [ entry[:label], entry[:count] ])
+        end
+
+        if cohorts.any?
+          sheet.add_row []
+          formatter.add_title_row(sheet, [ "Track/Cohort Breakdown" ])
+          formatter.add_header_row(sheet, [ "Track", "Class", "Respondents", "Employment Rate", "Employed", "Not Employed", "No Response" ])
+          cohorts.each do |entry|
+            counts = Array(entry[:status_counts])
+            formatter.add_data_row(sheet, [
+              entry[:track],
+              entry[:class_of].present? ? "Class of #{entry[:class_of]}" : "Class Unassigned",
+              entry[:total_respondents],
+              format_number(entry[:employment_rate], 1, suffix: "%"),
+              status_count(counts, "Employed"),
+              status_count(counts, "Not employed"),
+              status_count(counts, "No response")
+            ])
+          end
         end
 
         sheet.add_row []
@@ -334,9 +422,9 @@ module Reports
           [ "Course", :course ],
           [ "Competency", :competency ],
           [ "Assignment", :assignment ],
-          [ "Raw Grade", :raw_grade ],
-          [ "Assessed Level", :assessed_level ],
-          [ "Course Target", :course_target_level ],
+          [ "Raw Course Score", :raw_grade ],
+          [ "Course Achievement Level", :assessed_level ],
+          [ "Course Target Level", :course_target_level ],
           [ "Target Status", :target_status ],
           [ "Source File", :source_file ],
           [ "Imported At", :imported_at ],
@@ -387,6 +475,14 @@ module Reports
 
     def raw_rows(key)
       Array(payload.dig(:raw_data, key))
+    end
+
+    def rating_level_label(level, label)
+      level.to_i.zero? ? "0/Not able to assess" : "#{level} #{label}"
+    end
+
+    def status_count(counts, label)
+      Array(counts).find { |entry| entry[:label] == label }&.dig(:count).to_i
     end
 
     def format_raw_value(value)

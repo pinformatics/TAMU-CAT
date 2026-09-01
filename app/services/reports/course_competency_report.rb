@@ -32,12 +32,13 @@ module Reports
           "Class Of",
           "Students",
           "Rows",
-          "Assessed Average",
-          "Course Target Average",
-          "Met",
-          "Below Target",
-          "No Target",
-          "Met Rate",
+          "Course Achievement Levels",
+          "Course Target Levels",
+          "Achieved",
+          "Not Met",
+          "No Course Target",
+          "Achieved Rate",
+          "Not Achieved Rate",
           "Release Status"
         ]
 
@@ -50,12 +51,13 @@ module Reports
             row[:class_years],
             row[:student_count],
             row[:evidence_count],
-            row[:assessed_average],
-            row[:course_target_average],
+            row[:assessed_levels],
+            row[:course_target_levels],
             row[:met_count],
             row[:below_count],
             row[:no_target_count],
             row[:met_rate],
+            row[:below_rate],
             row[:release_statuses]
           ]
         end
@@ -152,18 +154,24 @@ module Reports
     end
 
     def course_contributions(rows)
-      rows.group_by { |row| [ row.course_code.presence || "No course code", row.competency_title.presence || "No competency" ] }
-        .map do |(course_code, competency_title), group|
+      rows.group_by do |row|
+        [
+          row.course_code.presence || "No course code",
+          row.competency_title.presence || "No competency",
+          row.student&.track.presence || "No track",
+          row.student&.program_year.presence || "No class"
+        ]
+      end.map do |(course_code, competency_title, track, class_year), group|
           build_group_summary(group).merge(
             course_code: course_code,
             competency_title: competency_title,
             semester_names: group.map { |row| row.grade_import_batch&.program_semester&.name }.compact_blank.uniq.sort.join("; "),
-            tracks: group.filter_map { |row| row.student&.track }.compact_blank.uniq.sort.join("; "),
-            class_years: group.filter_map { |row| row.student&.program_year }.compact.uniq.sort.join("; "),
+            tracks: track,
+            class_years: class_year == "No class" ? nil : class_year,
             release_statuses: group.map { |row| release_status_label(row) }.uniq.sort.join("; ")
           )
         end
-        .sort_by { |row| [ row[:course_code].to_s, row[:competency_title].to_s ] }
+        .sort_by { |row| [ row[:course_code].to_s, row[:tracks].to_s, row[:class_years].to_s, row[:competency_title].to_s ] }
     end
 
     def target_attainment(rows)
@@ -176,10 +184,12 @@ module Reports
           student = group.first.student
           statuses = group.map { |row| GradeImports::TargetAttainmentReport.status_for(row.mapped_level, row.course_target_level) }
           assessed_values = group.filter_map(&:mapped_level).map(&:to_f)
+          competency_titles = group.map(&:competency_title).compact_blank.uniq.sort
 
           {
             student_id: student_id,
             student_name: student&.user&.name || "Student #{student_id}",
+            competency_titles: competency_titles,
             track: student&.track,
             class_of: student&.program_year,
             semester_names: semester_name,
@@ -204,11 +214,18 @@ module Reports
         evidence_count: rows.size,
         assessed_average: average(rows.filter_map(&:mapped_level).map(&:to_f)),
         course_target_average: average(rows.filter_map(&:course_target_level).map(&:to_f)),
+        assessed_levels: rows.filter_map(&:mapped_level).map { |level| format_level(level) }.uniq.sort.join("; "),
+        course_target_levels: rows.filter_map(&:course_target_level).map { |level| format_level(level) }.uniq.sort.join("; "),
         met_count: statuses.count(:met),
         below_count: statuses.count(:below_target),
         no_target_count: statuses.count(:no_target),
-        met_rate: denominator.positive? ? ((statuses.count(:met).to_f / denominator) * 100).round(1) : nil
+        met_rate: denominator.positive? ? ((statuses.count(:met).to_f / denominator) * 100).round(1) : nil,
+        below_rate: denominator.positive? ? ((statuses.count(:below_target).to_f / denominator) * 100).round(1) : nil
       }
+    end
+
+    def format_level(value)
+      value.to_s.sub(/\.0+\z/, "")
     end
 
     def release_status(row)

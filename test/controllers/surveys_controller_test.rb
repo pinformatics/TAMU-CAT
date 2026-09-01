@@ -336,8 +336,8 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     get survey_path(@survey)
     assert_response :success
 
-    assert_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 4\/5/m, response.body)
-    refute_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 1\/5/m, response.body)
+    assert_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 4/m, response.body)
+    refute_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 1/m, response.body)
   end
 
   test "show displays course competency context when released evidence exists" do
@@ -389,9 +389,9 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     get survey_path(@survey)
     assert_response :success
     assert_includes response.body, "Course competency evidence"
-    assert_includes response.body, "Mastery level: 4"
+    assert_includes response.body, "Course achievement level: 4"
     assert_includes response.body, "PHPM 701-001"
-    assert_includes response.body, "Course target: 5"
+    assert_includes response.body, "Course target level: 5"
   end
 
   test "show displays released course competency entries from prior semesters under matching questions" do
@@ -436,7 +436,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Course competency evidence"
-    assert_includes response.body, "Mastery level: 2"
+    assert_includes response.body, "Course achievement level: 2"
     assert_includes response.body, "PHPM 601-700"
     assert_includes response.body, "Fall 2025"
   end
@@ -483,7 +483,7 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_match(/#{Regexp.escape(question_title)}.*Course competency evidence/m, response.body)
-    assert_includes response.body, "Mastery level: 3"
+    assert_includes response.body, "Course achievement level: 3"
     assert_includes response.body, "PHPM 633-700"
   end
 

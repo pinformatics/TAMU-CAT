@@ -97,6 +97,10 @@ const EMPTY_OPTIONS = Object.freeze({
 
 const compact = (values) => values.filter(Boolean)
 
+const ratingLevelLabel = (level, label) => (
+  Number(level) === 0 ? "0/Not able to assess" : `${level} ${label}`
+)
+
 const titleize = (value = "") => {
   const str = String(value).trim()
   if (!str) return ""
@@ -433,8 +437,11 @@ const SummaryCards = ({ cards }) =>
           const trackRows = trackSummaries.map((track) => {
             const detailParts = []
             if (track.source_label) detailParts.push(track.source_label)
-            if (track.students_met_goal !== undefined && track.students_met_goal !== null) {
-              detailParts.push(`Students meeting goal: ${track.students_met_goal}`)
+            if (track.competencies_met_goal !== undefined && track.competencies_met_goal !== null) {
+              detailParts.push(`Competencies meeting benchmark: ${track.competencies_met_goal}`)
+            }
+            if (track.competencies_below_goal !== undefined && track.competencies_below_goal !== null) {
+              detailParts.push(`Below benchmark: ${track.competencies_below_goal}`)
             }
 
             const children = [
@@ -474,6 +481,16 @@ const SummaryCards = ({ cards }) =>
       if (card.meta && card.meta.students_met_goal !== undefined) {
         footerChildren.push(
           h("span", { className: "c-analytics-summary__description" }, `Students meeting goal: ${card.meta.students_met_goal}`)
+        )
+      }
+      if (card.meta && card.meta.competencies_met_goal !== undefined) {
+        footerChildren.push(
+          h("span", { className: "c-analytics-summary__description" }, `Competencies meeting benchmark: ${card.meta.competencies_met_goal}`)
+        )
+      }
+      if (card.meta && card.meta.competencies_below_goal !== undefined) {
+        footerChildren.push(
+          h("span", { className: "c-analytics-summary__description" }, `Below benchmark: ${card.meta.competencies_below_goal}`)
         )
       }
 
@@ -573,7 +590,7 @@ const TrendChart = ({ timeline, yAxisMode }) => {
     return () => chart.destroy()
   }, [ timeline, yAxisMode ])
 
-  const ariaLabel = yAxisMode === "percent" ? "% meeting target over time" : "Monthly average scores"
+  const ariaLabel = yAxisMode === "percent" ? "% meeting target over time" : "Achievement over time"
 
   return h(ChartViewport, { label: ariaLabel, size: "wide" },
     h("div", { className: "c-analytics-chart", role: "img", "aria-label": ariaLabel },
@@ -672,8 +689,8 @@ const CompetencyAchievementChart = ({ items, yAxisMode }) => {
     return h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   }
 
-  return h(ChartViewport, { label: "Average score by competency", size: "xwide" },
-    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by competency", style: { minHeight: "360px" } },
+  return h(ChartViewport, { label: "Competency achievement", size: "xwide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Competency achievement", style: { minHeight: "360px" } },
       h("canvas", { ref: canvasRef })
     )
   )
@@ -767,8 +784,8 @@ const DomainAverageChart = ({ items, yAxisMode }) => {
     return h("p", { className: "c-analytics-placeholder" }, "No competency data available for the selected filters.")
   }
 
-  return h(ChartViewport, { label: "Average score by domain", size: "wide" },
-    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Average score by domain", style: { minHeight: "360px" } },
+  return h(ChartViewport, { label: "Domain achievement", size: "wide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": "Domain achievement", style: { minHeight: "360px" } },
       h("canvas", { ref: canvasRef })
     )
   )
@@ -883,10 +900,9 @@ const TrackAchievementChart = ({ tracks }) => {
   useEffect(() => {
     if (!canvasRef.current || !Array.isArray(tracks) || tracks.length === 0) return undefined
 
-    const labels = tracks.map((track) => track.track || track.title)
+    const labels = tracks.map((track) => track.cohort_label || track.track || track.title)
     const achievedPercents = tracks.map((track) => safeNumber(track.achieved_percent) ?? 0)
     const notMetPercents = tracks.map((track) => safeNumber(track.not_met_percent) ?? 0)
-    const notAssessedPercents = tracks.map((track) => safeNumber(track.not_assessed_percent) ?? 0)
 
     const chart = new Chart(canvasRef.current.getContext("2d"), {
       type: "bar",
@@ -905,13 +921,6 @@ const TrackAchievementChart = ({ tracks }) => {
             label: "Not met",
             data: notMetPercents,
             backgroundColor: COLORS.notMet,
-            borderRadius: 10,
-            stack: "status"
-          },
-          {
-            label: "Not assessed",
-            data: notAssessedPercents,
-            backgroundColor: COLORS.notAssessed,
             borderRadius: 10,
             stack: "status"
           }
@@ -939,7 +948,6 @@ const TrackAchievementChart = ({ tracks }) => {
                 let count = 0
                 if (label === "Achieved") count = trackEntry?.achieved_count ?? 0
                 if (label === "Not met") count = trackEntry?.not_met_count ?? 0
-                if (label === "Not assessed") count = trackEntry?.not_assessed_count ?? 0
                 return `${label}: ${percent.toFixed(1)}% (${count})`
               }
             }
@@ -981,6 +989,207 @@ const TrackAchievementChart = ({ tracks }) => {
       h("canvas", { ref: canvasRef })
     )
   )
+}
+
+const CohortOutcomeChart = ({ rows, achievedKey, notMetKey, achievedLabel = "Achieved", notMetLabel = "Not met", emptyMessage, ariaLabel }) => {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    if (!canvasRef.current || !Array.isArray(rows) || rows.length === 0) return undefined
+
+    const labels = rows.map((row) => row.cohort_label || row.track || "Cohort")
+    const achievedPercents = rows.map((row) => safeNumber(row[achievedKey]) ?? 0)
+    const notMetPercents = rows.map((row) => safeNumber(row[notMetKey]) ?? 0)
+
+    const chart = new Chart(canvasRef.current.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: achievedLabel,
+            data: achievedPercents,
+            backgroundColor: COLORS.achieved,
+            borderRadius: 10,
+            stack: "status",
+            showDataLabels: true
+          },
+          {
+            label: notMetLabel,
+            data: notMetPercents,
+            backgroundColor: COLORS.notMet,
+            borderRadius: 10,
+            stack: "status"
+          }
+        ]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                const percent = safeNumber(context.raw) ?? 0
+                return `${context.dataset.label}: ${percent.toFixed(1)}%`
+              }
+            }
+          },
+          percentageLabelPlugin: {
+            color: COLORS.neutralText
+          }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            min: 0,
+            max: 100,
+            ticks: {
+              callback(value) {
+                return `${value}%`
+              }
+            }
+          },
+          y: {
+            stacked: true,
+            ticks: {
+              autoSkip: false
+            }
+          }
+        }
+      }
+    })
+
+    return () => chart.destroy()
+  }, [ rows, achievedKey, notMetKey, achievedLabel, notMetLabel ])
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return h("p", { className: "c-analytics-placeholder" }, emptyMessage || "No cohort data available.")
+  }
+
+  return h(ChartViewport, { label: ariaLabel || "Cohort achievement chart", size: "wide" },
+    h("div", { className: "c-analytics-chart", role: "img", "aria-label": ariaLabel || "Cohort achievement chart", style: { minHeight: "360px" } },
+      h("canvas", { ref: canvasRef })
+    )
+  )
+}
+
+const TrackAchievementTable = ({ tracks }) => {
+  if (!Array.isArray(tracks) || tracks.length === 0) return null
+
+  return h("div", { className: "c-table-wrapper" },
+    h("table", { className: "c-table c-table--sm" }, [
+      h("thead", null,
+        h("tr", null, [
+          h("th", null, "Track"),
+          h("th", null, "Class"),
+          h("th", null, "Students"),
+          h("th", null, "# Achieved Program Target"),
+          h("th", null, "# Not Met Program Target"),
+          h("th", null, "% Achieved Program Target"),
+          h("th", null, "% Not Met Program Target")
+        ])
+      ),
+      h("tbody", null,
+        tracks.map((track) => h("tr", { key: track.id || track.cohort_label }, [
+          h("td", null, track.track || "—"),
+          h("td", null, track.class_of ? `Class of ${track.class_of}` : "Class Unassigned"),
+          h("td", null, String(track.total_students ?? "—")),
+          h("td", null, String(track.achieved_count ?? 0)),
+          h("td", null, String(track.not_met_count ?? 0)),
+          h("td", null, formatMetricValue(track.achieved_percent, "percent", 1)),
+          h("td", null, formatMetricValue(track.not_met_percent, "percent", 1))
+        ]))
+      )
+    ])
+  )
+}
+
+const ProgramAttainmentTable = ({ distribution }) => {
+  const levels = Object.entries(distribution?.levels || {}).sort(([a], [b]) => Number(a) - Number(b))
+  const items = Array.isArray(distribution?.items) ? distribution.items : []
+
+  if (items.length === 0) {
+    return h("p", { className: "c-analytics-placeholder" }, "No program-level attainment data available.")
+  }
+
+  return h("div", { className: "c-table-wrapper" },
+    h("table", { className: "c-table c-table--sm c-table--sticky-header" }, [
+      h("thead", null,
+        h("tr", null, [
+          h("th", null, "Track"),
+          h("th", null, "Class"),
+          h("th", null, "Competency"),
+          ...levels.map(([level, label]) => h("th", { key: `level-${level}` }, ratingLevelLabel(level, label))),
+          h("th", null, "Students"),
+          h("th", null, "% Achieved Program Target"),
+          h("th", null, "% Not Achieved Program Target")
+        ])
+      ),
+      h("tbody", null,
+        items.map((item) => h("tr", { key: `${item.cohort_label}-${item.id}` }, [
+          h("td", null, item.track || "—"),
+          h("td", null, item.class_of ? `Class of ${item.class_of}` : "Class Unassigned"),
+          h("td", null, item.name || "—"),
+          ...levels.map(([level]) => h("td", { key: `level-${level}` }, String(item.level_counts?.[level] ?? 0))),
+          h("td", null, String(item.total_students ?? 0)),
+          h("td", null, formatMetricValue(item.target_met_percent, "percent", 1)),
+          h("td", null, formatMetricValue(item.target_not_met_percent, "percent", 1))
+        ]))
+      )
+    ])
+  )
+}
+
+const CourseTargetSummary = ({ rows }) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return h("p", { className: "c-analytics-placeholder" }, "No course-level competency achievement data available.")
+  }
+
+  return h("div", { className: "space-y-4" }, [
+    h(StatusLegend, { statuses: [ "achieved", "not_met" ] }),
+    h(CohortOutcomeChart, {
+      rows,
+      achievedKey: "met_percent",
+      notMetKey: "below_percent",
+      achievedLabel: "Achieved course target",
+      notMetLabel: "Below course target",
+      ariaLabel: "Course-level competency achievement by track and cohort",
+      emptyMessage: "No course-level competency achievement data available."
+    }),
+    h("div", { className: "c-table-wrapper" },
+      h("table", { className: "c-table c-table--sm" }, [
+        h("thead", null,
+          h("tr", null, [
+            h("th", null, "Track"),
+            h("th", null, "Class"),
+            h("th", null, "Students"),
+            h("th", null, "Evidence Rows"),
+            h("th", null, "# Achieved Course Target"),
+            h("th", null, "# Not Met Course Target"),
+            h("th", null, "% Achieved Course Target"),
+            h("th", null, "% Not Met Course Target"),
+            h("th", null, "No Course Target")
+          ])
+        ),
+        h("tbody", null,
+          rows.map((row) => h("tr", { key: row.cohort_label }, [
+            h("td", null, row.track || "—"),
+            h("td", null, row.class_of ? `Class of ${row.class_of}` : "Class Unassigned"),
+            h("td", null, String(row.student_count ?? 0)),
+            h("td", null, String(row.evidence_count ?? 0)),
+            h("td", null, String(row.met_count ?? 0)),
+            h("td", null, String(row.below_count ?? 0)),
+            h("td", null, formatMetricValue(row.met_percent, "percent", 1)),
+            h("td", null, formatMetricValue(row.below_percent, "percent", 1)),
+            h("td", null, String(row.no_target_count ?? 0))
+          ]))
+        )
+      ])
+    )
+  ])
 }
 
 // ─── Employment charts ───────────────────────────────────────────────────────
@@ -1104,10 +1313,46 @@ const EmploymentFlexibilityChart = ({ distribution }) => {
   )
 }
 
+const employmentStatusCount = (row, label) => {
+  const status = Array.isArray(row?.status_counts) ? row.status_counts : []
+  return status.find((entry) => entry.label === label)?.count ?? 0
+}
+
+const EmploymentCohortTable = ({ cohorts }) => {
+  if (!Array.isArray(cohorts) || cohorts.length === 0) return null
+
+  return h("div", { className: "c-table-wrapper" },
+    h("table", { className: "c-table c-table--sm" }, [
+      h("thead", null,
+        h("tr", null, [
+          h("th", null, "Track"),
+          h("th", null, "Class"),
+          h("th", null, "Respondents"),
+          h("th", null, "Employment Rate"),
+          h("th", null, "Employed"),
+          h("th", null, "Not Employed"),
+          h("th", null, "No Response")
+        ])
+      ),
+      h("tbody", null,
+        cohorts.map((row) => h("tr", { key: row.cohort_label }, [
+          h("td", null, row.track || "—"),
+          h("td", null, row.class_of ? `Class of ${row.class_of}` : "Class Unassigned"),
+          h("td", null, String(row.total_respondents ?? 0)),
+          h("td", null, formatMetricValue(row.employment_rate, "percent", 1)),
+          h("td", null, String(employmentStatusCount(row, "Employed"))),
+          h("td", null, String(employmentStatusCount(row, "Not employed"))),
+          h("td", null, String(employmentStatusCount(row, "No response")))
+        ]))
+      )
+    ])
+  )
+}
+
 const EmploymentTab = ({ data, onExport }) => {
   if (!data) return h("p", { className: "c-analytics-placeholder" }, "Loading employment data…")
 
-  const { total_respondents, employment_rate, status_counts, hours_distribution, flexibility_distribution } = data
+  const { total_respondents, employment_rate, status_counts, hours_distribution, flexibility_distribution, cohorts } = data
 
   return h("div", { className: "space-y-8" }, [
     // Summary banner
@@ -1123,6 +1368,8 @@ const EmploymentTab = ({ data, onExport }) => {
           ])
         : null
     ].filter(Boolean)),
+
+    h(EmploymentCohortTable, { cohorts }),
 
     // Status donut
     h("div", { className: "space-y-2" }, [
@@ -1158,7 +1405,7 @@ const YAxisToggle = ({ mode, onChange }) => {
       className: buttonClass(scoreActive),
       onClick: () => onChange("score"),
       "aria-pressed": scoreActive
-    }, "Average score"),
+    }, "Achievement level"),
     h("button", {
       type: "button",
       className: buttonClass(percentActive),
@@ -1211,15 +1458,10 @@ const ReportsApp = ({ initialFilters = {} }) => {
   const [ options, setOptions ] = useState(EMPTY_OPTIONS)
   const [ filters, setFilters ] = useState(initialDashboardFilters)
   const [ benchmark, setBenchmark ] = useState(null)
-  const [ competencies, setCompetencies ] = useState([])
   const [ tracks, setTracks ] = useState([])
-  const [ competencyDetail, setCompetencyDetail ] = useState(null)
   const [ loading, setLoading ] = useState(true)
   const [ error, setError ] = useState(null)
-  const [ activeTab, setActiveTab ] = useState("competency")
-  const [ yAxisMode, setYAxisMode ] = useState("percent")
-  const [ competencyDetailDomain, setCompetencyDetailDomain ] = useState("all")
-  const [ competencyDetailSort, setCompetencyDetailSort ] = useState("student")
+  const [ activeTab, setActiveTab ] = useState("track")
   const [ employment, setEmployment ] = useState(null)
   const filtersRef = useRef(initialDashboardFilters)
 
@@ -1232,20 +1474,16 @@ const ReportsApp = ({ initialFilters = {} }) => {
       const inputFilters = (nextFilters && typeof nextFilters === "object") ? nextFilters : filtersRef.current
       const resolvedFilters = { ...DEFAULT_FILTERS, ...inputFilters }
       const query = buildQueryString(resolvedFilters)
-      const [ benchmarkRes, competencyRes, trackRes, competencyDetailRes, employmentRes ] = await Promise.all([
+      const [ benchmarkRes, trackRes, employmentRes ] = await Promise.all([
         fetchJson(`${API_ENDPOINTS.benchmark}${query}`),
-        fetchJson(`${API_ENDPOINTS.competency}${query}`),
         fetchJson(`${API_ENDPOINTS.track}${query}`),
-        fetchJson(`${API_ENDPOINTS.competencyDetail}${query}`),
         fetchJson(`${API_ENDPOINTS.employment}${query}`)
       ])
 
       filtersRef.current = resolvedFilters
       setFilters(resolvedFilters)
       setBenchmark(benchmarkRes)
-      setCompetencies(Array.isArray(competencyRes) ? competencyRes : [])
       setTracks(Array.isArray(trackRes) ? trackRes : [])
-      setCompetencyDetail(competencyDetailRes)
       setEmployment(employmentRes)
     } catch (err) {
       console.error(err)
@@ -1298,71 +1536,24 @@ const ReportsApp = ({ initialFilters = {} }) => {
     syncDashboardUrl(filters)
   }, [ filters ])
 
-  useEffect(() => {
-    const domainIds = new Set((competencyDetail?.domains || []).map((domain) => String(domain.id)))
-    if (competencyDetailDomain !== "all" && !domainIds.has(String(competencyDetailDomain))) {
-      setCompetencyDetailDomain("all")
-    }
-  }, [ competencyDetail, competencyDetailDomain ])
-
-  const competencyAchievementItems = useMemo(() => {
-    if (!Array.isArray(competencyDetail?.items)) return []
-
-    return competencyDetail.items.map((item) => {
-      const achieved = Number(item?.achieved_count)
-      const notMet = Number(item?.not_met_count)
-      const notAssessed = Number(item?.not_assessed_count)
-
-      return {
-        ...item,
-        achieved_count: Number.isFinite(achieved) ? achieved : 0,
-        not_met_count: Number.isFinite(notMet) ? notMet : 0,
-        not_assessed_count: Number.isFinite(notAssessed) ? notAssessed : 0
-      }
-    })
-  }, [ competencyDetail ])
-
   const summaryCards = Array.isArray(benchmark?.cards) ? benchmark.cards : []
-  const timeline = Array.isArray(benchmark?.timeline) ? benchmark.timeline : []
+  const ratingLevelDistribution = benchmark?.rating_level_distribution || {}
+  const programAttainmentCohorts = Array.isArray(ratingLevelDistribution?.cohorts) ? ratingLevelDistribution.cohorts : []
+  const courseTargetSummary = Array.isArray(benchmark?.course_target_summary) ? benchmark.course_target_summary : []
 
 
   const chartTabs = useMemo(() => {
     const tabs = []
 
     tabs.push({
-      key: "competency",
-      label: "Competency",
-      title: "Num Achieved by Competency",
-      description: "Side-by-side comparison of student self-ratings, advisor ratings, and course-derived ratings averaged per competency.",
-      axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
-      content: h(CompetencyAchievementChart, { items: competencyAchievementItems, yAxisMode }),
-      footnote: h("p", { className: "text-xs text-slate-500 space-y-1" }, [
-        "Averages are calculated based on all responses within each competency.",
-        filtersDescription && filtersDescription !== "None" ? h("span", { className: "block" }, `Filters applied: ${filtersDescription}`) : null
-      ].filter(Boolean))
-    })
-
-    tabs.push({
-      key: "domain",
-      label: "Domain",
-      title: "Num Achieved by Domain",
-      description: "Side-by-side comparison of student self-ratings, advisor ratings, and course-derived ratings averaged per domain.",
-      axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
-      content: h(DomainAverageChart, { items: competencies, yAxisMode }),
-      footnote: h("p", { className: "text-xs text-slate-500 space-y-1" }, [
-        "Averages are calculated based on all responses within each domain.",
-        filtersDescription && filtersDescription !== "None" ? h("span", { className: "block" }, `Filters applied: ${filtersDescription}`) : null
-      ].filter(Boolean))
-    })
-
-    tabs.push({
       key: "track",
-      label: "Track",
-      title: "% All Competency Achieved by Track",
-      description: "Horizontal stacked bars highlight attainment percentages alongside missing and unassessed counts.",
+      label: "Track/Cohort",
+      title: "Track/Cohort Program Achievement",
+      description: "Achievement and not-met outcomes separated by MHA track and graduating class.",
       content: h(React.Fragment, null, [
-        h(StatusLegend, { statuses: [ "achieved", "not_met", "not_assessed" ] }),
-        h(TrackAchievementChart, { tracks })
+        h(StatusLegend, { statuses: [ "achieved", "not_met" ] }),
+        h(TrackAchievementChart, { tracks }),
+        h(TrackAchievementTable, { tracks })
       ]),
       footnote: (filtersDescription && filtersDescription !== "None")
         ? h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
@@ -1370,15 +1561,37 @@ const ReportsApp = ({ initialFilters = {} }) => {
     })
 
     tabs.push({
-      key: "trend",
-      label: "Trend",
-      title: "Progress Over Time",
-      description: "Monthly average scores for students, advisors, and course ratings so you can spot improvements or regression at a glance.",
-      axisToggle: h(YAxisToggle, { mode: yAxisMode, onChange: setYAxisMode }),
-      content: timeline.length > 0
-        ? h(TrendChart, { timeline, yAxisMode })
-        : h("p", { className: "c-analytics-placeholder" }, "No trend data available."),
-      footnote: h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
+      key: "program_attainment",
+      label: "Program Attainment",
+      title: "Program-Level Competency Achievement",
+      description: "Level distribution and program-target achievement by track and graduating class.",
+      content: h(React.Fragment, null, [
+        h(StatusLegend, { statuses: [ "achieved", "not_met" ] }),
+        h(CohortOutcomeChart, {
+          rows: programAttainmentCohorts,
+          achievedKey: "target_met_percent",
+          notMetKey: "target_not_met_percent",
+          achievedLabel: "Achieved program target",
+          notMetLabel: "Did not achieve program target",
+          ariaLabel: "Overall program target achievement by track and cohort",
+          emptyMessage: "No program-level attainment data available."
+        }),
+        h(ProgramAttainmentTable, { distribution: ratingLevelDistribution })
+      ]),
+      footnote: (filtersDescription && filtersDescription !== "None")
+        ? h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
+        : null
+    })
+
+    tabs.push({
+      key: "course_target",
+      label: "Course-Level",
+      title: "Course-Level Competency Achievement",
+      description: "Course evidence compared with course target levels by track and graduating class.",
+      content: h(CourseTargetSummary, { rows: courseTargetSummary }),
+      footnote: (filtersDescription && filtersDescription !== "None")
+        ? h("p", { className: "text-xs text-slate-500" }, `Filters applied: ${filtersDescription}`)
+        : null
     })
 
     tabs.push({
@@ -1393,7 +1606,7 @@ const ReportsApp = ({ initialFilters = {} }) => {
     })
 
     return tabs
-  }, [ competencies, competencyAchievementItems, employment, filtersDescription, timeline, tracks, yAxisMode ])
+  }, [ courseTargetSummary, employment, filtersDescription, programAttainmentCohorts, ratingLevelDistribution, tracks ])
 
   useEffect(() => {
     if (!Array.isArray(chartTabs) || chartTabs.length === 0) return

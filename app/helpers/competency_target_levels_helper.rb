@@ -72,6 +72,10 @@ module CompetencyTargetLevelsHelper
       }
     end
 
+    if context.present?
+      context[:program_target_level] = effective_competency_target_level(question: question, survey: survey, student: student)
+    end
+
     @_course_competency_context_cache[cache_key] = context
   end
 
@@ -79,11 +83,16 @@ module CompetencyTargetLevelsHelper
     return if context.blank?
 
     if context[:released] == false
+      parts = [
+        content_tag(:span, "Course competency evidence", class: "c-context-panel__label"),
+        content_tag(:strong, context[:release_label].presence || "Not released")
+      ]
+      if context[:program_target_level].present?
+        parts << content_tag(:span, "End of program target level: #{context[:program_target_level]}", class: "c-context-panel__meta")
+      end
+
       return content_tag(:div, class: "c-context-panel c-context-panel--locked") do
-        safe_join([
-          content_tag(:span, "Course competency evidence", class: "c-context-panel__label"),
-          content_tag(:strong, context[:release_label].presence || "Not released")
-        ], " ")
+        safe_join(parts, " ")
       end
     end
 
@@ -92,13 +101,17 @@ module CompetencyTargetLevelsHelper
 
     rows = entries.map do |entry|
       parts = [
-        content_tag(:strong, "Mastery level: #{entry[:mastery_level]}", class: "c-context-panel__value"),
+        content_tag(:strong, "Course achievement level: #{entry[:mastery_level]}", class: "c-context-panel__value"),
         content_tag(:span, entry[:course_code], class: "c-context-panel__chip"),
         content_tag(:span, entry[:semester_name], class: "c-context-panel__meta")
       ]
 
       if entry[:course_target_levels].present?
-        parts << content_tag(:span, "Course target: #{entry[:course_target_levels].join(', ')}", class: "c-context-panel__meta")
+        parts << content_tag(:span, "Course target level: #{entry[:course_target_levels].join(', ')}", class: "c-context-panel__meta")
+      end
+
+      if context[:program_target_level].present?
+        parts << content_tag(:span, "End of program target level: #{context[:program_target_level]}", class: "c-context-panel__meta")
       end
 
       if entry[:source_count].to_i > 1

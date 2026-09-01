@@ -245,7 +245,7 @@ class ReportsController < ApplicationController
     insights = Reports::CompetencyInsights.new(user: current_user, params: reports_filter_params).call
 
     CSV.generate(headers: true) do |csv|
-      csv << [ "Semester", "Cohort", "Students", "Self Avg", "Advisor Avg", "Course Avg", "Below Target" ]
+      csv << [ "Semester", "Cohort", "Students", "Self Avg", "Advisor Avg", "Course Avg", "Below Program Target" ]
       Array(insights[:cohort_comparison]).each do |row|
         csv << [
           row[:semester],
@@ -266,11 +266,18 @@ class ReportsController < ApplicationController
 
     CSV.generate do |csv|
       csv << [ "Course Heatmap" ]
-      csv << [ "Course", "Student", "Semester", "Track", "Class", "Average", "Rows", "Below Target", "No Target" ]
-      Array(course_report[:student_course_heatmap]).sort_by { |row| [ row[:course_code].to_s, row[:student_name].to_s.downcase, row[:semester_names].to_s ] }.each do |row|
+      csv << [
+        "Course", "Student", "Competencies", "Semester", "Track",
+        "Class", "Course Achievement Level", "Rows", "Below Course Target", "No Course Target"
+      ]
+      course_heatmap_rows = Array(course_report[:student_course_heatmap]).sort_by do |row|
+        [ row[:course_code].to_s, row[:student_name].to_s.downcase, row[:semester_names].to_s ]
+      end
+      course_heatmap_rows.each do |row|
         csv << [
           row[:course_code],
           row[:student_name],
+          Array(row[:competency_titles]).join("; "),
           row[:semester_names],
           row[:track],
           row[:class_of],

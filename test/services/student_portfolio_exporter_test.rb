@@ -38,10 +38,10 @@ class StudentPortfolioExporterTest < ActiveSupport::TestCase
       "Courses With Evidence",
       "Course Evidence Rows",
       "Course Competencies",
-      "Course Targets Met",
+      "Course Targets Achieved",
       "Below Course Target",
       "No Course Target",
-      "Course Target Met Rate"
+      "Course Target Achievement Rate"
     ], sheet.rows.first.cells.map(&:value)
     assert_equal @student.uin, sheet.rows.second.cells.first.value
     assert_equal @student.program_year.to_s, sheet.rows.second.cells[4].value

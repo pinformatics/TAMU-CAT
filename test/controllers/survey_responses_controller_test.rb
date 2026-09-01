@@ -1086,8 +1086,8 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
 
     get survey_response_path(survey_response)
     assert_response :success
-    assert_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 5</m, response.body)
-    refute_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 1</m, response.body)
+    assert_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 5(?:<|\b)/m, response.body)
+    refute_match(/#{Regexp.escape(competency_title)}.*End-of-program target level: 1(?:<|\b)/m, response.body)
   end
 
   test "show includes released course competency and target context" do
@@ -1141,9 +1141,9 @@ class SurveyResponsesControllerIntegrationTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Course competency evidence"
-    assert_includes response.body, "Mastery level: 4"
+    assert_includes response.body, "Course achievement level: 4"
     assert_includes response.body, "PHPM 701-001"
-    assert_includes response.body, "Course target: 5"
+    assert_includes response.body, "Course target level: 5"
   end
 
   test "completed response shows self target summary to every permitted role" do

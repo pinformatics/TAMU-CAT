@@ -166,8 +166,8 @@ module Reports
       refute_nil track_card, "Expected combined benchmark track card"
       assert_equal 2, Array(track_card.dig(:meta, :tracks)).size
 
-      residential = track_card[:meta][:tracks].find { |entry| entry[:label] == "Residential" }
-      executive = track_card[:meta][:tracks].find { |entry| entry[:label] == "Executive" }
+      residential = track_card[:meta][:tracks].find { |entry| entry[:label] == "Residential, Class of 2026" }
+      executive = track_card[:meta][:tracks].find { |entry| entry[:label] == "Executive, Class of 2027" }
 
       refute_nil residential, "Expected Residential track entry"
       refute_nil executive, "Expected Executive track entry"
@@ -177,8 +177,8 @@ module Reports
 
       assert_in_delta 100.0, residential[:percent], 0.01
       assert_in_delta 0.0, executive[:percent], 0.01
-      assert_equal 1, residential[:students_met_goal]
-      assert_equal 0, executive[:students_met_goal]
+      assert_equal 1, residential[:competencies_met_goal]
+      assert_equal 0, executive[:competencies_met_goal]
       assert_equal 2, track_card[:sample_size]
     end
 

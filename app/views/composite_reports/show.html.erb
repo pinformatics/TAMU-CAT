@@ -45,6 +45,12 @@
       <td><%= survey_response.completion_date ? survey_response.completion_date.strftime("%Y-%m-%d") : "—" %></td>
     </tr>
     <tr>
+      <th>Track</th>
+      <td><%= student.track.presence || "—" %></td>
+      <th>Cohort</th>
+      <td><%= student.program_year.present? ? "Class of #{student.program_year}" : "—" %></td>
+    </tr>
+    <tr>
       <th>Student Update</th>
       <td><%= latest_student ? latest_student.strftime("%Y-%m-%d") : "—" %></td>
       <th>Advisor Update</th>
@@ -98,45 +104,79 @@
     <% advisor_rating_numeric = feedback_for_question ? normalize_proficiency_value(feedback_for_question.average_score) : nil %>
     <% advisor_rating_numeric = advisor_rating_numeric.to_s[/\d+/] if advisor_rating_numeric.present? %>
     <% grade_derived_entry = grade_derived_competencies[question.question_text.to_s] || {} %>
+    <% grade_derived_provenance = Array(grade_derived_entry[:provenance]) %>
+    <% course_target_levels = grade_derived_provenance.filter_map { |item| item[:course_target_level] }.uniq.sort %>
 
     <% competency_rows << {
       competency: question.question_text.to_s,
       target_level: target_level,
+      course_target_levels: course_target_levels,
       student_rating: student_rating_numeric,
       advisor_rating: advisor_rating_numeric,
       grade_derived_rating: grade_derived_entry[:aggregated_level],
       grade_derived_evidence_count: grade_derived_entry[:evidence_count],
       grade_derived_latest_at: grade_derived_entry[:latest_updated_at],
-      grade_derived_provenance: Array(grade_derived_entry[:provenance])
+      grade_derived_provenance: grade_derived_provenance
     } %>
     <% competency_rating_question_ids << question.id %>
   <% end %>
 <% end %>
 
 <% if competency_rows.any? %>
-  <% target_values = competency_rows.map { |row| row[:target_level].to_s[/\d+/] }.compact.map(&:to_f) %>
-  <% student_values = competency_rows.map { |row| row[:student_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
   <% advisor_values = competency_rows.map { |row| row[:advisor_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
-  <% grade_derived_values = competency_rows.map { |row| row[:grade_derived_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
   <% show_advisor_rating_column = advisor_values.any? %>
-  <% competency_summary_colspan = show_advisor_rating_column ? 5 : 4 %>
-  <% avg_target = target_values.any? ? (target_values.sum / target_values.size) : nil %>
-  <% avg_student = student_values.any? ? (student_values.sum / student_values.size) : nil %>
-  <% avg_advisor = advisor_values.any? ? (advisor_values.sum / advisor_values.size) : nil %>
-  <% avg_grade_derived = grade_derived_values.any? ? (grade_derived_values.sum / grade_derived_values.size) : nil %>
+  <% checkpoint_rows_by_competency = Array(checkpoint_progress&.dig(:rows)).index_by { |row| row[:competency] } %>
+  <% checkpoint_labels = Array(checkpoint_progress&.dig(:checkpoints)) %>
+  <% show_checkpoint_columns = checkpoint_labels.any? %>
+  <% self_assessment_column_count = show_checkpoint_columns ? checkpoint_labels.size : 1 %>
+  <% competency_summary_colspan = 5 + self_assessment_column_count + (show_advisor_rating_column ? 1 : 0) %>
 
   <section class="pdf-section">
-    <h2 class="c-section-title c-heading-inline">Competency Achievement Summary</h2>
+    <h2 class="c-section-title c-heading-inline">MHA Competency Self-Assessment</h2>
+    <p class="c-help">
+      Student's current self-assessment responses are shown before the course faculty achievement summary.
+    </p>
     <table class="competency-table">
       <thead>
         <tr>
           <th>Competency</th>
+          <th>Student Self-Assessment Level</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% competency_rows.each do |row| %>
+          <tr>
+            <td><%= row[:competency] %></td>
+            <td class="numeric"><%= row[:student_rating].present? ? row[:student_rating] : "—" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="pdf-section">
+    <h2 class="c-section-title c-heading-inline">Competency Achievement Summary</h2>
+    <p class="c-help">
+      From course faculty. Student self-assessment checkpoints are shown beside course faculty achievement when available.
+    </p>
+    <table class="competency-table">
+      <thead>
+        <tr>
+          <th>Competency</th>
+          <th>Course Target Level</th>
           <th>End of Program Target Level</th>
-          <th>Student Self-Assessment</th>
+          <th>End of Program Achievement Level</th>
+          <th>Total Assessments Supporting End of Program Achievement Level</th>
+          <% if show_checkpoint_columns %>
+            <% checkpoint_labels.each do |checkpoint| %>
+              <th>Self-Assessment: <%= checkpoint %></th>
+            <% end %>
+          <% else %>
+            <th>Student Self-Assessment Level</th>
+          <% end %>
           <% if show_advisor_rating_column %>
             <th>Advisor Rating</th>
           <% end %>
-          <th>Course-Derived Rating</th>
         </tr>
       </thead>
       <tbody>
@@ -144,65 +184,37 @@
           <% if row[:grade_derived_provenance].any? %>
             <tr>
               <td colspan="<%= competency_summary_colspan %>">
-                <strong>Course:</strong>
-                <%= row[:grade_derived_provenance].map { |item| [item[:course_code], item[:assignment_name]].reject(&:blank?).join(" · ") }.join(" | ") %>
+                <strong>Completed course evidence:</strong>
+                <%= row[:grade_derived_provenance].map { |item|
+                  details = [item[:course_code], item[:assignment_name]].reject(&:blank?)
+                  details << "achievement #{item[:mapped_level]}" if item[:mapped_level].present?
+                  details << "target #{item[:course_target_level]}" if item[:course_target_level].present?
+                  details.join(" · ")
+                }.join(" | ") %>
               </td>
             </tr>
           <% end %>
           <tr>
             <td><%= row[:competency] %></td>
+            <td class="numeric"><%= row[:course_target_levels].present? ? row[:course_target_levels].join(", ") : "—" %></td>
             <td class="numeric"><%= row[:target_level].present? ? row[:target_level] : "—" %></td>
-            <td class="numeric"><%= row[:student_rating].present? ? row[:student_rating] : "—" %></td>
-            <% if show_advisor_rating_column %>
-              <td class="numeric"><%= row[:advisor_rating].present? ? row[:advisor_rating] : "—" %></td>
-            <% end %>
             <td class="numeric">
-              <% if row[:grade_derived_rating].present? %>
-                <%= row[:grade_derived_rating] %>
-                <div class="c-muted"><%= row[:grade_derived_evidence_count] %> contributing courses</div>
-                <% if row[:grade_derived_latest_at].present? %>
-                  <div class="c-muted"><%= row[:grade_derived_latest_at].strftime("%Y-%m-%d") %></div>
-                <% end %>
-              <% else %>
-                —
+              <%= row[:grade_derived_rating].present? ? row[:grade_derived_rating] : "—" %>
+              <% if row[:grade_derived_latest_at].present? %>
+                <div class="c-muted"><%= row[:grade_derived_latest_at].strftime("%Y-%m-%d") %></div>
               <% end %>
             </td>
-          </tr>
-        <% end %>
-
-        <tr class="competency-average-row">
-          <td><strong>Average</strong></td>
-          <td class="numeric"><%= avg_target ? format("%.2f", avg_target) : "—" %></td>
-          <td class="numeric"><%= avg_student ? format("%.2f", avg_student) : "—" %></td>
-          <% if show_advisor_rating_column %>
-            <td class="numeric"><%= avg_advisor ? format("%.2f", avg_advisor) : "—" %></td>
-          <% end %>
-          <td class="numeric"><%= avg_grade_derived ? format("%.2f", avg_grade_derived) : "—" %></td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
-<% end %>
-
-<% if checkpoint_progress.present? %>
-  <section class="pdf-section">
-    <h2 class="c-section-title c-heading-inline">Progress Over Time</h2>
-    <p class="c-help">Self-assessment rating at each program checkpoint completed so far.</p>
-    <table class="competency-table">
-      <thead>
-        <tr>
-          <th>Competency</th>
-          <% checkpoint_progress[:checkpoints].each do |checkpoint| %>
-            <th><%= checkpoint %></th>
-          <% end %>
-        </tr>
-      </thead>
-      <tbody>
-        <% checkpoint_progress[:rows].each do |row| %>
-          <tr>
-            <td><%= row[:competency] %></td>
-            <% checkpoint_progress[:checkpoints].each do |checkpoint| %>
-              <td class="numeric"><%= row[:scores][checkpoint] || "—" %></td>
+            <td class="numeric"><%= row[:grade_derived_evidence_count].present? ? row[:grade_derived_evidence_count] : "—" %></td>
+            <% if show_checkpoint_columns %>
+              <% checkpoint_scores = checkpoint_rows_by_competency.dig(row[:competency], :scores) || {} %>
+              <% checkpoint_labels.each do |checkpoint| %>
+                <td class="numeric"><%= checkpoint_scores[checkpoint] || "—" %></td>
+              <% end %>
+            <% else %>
+              <td class="numeric"><%= row[:student_rating].present? ? row[:student_rating] : "—" %></td>
+            <% end %>
+            <% if show_advisor_rating_column %>
+              <td class="numeric"><%= row[:advisor_rating].present? ? row[:advisor_rating] : "—" %></td>
             <% end %>
           </tr>
         <% end %>

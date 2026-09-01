@@ -159,10 +159,10 @@ class StudentPortfolioExporter
       "Courses With Evidence",
       "Course Evidence Rows",
       "Course Competencies",
-      "Course Targets Met",
+      "Course Targets Achieved",
       "Below Course Target",
       "No Course Target",
-      "Course Target Met Rate"
+      "Course Target Achievement Rate"
     ]
   end
 

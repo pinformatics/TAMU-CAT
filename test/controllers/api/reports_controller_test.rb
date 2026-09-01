@@ -306,6 +306,11 @@ module Api
 
       assert_response :success
       assert_equal "application/json; charset=utf-8", @response.content_type
+      json_response = JSON.parse(@response.body)
+      assert_includes json_response.keys, "rating_level_distribution"
+      assert_includes json_response.keys, "course_target_summary"
+      assert_equal "Not able to assess", json_response.dig("rating_level_distribution", "levels", "0")
+      assert_kind_of Array, json_response["course_target_summary"]
     end
 
     test "competency_summary returns JSON response" do

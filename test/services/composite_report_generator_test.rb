@@ -26,11 +26,57 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     assert_includes html, "Survey Response Report"
     assert_includes html, "Student-level competency record"
     assert_includes html, "FERPA"
+    assert_includes html, "MHA Competency Self-Assessment"
     assert_includes html, "class=\"report-facts\""
     assert_includes html, "class=\"pdf-stat-row\""
     assert_no_match(/pdf-stat-label\">\s*Answered\s*</, html)
     assert_no_match(/\d+%\s+complete/, html)
     assert_includes html, "Required"
+    assert_operator html.index("MHA Competency Self-Assessment"), :<, html.index("Competency Achievement Summary")
+  end
+
+  test "composite report labels course evidence without grade wording" do
+    html = render_competency_report_html(course_evidence: true)
+
+    assert_includes html, "Competency Achievement Summary"
+    assert_includes html, "From course faculty"
+    assert_includes html, "Course Target Level"
+    assert_includes html, "End of Program Target Level"
+    assert_includes html, "End of Program Achievement Level"
+    assert_includes html, "Student Self-Assessment Level"
+    assert_includes html, "Total Assessments Supporting End of Program Achievement Level"
+    assert_includes html, "Completed course evidence:"
+    assert_includes html, "achievement 4"
+    assert_includes html, "target 3"
+    refute_includes html, "Competency Summary"
+    refute_includes html, "Grade provenance"
+    refute_includes html, "Grade-Derived"
+    refute_includes html, "contributing grades"
+  end
+
+  test "composite report combines checkpoint self assessment with course faculty achievement" do
+    checkpoint_progress = {
+      checkpoints: [ "Initial", "Mid-point", "Final" ],
+      rows: [
+        {
+          competency: "Communication",
+          scores: {
+            "Initial" => 2,
+            "Mid-point" => 4,
+            "Final" => 5
+          }
+        }
+      ]
+    }
+    html = render_competency_report_html(course_evidence: true, checkpoint_progress: checkpoint_progress)
+
+    assert_includes html, "Self-Assessment: Initial"
+    assert_includes html, "Self-Assessment: Mid-point"
+    assert_includes html, "Self-Assessment: Final"
+    assert_includes html, ">2<"
+    assert_includes html, ">4<"
+    assert_includes html, ">5<"
+    refute_includes html, "Progress Over Time"
   end
 
   test "result cleanup runs once" do
@@ -181,7 +227,7 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
 
   private
 
-  def render_competency_report_html(advisor_score: nil)
+  def render_competency_report_html(advisor_score: nil, course_evidence: false, checkpoint_progress: nil)
     student = students(:student)
     survey = Survey.create!(
       title: "Composite PDF Advisor Rating #{SecureRandom.hex(4)}",
@@ -238,7 +284,38 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
       )
     end
 
+    if course_evidence
+      batch = GradeImportBatch.create!(
+        uploaded_by: users(:admin),
+        program_semester: survey.program_semester,
+        status: "completed",
+        summary: { "dry_run" => false }
+      )
+      file = batch.grade_import_files.create!(
+        file_name: "composite-course-evidence.csv",
+        file_checksum: "composite-course-evidence-#{SecureRandom.hex(4)}",
+        status: "processed"
+      )
+      batch.grade_competency_evidences.create!(
+        grade_import_file: file,
+        student: student,
+        assignment_name: "Final Assessment",
+        course_code: "PHPM-601",
+        competency_title: question.question_text,
+        raw_grade: 94,
+        mapped_level: 4,
+        course_target_level: 3,
+        source_key: "composite-course-evidence-#{SecureRandom.hex(4)}",
+        import_fingerprint: "composite-course-evidence-#{SecureRandom.hex(4)}"
+      )
+    end
+
     survey_response = SurveyResponse.build(student: student, survey: survey)
-    CompositeReportGenerator.new(survey_response: survey_response, cache: false).send(:render_html)
+    generator = CompositeReportGenerator.new(survey_response: survey_response, cache: false)
+    if checkpoint_progress
+      generator.stub(:checkpoint_progress, checkpoint_progress) { generator.send(:render_html) }
+    else
+      generator.send(:render_html)
+    end
   end
 end

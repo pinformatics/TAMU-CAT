@@ -250,7 +250,7 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
 
   test "employment summary aggregates one response set per student" do
     aggregator = Reports::DataAggregator.new(user: @admin, params: {})
-    row = Struct.new(:student_id, :question_text, :response_value)
+    row = Struct.new(:student_id, :question_text, :response_value, :student_track, :student_program_year)
     fake_scope = Struct.new(:records) do
       def select(*_columns)
         records
@@ -258,16 +258,16 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
     end
 
     records = [
-      row.new(1, "Are you currently employed?", { answer: "Yes" }.to_json),
-      row.new(1, "How many hours per week do you work on average?", "8"),
-      row.new(1, "How flexible are your work hours?", "5 — Very flexible"),
-      row.new(1, "What is your title?", "Analyst"),
-      row.new(2, "Are you currently employed?", "No"),
-      row.new(3, "Are you currently employed?", "Maybe"),
-      row.new(4, "Where are you employed?", "No status only"),
-      row.new(5, "Are you currently employed?", "Yes"),
-      row.new(5, "How many hours per week do you work on average?", "42"),
-      row.new(5, "How flexible are your work hours?", "2 — Limited")
+      row.new(1, "Are you currently employed?", { answer: "Yes" }.to_json, "Residential", 2026),
+      row.new(1, "How many hours per week do you work on average?", "8", "Residential", 2026),
+      row.new(1, "How flexible are your work hours?", "5 — Very flexible", "Residential", 2026),
+      row.new(1, "What is your title?", "Analyst", "Residential", 2026),
+      row.new(2, "Are you currently employed?", "No", "Residential", 2026),
+      row.new(3, "Are you currently employed?", "Maybe", "Executive", 2027),
+      row.new(4, "Where are you employed?", "No status only", "Executive", 2027),
+      row.new(5, "Are you currently employed?", "Yes", "Executive", 2027),
+      row.new(5, "How many hours per week do you work on average?", "42", "Executive", 2027),
+      row.new(5, "How flexible are your work hours?", "2 — Limited", "Executive", 2027)
     ]
 
     aggregator.stub(:employment_response_scope, fake_scope.new(records)) do
@@ -284,6 +284,15 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
       assert_equal 1, summary[:hours_distribution][:data].fifth
       assert_equal 1, summary[:flexibility_distribution][:data][1]
       assert_equal 1, summary[:flexibility_distribution][:data][4]
+
+      cohorts = summary[:cohorts].index_by { |entry| entry[:cohort_label] }
+      residential = cohorts.fetch("Residential, Class of 2026")
+      executive = cohorts.fetch("Executive, Class of 2027")
+
+      assert_equal 2, residential[:total_respondents]
+      assert_equal 50.0, residential[:employment_rate]
+      assert_equal 3, executive[:total_respondents]
+      assert_in_delta 33.3, executive[:employment_rate], 0.1
     end
   end
 
@@ -334,21 +343,48 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
     benchmark_attainment = {
       overall: {
         total_students: 3,
+        total_competencies: 3,
+        competencies_meeting_count: 2,
+        competencies_not_meeting_count: 1,
+        competencies_meeting_percent: 66.7,
+        competencies_not_meeting_percent: 33.3,
         students_meeting_count: 2,
         students_meeting_percent: 66.7,
         students_not_meeting_percent: 33.3,
-        competencies_goal_percent: 85.0
+        students_goal_percent: 75.0
       },
       by_track: {
-        "" => { total_students: 1, students_meeting_count: 0, students_meeting_percent: 0.0 },
-        "Residential" => { total_students: 2, students_meeting_count: 2, students_meeting_percent: 100.0 }
+        "residential" => {
+          total_students: 2,
+          total_competencies: 2,
+          competencies_meeting_count: 2,
+          competencies_not_meeting_count: 0,
+          competencies_meeting_percent: 100.0,
+          competencies_not_meeting_percent: 0.0,
+          label: "Residential"
+        }
+      },
+      by_cohort: {
+        "residential|2026" => {
+          total_students: 2,
+          total_competencies: 2,
+          competencies_meeting_count: 2,
+          competencies_not_meeting_count: 0,
+          competencies_meeting_percent: 100.0,
+          competencies_not_meeting_percent: 0.0,
+          label: "Residential, Class of 2026",
+          track: "Residential",
+          class_of: 2026
+        }
       },
       per_student: {},
       source_breakdown: {
         overall: { advisor: 1, student: 2 },
         by_track: {
-          "" => { advisor: 0, student: 1 },
-          "Residential" => { advisor: 1, student: 1 }
+          "residential" => { advisor: 1, student: 1 }
+        },
+        by_cohort: {
+          "residential|2026" => { advisor: 1, student: 1 }
         }
       }
     }
@@ -368,17 +404,21 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
           aggregator.stub(:completion_stats, { completion_rate: 75.0, trend: 5.0, total_assignments: 4 }) do
             aggregator.stub(:competency_summary, []) do
               aggregator.stub(:build_timeline, [ { label: "Jun 2026" } ]) do
-                payload = aggregator.send(:build_benchmark_payload)
-                card_keys = payload[:cards].map { |card| card[:key] }
+                aggregator.stub(:rating_level_distribution, {}) do
+                  aggregator.stub(:course_target_summary, []) do
+                    payload = aggregator.send(:build_benchmark_payload)
+                    card_keys = payload[:cards].map { |card| card[:key] }
 
-                assert_equal 75.0, payload[:completion_rate]
-                assert_includes card_keys, "benchmark_attainment_overall"
-                assert_includes card_keys, "benchmark_not_meeting_overall"
-                assert_includes card_keys, "benchmark_attainment_by_track"
-                assert_includes card_keys, "student_advisor_alignment"
-                track_card = payload[:cards].find { |card| card[:key] == "benchmark_attainment_by_track" }
-                assert_equal 1, track_card[:meta][:tracks].size
-                assert_equal "Residential", track_card[:meta][:tracks].first[:label]
+                    assert_equal 75.0, payload[:completion_rate]
+                    assert_includes card_keys, "benchmark_attainment_overall"
+                    assert_includes card_keys, "benchmark_not_meeting_overall"
+                    assert_includes card_keys, "benchmark_attainment_by_track"
+                    assert_includes card_keys, "student_advisor_alignment"
+                    track_card = payload[:cards].find { |card| card[:key] == "benchmark_attainment_by_track" }
+                    assert_equal 1, track_card[:meta][:tracks].size
+                    assert_equal "Residential, Class of 2026", track_card[:meta][:tracks].first[:label]
+                  end
+                end
               end
             end
           end
@@ -427,8 +467,102 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
     assert_equal false, stats[:per_student][2][:meets_benchmark]
     assert_equal 1, stats[:source_breakdown][:overall][:advisor]
     assert_equal 2, stats[:source_breakdown][:overall][:student]
-    assert_equal 100.0, stats[:by_track]["Residential"][:students_meeting_percent]
-    assert_equal 0.0, stats[:by_track]["Executive"][:students_meeting_percent]
+    assert_equal 100.0, stats[:by_track]["residential"][:competencies_meeting_percent]
+    assert_equal 0.0, stats[:by_track]["executive"][:competencies_meeting_percent]
+  end
+
+  test "program attainment distribution includes level zero and cohort percentages" do
+    aggregator = Reports::DataAggregator.new(user: @admin, params: {})
+    rows = [
+      {
+        student_id: 1,
+        question_text: "Communication",
+        score: 0,
+        advisor_entry: false,
+        track: "Residential",
+        class_of: 2026,
+        program_target_level: 4
+      },
+      {
+        student_id: 2,
+        question_text: "Communication",
+        score: 5,
+        advisor_entry: false,
+        track: "Residential",
+        class_of: 2026,
+        program_target_level: 4
+      },
+      {
+        student_id: 3,
+        question_text: "Communication",
+        score: 4,
+        advisor_entry: false,
+        track: "Executive",
+        class_of: 2027,
+        program_target_level: 4
+      }
+    ]
+
+    aggregator.stub(:dataset_rows, rows) do
+      distribution = aggregator.rating_level_distribution
+      residential = distribution[:items].find do |item|
+        item[:cohort_label] == "Residential, Class of 2026"
+      end
+      executive = distribution[:cohorts].find do |item|
+        item[:cohort_label] == "Executive, Class of 2027"
+      end
+
+      assert_equal "Not able to assess", distribution[:levels][0]
+      assert_equal 75.0, distribution[:program_target_met_percent]
+      assert_equal 1, residential[:level_counts][0]
+      assert_equal 1, residential[:level_counts][5]
+      assert_equal 1, residential[:target_met_count]
+      assert_equal 1, residential[:target_not_met_count]
+      assert_equal 50.0, residential[:target_met_percent]
+      assert_equal 50.0, residential[:target_not_met_percent]
+      assert_equal false, residential[:target_met]
+      assert_equal 100.0, executive[:target_met_percent]
+      assert_equal 0.0, executive[:target_not_met_percent]
+    end
+  end
+
+  test "course target summary reports course achievement by track cohort" do
+    aggregator = Reports::DataAggregator.new(user: @admin, params: {})
+    student = Struct.new(:track, :program_year) do
+      def track_key
+        ProgramTrack.canonical_key(track)
+      end
+    end
+    row = Struct.new(:student, :student_id, :mapped_level, :course_target_level)
+    relation = Struct.new(:rows) do
+      def to_a
+        rows
+      end
+    end
+
+    residential = student.new("Residential", 2026)
+    executive = student.new("Executive", 2027)
+    rows = [
+      row.new(residential, 1, 4, 4),
+      row.new(residential, 1, 2, 4),
+      row.new(executive, 2, 3, nil)
+    ]
+
+    aggregator.stub(:reportable_course_evidence_scope, relation.new(rows)) do
+      summary = aggregator.course_target_summary.index_by { |entry| entry[:cohort_label] }
+      residential_summary = summary.fetch("Residential, Class of 2026")
+      executive_summary = summary.fetch("Executive, Class of 2027")
+
+      assert_equal 1, residential_summary[:student_count]
+      assert_equal 2, residential_summary[:evidence_count]
+      assert_equal 1, residential_summary[:met_count]
+      assert_equal 1, residential_summary[:below_count]
+      assert_equal 50.0, residential_summary[:met_percent]
+      assert_equal 50.0, residential_summary[:below_percent]
+      assert_equal 1, executive_summary[:no_target_count]
+      assert_nil executive_summary[:met_percent]
+      assert_nil executive_summary[:below_percent]
+    end
   end
 
   test "average percent and alignment helpers cover nil and clamped edges" do
@@ -1203,7 +1337,7 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
 
   test "course rating rows skip missing targets and include student metadata when present" do
     aggregator = Reports::DataAggregator.new(user: @admin, params: {})
-    student = Struct.new(:student_id, :track, :advisor_id).new(123, "Residential", 77)
+    student = Struct.new(:student_id, :track, :program_year, :advisor_id).new(123, "Residential", 2026, 77)
     rating = Struct.new(:student_id, :student, :competency_title, :aggregated_level, :updated_at, :grade_import_batch)
     ratings = [
       rating.new(123, student, "Communication", 4, Time.current, nil),
@@ -1219,6 +1353,7 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
           assert_equal 1, rows.size
           assert_equal 123, rows.first[:student_id]
           assert_equal "Residential", rows.first[:track]
+          assert_equal 2026, rows.first[:class_of]
           assert_equal 77, rows.first[:advisor_id]
           assert_equal "Leadership Skills", rows.first[:category_name]
         end

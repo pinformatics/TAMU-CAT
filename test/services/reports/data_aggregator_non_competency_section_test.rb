@@ -6,7 +6,7 @@ module Reports
   # non-competency sections (e.g. "Professional Snapshot" -- employment
   # questions like "how many hours per week do you work", answered as a
   # plain integer) were being parsed as 1-5 competency scores and inflating
-  # averages past the real scale, most visibly in the Monthly Trend chart.
+  # averages past the real scale, most visibly in historical chart aggregations.
   class DataAggregatorNonCompetencySectionTest < ActiveSupport::TestCase
     setup do
       @admin = users(:admin)

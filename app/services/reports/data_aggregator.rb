@@ -38,8 +38,8 @@ module Reports
       "Analytic and Technical Skills"
     ].freeze
 
-    # The self-assessment rating scale students choose from (see
-    # composite_reports_helper.rb's DEFAULT_PROFICIENCY_OPTION_PAIRS).
+    # Rating scale used in program attainment reporting. Level 0 is used when
+    # advisors mark a competency as not able to assess.
     RATING_LEVEL_LABELS = {
       0 => "Not able to assess",
       1 => "Beginner",
@@ -168,6 +168,11 @@ module Reports
         .sort_by { |entry| [ entry[:track_name], entry[:program_year] ] }
     end
 
+    # Course-level target attainment grouped by track/cohort.
+    def course_target_summary
+      @course_target_summary ||= build_course_target_summary
+    end
+
     # Cards for quick overview tiles (alias for convenience).
     def summary_cards
       benchmark[:cards]
@@ -183,6 +188,7 @@ module Reports
         competency_detail: competency_detail,
         track_summary: track_summary,
         rating_level_distribution: rating_level_distribution,
+        course_target_summary: course_target_summary,
         employment_summary: employment_summary,
         raw_data: raw_data
       }
@@ -355,6 +361,8 @@ module Reports
           "student_questions.student_id",
           "student_questions.question_id",
           "student_questions.response_value",
+          "students.track AS student_track",
+          "students.program_year AS student_program_year",
           "questions.question_text",
           "questions.question_type"
         )
@@ -365,17 +373,38 @@ module Reports
         field = employment_field_key(record.question_text)
         next unless field
 
-        by_student[record.student_id][field] ||= parse_employment_value(record)
+        entry = by_student[record.student_id]
+        entry[:_cohort] ||= cohort_metadata_for_row(
+          track: record[:student_track],
+          class_of: record[:student_program_year],
+          program_year: record[:student_program_year]
+        )
+        entry[field] ||= parse_employment_value(record)
       end
 
-      # Aggregate buckets
+      summary = employment_distribution_for(by_student.values)
+      cohort_rows = by_student.values
+                              .group_by { |fields| fields.dig(:_cohort, :key) }
+                              .map do |_cohort_key, field_sets|
+        cohort = field_sets.first[:_cohort]
+        employment_distribution_for(field_sets).merge(
+          track: cohort[:track],
+          class_of: cohort[:class_of],
+          cohort_label: cohort[:label]
+        )
+      end
+
+      summary.merge(cohorts: sort_rows_by_cohort(cohort_rows))
+    end
+
+    def employment_distribution_for(field_sets)
       status_counts   = Hash.new(0)   # "Yes" / "No" / "No response"
       hours_dist      = Hash.new(0)   # bucket label => count
       flex_dist       = Hash.new(0)   # "1".."5" => count
       total_employed  = 0
-      total_responded = by_student.size
+      total_responded = field_sets.size
 
-      by_student.each_value do |fields|
+      field_sets.each do |fields|
         employed = fields[:currently_employed]
         if employed.blank?
           status_counts["No response"] += 1
@@ -574,7 +603,7 @@ module Reports
       # questions like "how many hours per week do you work", answered as a
       # plain integer) get parsed as a 1-5 competency score by
       # build_dataset_row and inflate averages well past the real 1-5 scale,
-      # particularly in the Monthly Trend chart which averages dataset_rows
+      # particularly in historical aggregations that average dataset_rows
       # without any further category filtering. Categories with no section
       # at all (nil) are left alone rather than excluded, since that's not
       # a signal that a category is non-competency -- just that it predates
@@ -743,13 +772,13 @@ module Reports
       Rails.logger.debug "Dataset rows count: #{dataset_rows.size}"
 
       benchmark_thresholds = {
-        students_goal_percent: 80.0,
-        competencies_goal_percent: 75.0
+        students_goal_percent: RATING_LEVEL_TARGET_MET_PERCENT,
+        competencies_goal_percent: RATING_LEVEL_TARGET_MET_PERCENT
       }
 
       benchmark_attainment = benchmark_attainment_stats(
         dataset_rows,
-        competencies_goal_percent: benchmark_thresholds[:competencies_goal_percent]
+        students_goal_percent: benchmark_thresholds[:students_goal_percent]
       )
 
       cards = []
@@ -757,46 +786,50 @@ module Reports
       overall_source_label = rating_source_label(benchmark_attainment.dig(:source_breakdown, :overall))
       overall_meta = {
         goal_percent: benchmark_thresholds[:students_goal_percent],
-        students_met_goal: benchmark_attainment[:overall][:students_meeting_count],
-        competencies_goal_percent: benchmark_thresholds[:competencies_goal_percent]
+        competencies_met_goal: benchmark_attainment[:overall][:competencies_meeting_count],
+        competencies_below_goal: benchmark_attainment[:overall][:competencies_not_meeting_count]
       }
       overall_meta[:name] = overall_source_label if overall_source_label.present?
 
       cards << build_card(
         key: "benchmark_attainment_overall",
         title: "Benchmark Attainment",
-        value: benchmark_attainment[:overall][:students_meeting_percent],
+        value: benchmark_attainment[:overall][:competencies_meeting_percent],
         unit: "percent",
         precision: 0,
         change: nil,
-        description: "At least #{benchmark_thresholds[:competencies_goal_percent].to_i}% of the MHA track cohort will achieve the MHA competency at the program target level by the end of their degree program.",
-        sample_size: benchmark_attainment[:overall][:total_students],
+        description: "At least 75% of the MHA track cohort will achieve the MHA competency " \
+                     "at the program target level by the end of their degree program.",
+        sample_size: benchmark_attainment[:overall][:total_competencies],
         meta: overall_meta
       )
 
       cards << build_card(
         key: "benchmark_not_meeting_overall",
         title: "Below Benchmark",
-        value: benchmark_attainment[:overall][:students_not_meeting_percent],
+        value: benchmark_attainment[:overall][:competencies_not_meeting_percent],
         unit: "percent",
         precision: 0,
         change: nil,
-        description: "Less than #{benchmark_thresholds[:competencies_goal_percent].to_i}% of the MHA track cohort achieved the MHA competency at the program target level by the end of their degree program.",
-        sample_size: benchmark_attainment[:overall][:total_students]
+        description: "Less than 75% of the MHA track cohort achieved the MHA competency " \
+                     "at the program target level by the end of their degree program.",
+        sample_size: benchmark_attainment[:overall][:total_competencies]
       )
 
       track_summaries = []
-      benchmark_attainment[:by_track].each do |track_key, stats|
-        track_label = track_key.to_s.strip
+      benchmark_attainment[:by_cohort].each do |cohort_key, stats|
+        track_label = stats[:label].to_s.strip
         next if track_label.blank?
 
-        track_source_label = rating_source_label(benchmark_attainment.dig(:source_breakdown, :by_track, track_key))
+        track_source_label = rating_source_label(benchmark_attainment.dig(:source_breakdown, :by_cohort, cohort_key))
 
         track_summaries << {
           label: track_label,
-          percent: stats[:students_meeting_percent],
-          students_met_goal: stats[:students_meeting_count],
-          sample_size: stats[:total_students],
+          percent: stats[:competencies_meeting_percent],
+          not_meeting_percent: stats[:competencies_not_meeting_percent],
+          competencies_met_goal: stats[:competencies_meeting_count],
+          competencies_below_goal: stats[:competencies_not_meeting_count],
+          sample_size: stats[:total_competencies],
           source_label: track_source_label
         }
       end
@@ -805,16 +838,15 @@ module Reports
         total_track_students = track_summaries.sum { |entry| entry[:sample_size].to_i }
         cards << build_card(
           key: "benchmark_attainment_by_track",
-          title: "Benchmark by Track",
+          title: "Benchmark by Track/Cohort",
           value: nil,
           unit: "percent",
           precision: 0,
           change: nil,
-          description: "Percent of students meeting the benchmark broken down by track.",
+          description: "Benchmark attainment and below-benchmark achievement by track and graduating class.",
           sample_size: total_track_students,
           meta: {
             goal_percent: benchmark_thresholds[:students_goal_percent],
-            competencies_goal_percent: benchmark_thresholds[:competencies_goal_percent],
             tracks: track_summaries
           }
         )
@@ -836,7 +868,7 @@ module Reports
       )
 
       competency_summary_data = competency_summary
-      Rails.logger.debug "Competency Summary (for Leading Competency card): #{competency_summary_data.first.inspect}"
+      Rails.logger.debug "Competency data (for Leading Competency card): #{competency_summary_data.first.inspect}"
 
       Rails.logger.debug "--- Finished build_benchmark_payload ---"
 
@@ -844,7 +876,9 @@ module Reports
         completion_rate: completion_stats[:completion_rate],
         cards: cards.compact,
         timeline: build_timeline,
-        benchmark_attainment: benchmark_attainment
+        benchmark_attainment: benchmark_attainment,
+        rating_level_distribution: rating_level_distribution,
+        course_target_summary: course_target_summary
       }
     end
 
@@ -865,111 +899,66 @@ module Reports
       )
     end
 
-    def benchmark_attainment_stats(rows, competencies_goal_percent:)
-      goal = competencies_goal_percent.to_f
+    def benchmark_attainment_stats(rows, competencies_goal_percent: nil, students_goal_percent: nil)
+      goal = (students_goal_percent || competencies_goal_percent || RATING_LEVEL_TARGET_MET_PERCENT).to_f
+      grouped = preferred_competency_rows(rows)
+      preferred_rows = grouped.values.flat_map(&:values)
 
-      grouped = Hash.new { |hash, key| hash[key] = {} }
-
-      rows.each do |row|
-        student_id = row[:student_id]
-        next if student_id.blank?
-
-        competency_title = normalized_competency_title(row[:question_text])
-        next if competency_title.blank?
-
-        existing = grouped[student_id][competency_title]
-        if existing.nil?
-          grouped[student_id][competency_title] = row
-          next
-        end
-
-        existing_time = existing[:updated_at]
-        incoming_time = row[:updated_at]
-
-        preferred = if existing[:advisor_entry] && !row[:advisor_entry]
-          false
-        elsif !existing[:advisor_entry] && row[:advisor_entry]
-          true
-        elsif existing_time.present? && incoming_time.present?
-          incoming_time > existing_time
-        else
-          false
-        end
-
-        grouped[student_id][competency_title] = row if preferred
-      end
-
+      overall_source_counts = source_counts_for_rows(preferred_rows)
+      per_track_source_counts = {}
+      per_cohort_source_counts = {}
       per_student = {}
-      per_track = Hash.new { |hash, key| hash[key] = { students: 0, meeting: 0 } }
-      per_track_source_counts = Hash.new { |hash, key| hash[key] = { advisor: 0, student: 0 } }
-      overall_source_counts = { advisor: 0, student: 0 }
 
       grouped.each do |student_id, competency_map|
         competency_rows = competency_map.values
         next if competency_rows.blank?
 
-        achieved = 0
-        advisor_entries = 0
-        student_entries = 0
-
-        competency_rows.each do |row|
+        achieved = competency_rows.count do |row|
           target = row[:program_target_level].presence || 4.0
-          achieved += 1 if row[:score].to_f >= target.to_f
-          if row[:advisor_entry]
-            advisor_entries += 1
-          else
-            student_entries += 1
-          end
+          row[:score].to_f >= target.to_f
         end
-
         total = competency_rows.size
         percent_met = safe_percent(achieved, total) || 0.0
-        meets_goal = percent_met >= goal
+        first_row = competency_rows.first
+        cohort = cohort_metadata_for_row(first_row)
 
-        track = competency_rows.first[:track]
-        track_key = track.to_s
-
-        overall_source_counts[:advisor] += advisor_entries
-        overall_source_counts[:student] += student_entries
-        per_track_source_counts[track_key][:advisor] += advisor_entries
-        per_track_source_counts[track_key][:student] += student_entries
         per_student[student_id] = {
-          track: track,
+          track: cohort[:track],
+          class_of: cohort[:class_of],
+          cohort_label: cohort[:label],
           competencies_total: total,
           competencies_met: achieved,
           competencies_met_percent: percent_met,
-          meets_benchmark: meets_goal
+          meets_benchmark: percent_met >= goal
         }
-
-        per_track[track_key][:students] += 1
-        per_track[track_key][:meeting] += 1 if meets_goal
       end
 
-      total_students = per_student.size
-      meeting_students = per_student.values.count { |s| s[:meets_benchmark] }
-      meeting_percent = safe_percent(meeting_students, total_students)
-      not_meeting_percent = meeting_percent.nil? ? nil : (100.0 - meeting_percent)
+      by_track = preferred_rows.group_by { |row| cohort_metadata_for_row(row)[:track_key] }.transform_values do |track_rows|
+        stats = benchmark_stats_for_group(track_rows, goal)
+        cohort = cohort_metadata_for_row(track_rows.first)
+        source_key = cohort[:track_key]
+        per_track_source_counts[source_key] = source_counts_for_rows(track_rows)
+        stats.merge(label: cohort[:track])
+      end
+
+      by_cohort = preferred_rows.group_by { |row| cohort_metadata_for_row(row)[:key] }.transform_values do |cohort_rows|
+        stats = benchmark_stats_for_group(cohort_rows, goal)
+        cohort = cohort_metadata_for_row(cohort_rows.first)
+        per_cohort_source_counts[cohort[:key]] = source_counts_for_rows(cohort_rows)
+        stats.merge(track: cohort[:track], class_of: cohort[:class_of], label: cohort[:label])
+      end
+
+      overall = benchmark_stats_for_group(preferred_rows, goal)
 
       {
-        overall: {
-          total_students: total_students,
-          students_meeting_count: meeting_students,
-          students_meeting_percent: meeting_percent,
-          students_not_meeting_percent: not_meeting_percent,
-          competencies_goal_percent: goal
-        },
-        by_track: per_track.transform_values do |stats|
-          meeting_pct = safe_percent(stats[:meeting], stats[:students])
-          {
-            total_students: stats[:students],
-            students_meeting_count: stats[:meeting],
-            students_meeting_percent: meeting_pct
-          }
-        end,
+        overall: overall,
+        by_track: by_track,
+        by_cohort: sort_hash_by_cohort(by_cohort),
         per_student: per_student,
         source_breakdown: {
           overall: overall_source_counts,
-          by_track: per_track_source_counts.transform_values { |counts| counts.dup }
+          by_track: per_track_source_counts,
+          by_cohort: per_cohort_source_counts
         }
       }
     end
@@ -987,6 +976,95 @@ module Reports
         "Advisor ratings"
       else
         "Student self-ratings"
+      end
+    end
+
+    def preferred_competency_rows(rows)
+      grouped = Hash.new { |hash, key| hash[key] = {} }
+
+      rows.each do |row|
+        student_id = row[:student_id]
+        next if student_id.blank?
+
+        competency_title = normalized_competency_title(row[:question_text])
+        next if competency_title.blank?
+
+        existing = grouped[student_id][competency_title]
+        if existing.nil?
+          grouped[student_id][competency_title] = row
+          next
+        end
+
+        grouped[student_id][competency_title] = row if prefer_competency_row?(existing, row)
+      end
+
+      grouped
+    end
+
+    def prefer_competency_row?(existing, incoming)
+      if existing[:advisor_entry] && !incoming[:advisor_entry]
+        false
+      elsif !existing[:advisor_entry] && incoming[:advisor_entry]
+        true
+      elsif existing[:updated_at].present? && incoming[:updated_at].present?
+        incoming[:updated_at] > existing[:updated_at]
+      else
+        false
+      end
+    end
+
+    def benchmark_stats_for_group(rows, goal)
+      by_competency = Array(rows).group_by { |row| normalized_competency_title(row[:question_text]) }
+      competency_stats = by_competency.filter_map do |competency_title, competency_rows|
+        next if competency_title.blank?
+
+        total_students = competency_rows.map { |row| row[:student_id] }.compact.uniq.size
+        next if total_students.zero?
+
+        meeting_students = competency_rows.count do |row|
+          target = row[:program_target_level].presence || 4.0
+          row[:score].to_f >= target.to_f
+        end
+        meeting_percent = safe_percent(meeting_students, total_students) || 0.0
+
+        {
+          competency: competency_title,
+          total_students: total_students,
+          meeting_students: meeting_students,
+          meeting_percent: meeting_percent,
+          benchmark_met: meeting_percent >= goal
+        }
+      end
+
+      total_competencies = competency_stats.size
+      meeting_competencies = competency_stats.count { |entry| entry[:benchmark_met] }
+      not_meeting_competencies = total_competencies - meeting_competencies
+      meeting_percent = safe_percent(meeting_competencies, total_competencies)
+      not_meeting_percent = meeting_percent.nil? ? nil : (100.0 - meeting_percent)
+      total_students = Array(rows).map { |row| row[:student_id] }.compact.uniq.size
+
+      {
+        total_students: total_students,
+        total_competencies: total_competencies,
+        competencies_meeting_count: meeting_competencies,
+        competencies_not_meeting_count: not_meeting_competencies,
+        competencies_meeting_percent: meeting_percent,
+        competencies_not_meeting_percent: not_meeting_percent,
+        students_meeting_count: meeting_competencies,
+        students_meeting_percent: meeting_percent,
+        students_not_meeting_percent: not_meeting_percent,
+        students_goal_percent: goal,
+        competencies: competency_stats
+      }
+    end
+
+    def source_counts_for_rows(rows)
+      Array(rows).each_with_object({ advisor: 0, student: 0 }) do |row, counts|
+        if row[:advisor_entry]
+          counts[:advisor] += 1
+        else
+          counts[:student] += 1
+        end
       end
     end
 
@@ -1147,7 +1225,7 @@ module Reports
     end
 
     def build_competency_summary
-      Rails.logger.debug "--- Building Competency Summary ---"
+      Rails.logger.debug "--- Building competency data summary ---"
       assigned_total_students = assigned_student_ids_in_scope.size
       grouped = Hash.new { |hash, key| hash[key] = { rows: [], category_ids: [] } }
 
@@ -1320,20 +1398,21 @@ module Reports
     # want a level-by-level breakdown rather than a binary achieved/not-met
     # count (e.g. CAHME Exhibit 2.2.1).
     def build_rating_level_distribution
+      preferred_rows = preferred_competency_rows(dataset_rows).values.flat_map(&:values)
       buckets = Hash.new { |hash, key| hash[key] = [] }
 
-      dataset_rows.each do |row|
-        next if row[:advisor_entry]
-
+      preferred_rows.each do |row|
         slug = competency_slug(row[:question_text])
         next unless slug && competency_lookup.key?(slug)
 
-        buckets[slug] << row
+        cohort = cohort_metadata_for_row(row)
+        buckets[[ cohort[:key], slug ]] << row
       end
 
-      items = COMPETENCY_TITLES.map do |title|
-        slug = competency_slug(title)
-        rows = buckets[slug] || []
+      items = buckets.flat_map do |(_cohort_key, slug), rows|
+        title = competency_lookup[slug]&.dig(:name) || normalized_competency_title(rows.first&.dig(:question_text))
+        next [] if title.blank?
+
         student_group = group_student_rows(rows)
 
         level_counts = RATING_LEVEL_LABELS.keys.index_with { 0 }
@@ -1354,25 +1433,37 @@ module Reports
 
         not_met_count = assessed_count - target_met_count
         target_met_percent = assessed_count.positive? ? safe_percent(target_met_count, assessed_count) : nil
-        not_met_percent = assessed_count.positive? ? safe_percent(not_met_count, assessed_count) : nil
+        target_not_met_count = not_met_count
+        target_not_met_percent = target_met_percent.nil? ? nil : (100.0 - target_met_percent)
+        cohort = cohort_metadata_for_row(rows.first)
 
-        {
+        [ {
           id: slug,
           name: title,
+          track: cohort[:track],
+          class_of: cohort[:class_of],
+          cohort_label: cohort[:label],
           level_counts: level_counts,
+          student_ids: student_group.keys,
           total_students: assessed_count,
           target_met_count: target_met_count,
+          target_not_met_count: target_not_met_count,
           target_met_percent: target_met_percent,
           not_met_count: not_met_count,
-          not_met_percent: not_met_percent,
+          not_met_percent: target_not_met_percent,
+          target_not_met_percent: target_not_met_percent,
           target_met: target_met_percent.present? && target_met_percent >= RATING_LEVEL_TARGET_MET_PERCENT
-        }
+        } ]
       end
+
+      items = sort_rows_by_cohort(items)
+      cohorts = program_attainment_cohort_summary(items)
 
       {
         levels: RATING_LEVEL_LABELS,
         program_target_met_percent: RATING_LEVEL_TARGET_MET_PERCENT,
-        items: items
+        items: items.map { |item| item.except(:student_ids) },
+        cohorts: cohorts
       }
     end
 
@@ -1381,13 +1472,13 @@ module Reports
       # canonical key (e.g. "residential"), while program_track_names returns
       # display labels (e.g. "Residential") -- group/query by key, not by the
       # display label, or every track bucket comes back empty.
-      rows_by_track = dataset_rows
-                       .group_by { |row| ProgramTrack.canonical_key(row[:track]) }
+      rows_by_cohort = dataset_rows
+                       .group_by { |row| cohort_metadata_for_row(row)[:key] }
+      cohort_rows = track_cohort_metadata
 
-      program_track_names.map do |track_name|
-        track_key = ProgramTrack.canonical_key(track_name)
-        rows = rows_by_track[track_key] || []
-        track_total_students = assigned_student_count_for_track(track_key)
+      cohort_rows.map do |cohort|
+        rows = rows_by_cohort[cohort[:key]] || []
+        track_total_students = assigned_student_count_for_track_and_year(cohort[:track_key], cohort[:class_of])
 
         student_rows = rows.reject { |row| row[:advisor_entry] }
         advisor_rows = rows.select { |row| row[:advisor_entry] }
@@ -1400,8 +1491,10 @@ module Reports
         attainment_percentages = attainment_percentages(attainment_counts)
 
         {
-          id: track_key.presence || track_name.parameterize(separator: "_").presence || "track_#{track_name.object_id}",
-          track: track_name,
+          id: cohort[:key],
+          track: cohort[:track],
+          class_of: cohort[:class_of],
+          cohort_label: cohort[:label],
           student_average: student_avg,
           advisor_average: advisor_avg,
           gap: advisor_avg && student_avg ? (advisor_avg - student_avg) : nil,
@@ -1415,6 +1508,59 @@ module Reports
           total_students: attainment_counts[:total_students]
         }
       end
+    end
+
+    def program_attainment_cohort_summary(items)
+      grouped = Array(items).group_by { |item| [ item[:track], item[:class_of], item[:cohort_label] ] }
+
+      rows = grouped.map do |(track, class_of, cohort_label), cohort_items|
+        total_assessments = cohort_items.sum { |item| item[:total_students].to_i }
+        target_met_count = cohort_items.sum { |item| item[:target_met_count].to_i }
+        target_not_met_count = cohort_items.sum { |item| item[:target_not_met_count].to_i }
+        target_met_percent = safe_percent(target_met_count, total_assessments)
+        target_not_met_percent = target_met_percent.nil? ? nil : (100.0 - target_met_percent)
+
+        {
+          track: track,
+          class_of: class_of,
+          cohort_label: cohort_label,
+          total_students: cohort_items.flat_map { |item| Array(item[:student_ids]) }.compact.uniq.size,
+          total_assessments: total_assessments,
+          target_met_count: target_met_count,
+          target_not_met_count: target_not_met_count,
+          target_met_percent: target_met_percent,
+          target_not_met_percent: target_not_met_percent
+        }
+      end
+
+      sort_rows_by_cohort(rows)
+    end
+
+    def build_course_target_summary
+      rows = reportable_course_evidence_scope.to_a
+      grouped = rows.group_by { |row| cohort_metadata_for_student(row.student)[:key] }
+
+      grouped.map do |_cohort_key, group|
+        cohort = cohort_metadata_for_student(group.first.student)
+        statuses = group.map { |row| GradeImports::TargetAttainmentReport.status_for(row.mapped_level, row.course_target_level) }
+        denominator = statuses.count(:met) + statuses.count(:below_target)
+        met_count = statuses.count(:met)
+        below_count = statuses.count(:below_target)
+        met_percent = denominator.positive? ? safe_percent(met_count, denominator) : nil
+
+        {
+          track: cohort[:track],
+          class_of: cohort[:class_of],
+          cohort_label: cohort[:label],
+          student_count: group.map(&:student_id).compact.uniq.size,
+          evidence_count: group.size,
+          met_count: met_count,
+          below_count: below_count,
+          no_target_count: statuses.count(:no_target),
+          met_percent: met_percent,
+          below_percent: met_percent.nil? ? nil : (100.0 - met_percent)
+        }
+      end.then { |summary_rows| sort_rows_by_cohort(summary_rows) }
     end
 
     def completion_stats
@@ -1468,6 +1614,64 @@ module Reports
     def normalized_track_name(value)
       text = value.to_s.strip
       text.presence || "Unspecified Track"
+    end
+
+    def cohort_metadata_for_row(row)
+      track_key = target_track_key(row[:track])
+      track_label = ProgramTrack.name_for_key(track_key) || normalized_track_name(row[:track])
+      class_of = row[:class_of].presence || row[:program_year].presence
+      label = cohort_label(track_label, class_of)
+
+      {
+        key: "#{track_key.presence || track_label.to_s.parameterize(separator: "_")}|#{class_of.presence || 'unassigned'}",
+        track_key: track_key,
+        track: track_label,
+        class_of: class_of,
+        label: label
+      }
+    end
+
+    def cohort_metadata_for_student(student)
+      track_key = student&.track_key || target_track_key(student&.track)
+      track_label = ProgramTrack.name_for_key(track_key) || normalized_track_name(student&.track)
+      class_of = student&.program_year
+      label = cohort_label(track_label, class_of)
+
+      {
+        key: "#{track_key.presence || track_label.to_s.parameterize(separator: "_")}|#{class_of.presence || 'unassigned'}",
+        track_key: track_key,
+        track: track_label,
+        class_of: class_of,
+        label: label
+      }
+    end
+
+    def cohort_label(track_label, class_of)
+      [
+        track_label.presence || "Unspecified Track",
+        class_of.present? ? "Class of #{class_of}" : "Class Unassigned"
+      ].join(", ")
+    end
+
+    def sort_hash_by_cohort(hash)
+      hash.sort_by do |_key, entry|
+        [
+          entry[:track].to_s.downcase,
+          entry[:class_of].present? ? entry[:class_of].to_i : Float::INFINITY,
+          entry[:label].to_s.downcase
+        ]
+      end.to_h
+    end
+
+    def sort_rows_by_cohort(rows)
+      Array(rows).sort_by do |entry|
+        [
+          entry[:track].to_s.downcase,
+          entry[:class_of].present? ? entry[:class_of].to_i : Float::INFINITY,
+          entry[:cohort_label].to_s.downcase,
+          (entry[:competency] || entry[:name]).to_s.downcase
+        ]
+      end
     end
 
     def available_semesters
@@ -1598,14 +1802,14 @@ module Reports
 
     def reportable_course_rating_scope
       @reportable_course_rating_scope ||= begin
-      scope = GradeCompetencyRating
-        .joins(:grade_import_batch, student: :user)
-        .merge(GradeImportBatch.reportable)
-        .where(student_id: accessible_student_relation.select(:student_id))
+        scope = GradeCompetencyRating
+                .joins(:grade_import_batch, student: :user)
+                .merge(GradeImportBatch.reportable)
+                .where(student_id: accessible_student_relation.select(:student_id))
 
-      scope = scope.where(students: { track: filters[:track] }) if filters[:track]
-      scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
-      scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
+        scope = scope.where(students: { track: filters[:track] }) if filters[:track]
+        scope = scope.where(students: { program_year: filters[:program_year] }) if filters[:program_year]
+        scope = scope.where(students: { advisor_id: filters[:advisor_id] }) if filters[:advisor_id]
         scope = scope.where(student_id: filters[:student_id]) if filters[:student_id]
         if filters[:semester]
           semester = ProgramSemester.find_by_name_case_insensitive(filters[:semester])
@@ -1839,6 +2043,8 @@ module Reports
         program_semester_id: record.program_semester_id,
         survey_semester: record.survey_semester,
         track: record.student_track,
+        class_of: record.respond_to?(:student_class_of) ? record.student_class_of : nil,
+        program_year: record.respond_to?(:student_program_year) ? record.student_program_year : nil,
         student_id: record.student_primary_id,
         advisor_id: record.owning_advisor_id || record.advisor_id,
         rating_advisor_id: is_advisor_entry ? record.advisor_id : nil
@@ -1863,6 +2069,8 @@ module Reports
           survey_title: nil,
           survey_semester: nil,
           track: rating.student&.track,
+          class_of: rating.student&.program_year,
+          program_year: rating.student&.program_year,
           advisor_id: rating.student&.advisor_id
         }
       end
@@ -2165,6 +2373,48 @@ module Reports
         .where(students: { track: track_key })
         .distinct
         .count(:student_id)
+    end
+
+    def assigned_student_count_for_track_and_year(track_key, class_of)
+      scope = scoped_assignment_scope
+      scope = scope.where(students: { track: track_key }) if track_key.present?
+      scope = if class_of.present?
+        scope.where(students: { program_year: class_of })
+      else
+        scope.where(students: { program_year: nil })
+      end
+
+      scope.distinct.count(:student_id)
+    end
+
+    def track_cohort_metadata
+      student_rows = scoped_student_relation
+                     .select(:student_id, :track, :program_year)
+                     .map { |student| cohort_metadata_for_student(student) }
+
+      row_cohorts = dataset_rows.map { |row| cohort_metadata_for_row(row) }
+      combined = (student_rows + row_cohorts)
+                 .uniq { |cohort| cohort[:key] }
+                 .sort_by do |cohort|
+        [
+          cohort[:track].to_s.downcase,
+          cohort[:class_of].present? ? cohort[:class_of].to_i : Float::INFINITY,
+          cohort[:label].to_s.downcase
+        ]
+      end
+
+      return combined if combined.any?
+
+      program_track_names.map do |track_name|
+        track_key = ProgramTrack.canonical_key(track_name)
+        {
+          key: "#{track_key.presence || track_name.to_s.parameterize(separator: "_")}|unassigned",
+          track_key: track_key,
+          track: track_name,
+          class_of: nil,
+          label: cohort_label(track_name, nil)
+        }
+      end
     end
   end
 end

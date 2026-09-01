@@ -37,7 +37,9 @@ class Reports::CourseCompetencyReportTest < ActiveSupport::TestCase
     assert_equal 4.0, policy_row[:course_target_average]
     assert_equal 50.0, policy_row[:met_rate]
     assert payload[:target_attainment].any? { |row| row[:course_code] == "PHPM-601" && row[:competency_title] == "Policy Analysis" }
-    assert payload[:student_course_heatmap].any? { |row| row[:course_code] == "PHPM-601" && row[:below_count] == 1 }
+    heatmap_row = payload[:student_course_heatmap].find { |row| row[:course_code] == "PHPM-601" }
+    assert_equal [ "Policy Analysis" ], heatmap_row[:competency_titles]
+    assert_equal 1, heatmap_row[:below_count]
   end
 
   test "filters by course semester track class and release status" do
@@ -69,9 +71,14 @@ class Reports::CourseCompetencyReportTest < ActiveSupport::TestCase
 
     assert_equal "PHPM-601", parsed.first["Course"]
     assert_equal "Policy Analysis", parsed.first["Competency"]
-    assert_equal "5.0", parsed.first["Assessed Average"]
-    assert_equal "4.0", parsed.first["Course Target Average"]
-    assert_equal "100.0", parsed.first["Met Rate"]
+    assert_equal "5", parsed.first["Course Achievement Levels"]
+    assert_equal "4", parsed.first["Course Target Levels"]
+    assert_equal "1", parsed.first["Achieved"]
+    assert_equal "0", parsed.first["Not Met"]
+    assert_includes parsed.headers, "No Course Target"
+    refute_includes parsed.headers, "No Target"
+    assert_equal "100.0", parsed.first["Achieved Rate"]
+    assert_equal "0.0", parsed.first["Not Achieved Rate"]
   end
 
   test "advisor user only sees assigned advisee evidence" do

@@ -28,6 +28,8 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_path
 
     assert_response :success
+    assert_includes response.body, "MHA Program Analytics"
+    refute_includes response.body, "Program Reports"
     assert_select "nav[aria-label='Report modules'] a[aria-current='page']", text: /Program Dashboard/
     assert_includes response.body, "Course Target Attainment"
     assert_includes response.body, "Cohort Comparison"
@@ -236,7 +238,6 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".c-table th", text: "Course Evidence", count: 0
     assert_select ".c-table th", text: "Targets Met", count: 0
     assert_select ".c-table th", text: "Below Target", count: 0
-    assert_select ".c-table th", text: "Met Rate", count: 0
     assert_select ".c-table td", text: student.uin
     assert_select ".c-table td", text: student.user.email
     assert_select ".c-table td", text: student.program_year.to_s
@@ -277,6 +278,15 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Policy Analysis"
     assert_includes response.body, "100.0%"
     assert_includes response.body, "Download CSV"
+    assert_includes response.body, "No Course Target means the evidence row does not have a configured course target level."
+    assert_select ".c-table th", text: "Course Achievement Levels"
+    assert_select ".c-table th", text: "Course Target Levels"
+    assert_select ".c-table th", text: "# Achieved Course Target"
+    assert_select ".c-table th", text: "# Not Met Course Target"
+    assert_select ".c-table th", text: "% Achieved Course Target"
+    assert_select ".c-table th", text: "% Not Met Course Target"
+    assert_select ".c-table th", text: "Actual Avg", count: 0
+    assert_select ".c-table th", text: "Course Target Avg", count: 0
     assert_select "details.c-accordion summary", text: /PHPM-601/
     assert_select "details.c-accordion summary", text: /1 competency/
 
@@ -287,7 +297,14 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_select "details.c-accordion summary", text: /1 student/
     assert_select "details.c-accordion summary .c-accordion__action", text: /Show details/
     assert_select "details.c-accordion table.c-table--sticky-header th", text: "Student"
+    assert_select "details.c-accordion table.c-table--sticky-header th", text: "Competencies"
+    assert_select "details.c-accordion table.c-table--sticky-header th", text: "Course Achievement Level"
+    assert_select "details.c-accordion table.c-table--sticky-header th", text: "Below Course Target"
+    assert_select "details.c-accordion table.c-table--sticky-header th", text: "No Course Target"
+    assert_select "details.c-accordion table.c-table--sticky-header th", text: "Average", count: 0
+    assert_select "details.c-accordion table.c-table--sticky-header th", text: "No Target", count: 0
     assert_select "details.c-accordion table.c-table--sticky-header td", text: student.user.name
+    assert_select "details.c-accordion table.c-table--sticky-header td", text: "Policy Analysis"
   end
 
   test "export_course_competencies returns csv and records audit" do
@@ -324,6 +341,8 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     parsed = CSV.parse(response.body, headers: true)
     assert_equal "PHPM-601", parsed.first["Course"]
     assert_equal "Policy Analysis", parsed.first["Competency"]
+    assert_includes parsed.headers, "No Course Target"
+    refute_includes parsed.headers, "No Target"
     activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
     assert_equal "course_competency_report_csv", activity.metadata["export_type"]
     assert_equal "PHPM-601", activity.metadata["course_code"]
@@ -338,7 +357,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "text/csv", response.media_type
-    assert_includes response.body, "Semester,Cohort,Students,Self Avg,Advisor Avg,Course Avg,Below Target"
+    assert_includes response.body, "Semester,Cohort,Students,Self Avg,Advisor Avg,Course Avg,Below Program Target"
     activity = AdminActivityLog.where(action: "student_data_export").order(created_at: :desc).first
     assert_equal "cohort_comparison_report_csv", activity.metadata["export_type"]
   end
@@ -351,7 +370,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "text/csv", response.media_type
     assert_includes response.body, "Course Heatmap"
-    assert_includes response.body, "Course,Student,Semester,Track,Class,Average,Rows,Below Target,No Target"
+    assert_includes response.body, "Course,Student,Competencies,Semester,Track,Class,Course Achievement Level,Rows,Below Course Target,No Course Target"
     assert_includes response.body, "Student by Domain Heatmap"
   end
 
@@ -457,10 +476,10 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
         "Courses With Evidence",
         "Course Evidence Rows",
         "Course Competencies",
-        "Course Targets Met",
+        "Course Targets Achieved",
         "Below Course Target",
         "No Course Target",
-        "Course Target Met Rate"
+        "Course Target Achievement Rate"
       ]
       assert_equal expected_headers, headers
 

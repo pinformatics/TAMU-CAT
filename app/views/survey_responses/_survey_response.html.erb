@@ -208,7 +208,7 @@
 
                     <% effective_target_level = effective_competency_target_level(question: question, survey: survey, student: sr&.student) %>
                     <% course_context = course_competency_context_for(question: question, survey: survey, student: sr&.student, viewer: current_user) %>
-                    <% if question.question_type_dropdown? && effective_target_level.present? %>
+                    <% if question.question_type_dropdown? && effective_target_level.present? && course_context.blank? %>
                       <span class="c-question-card__meta">
                         <span class="c-level-badge">End-of-program target level: <%= effective_target_level %></span>
                       </span>

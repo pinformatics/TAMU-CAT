@@ -5,17 +5,21 @@
                       else
                         normalized_section
                       end %>
-<% trend_sections = %w[benchmark trend] %>
-<% domain_sections = %w[domain competency_summary] %>
-<% competency_sections = %w[competency competency_detail] %>
+<% key_metric_sections = %w[benchmark key_metrics] %>
+<% domain_sections = [] %>
+<% competency_sections = %w[competency competency_detail program_attainment] %>
 <% track_sections = %w[track] %>
+<% course_target_sections = %w[course_target course_level] %>
 <% employment_sections = %w[employment] %>
 
-<% show_trend = selected_section.blank? || trend_sections.include?(selected_section) %>
-<% show_domain_summary = selected_section.blank? || domain_sections.include?(selected_section) %>
-<% show_competency_detail = selected_section.blank? || competency_sections.include?(selected_section) %>
+<% show_key_metrics = selected_section.blank? || key_metric_sections.include?(selected_section) %>
+<% show_domain_summary = domain_sections.include?(selected_section) %>
+<% show_competency_detail = false %>
+<% show_program_attainment = selected_section.blank? || competency_sections.include?(selected_section) %>
 <% show_track = selected_section.blank? || track_sections.include?(selected_section) %>
+<% show_course_target = selected_section.blank? || course_target_sections.include?(selected_section) %>
 <% show_employment = selected_section.blank? || employment_sections.include?(selected_section) %>
+<% show_monthly_trend = false %>
 
 <% filters_text = payload.fetch(:filters, {}).map { |label, value| "#{label.to_s.titleize}: #{value.presence || 'All'}" }.join(", ") %>
 <% axis_mode = (defined?(y_axis_mode) ? y_axis_mode : "score").to_s %>
@@ -28,6 +32,9 @@
 <% rating_level_distribution = payload[:rating_level_distribution] || {} %>
 <% rating_levels = rating_level_distribution[:levels] || {} %>
 <% rating_level_items = Array(rating_level_distribution[:items]) %>
+<% rating_level_cohorts = Array(rating_level_distribution[:cohorts]) %>
+<% rating_level_label = ->(level, label) { level.to_i.zero? ? "0/Not able to assess" : "#{level} #{label}" } %>
+<% course_target_summary = Array(payload[:course_target_summary]) %>
 <% employment = payload[:employment_summary] || {} %>
 
 <section class="report-export">
@@ -52,7 +59,7 @@
     </div>
   </section>
 
-  <% if show_trend %>
+  <% if show_key_metrics %>
     <section class="report-export__section">
       <h2 class="c-section-title">Key Metrics</h2>
       <div class="c-table-wrapper">
@@ -70,7 +77,15 @@
           <% Array(payload.dig(:benchmark, :cards)).each do |card| %>
             <tr>
               <td><%= card[:title] %></td>
-              <td><%= number_with_precision(card[:value], precision: card[:precision] || 1) %> <%= card[:unit] == "percent" ? "%" : nil %></td>
+              <td>
+                <% if !card[:value].nil? %>
+                  <%= number_with_precision(card[:value], precision: card[:precision] || 1) %> <%= card[:unit] == "percent" ? "%" : nil %>
+                <% elsif Array(card.dig(:meta, :tracks)).any? %>
+                  See track/cohort rows
+                <% else %>
+                  —
+                <% end %>
+              </td>
               <td>
                 <% if card[:change].present? %>
                   <%= card[:change] > 0 ? "+" : nil %><%= number_with_precision(card[:change], precision: 1) %>
@@ -82,6 +97,18 @@
               <td><%= card[:description] %></td>
               <td><%= card[:sample_size] %></td>
             </tr>
+            <% Array(card.dig(:meta, :tracks)).each do |track| %>
+              <tr>
+                <td><%= track[:label] %></td>
+                <td><%= track[:percent].present? ? number_to_percentage(track[:percent], precision: 1) : "—" %></td>
+                <td>—</td>
+                <td>
+                  <%= track[:competencies_met_goal].to_i %> competencies met benchmark;
+                  <%= track[:competencies_below_goal].to_i %> below benchmark
+                </td>
+                <td><%= track[:sample_size] %></td>
+              </tr>
+            <% end %>
           <% end %>
         </tbody>
         </table>
@@ -91,22 +118,53 @@
 
   <% if show_domain_summary %>
     <section class="report-export__section">
-      <h2 class="c-section-title">Competency Summary</h2>
+      <h2 class="c-section-title">Domain Summary</h2>
+      <% if competencies.any? %>
+        <div class="chart-block">
+          <h3 class="c-h3">Student Program Target and Course Target by Domain</h3>
+        <div class="chart-legend">
+          <span class="chart-legend__item">
+            <span class="chart-legend__swatch" style="background-color: #500000"></span>
+            Student % Meeting Program Target
+          </span>
+          <span class="chart-legend__item">
+            <span class="chart-legend__swatch" style="background-color: #c2410c"></span>
+            Student % Meeting Course Target
+          </span>
+        </div>
+        <div class="space-y-3">
+          <% competencies.each do |entry| %>
+            <% student_value = percent_mode ? entry[:student_target_percent].to_f : entry[:student_average].to_f %>
+            <% course_value = percent_mode ? entry[:course_target_percent].to_f : entry[:course_average].to_f %>
+            <% student_width = score_scale.positive? ? (student_value / score_scale * 100.0) : 0.0 %>
+            <% course_width = score_scale.positive? ? (course_value / score_scale * 100.0) : 0.0 %>
+            <% student_width = [[student_width, 0.0].max, 100.0].min %>
+            <% course_width = [[course_width, 0.0].max, 100.0].min %>
+
+            <%= render "reports/metric_bar_card", title: entry[:name], percent_mode:,
+                  student_value:, course_value:,
+                  student_width:, course_width: %>
+            <% end %>
+          </div>
+        </div>
+      <% else %>
+        <p class="report-export__note">No domain data available for the selected filters.</p>
+      <% end %>
       <div class="c-table-wrapper">
         <table class="c-table report-export__table">
         <thead>
           <tr>
-            <th>Competency</th>
-            <th>Student % Meeting Target</th>
-            <th>Course % Meeting Target</th>
-            <th>Trend %</th>
-            <th>Status</th>
-            <th>Achieved</th>
-            <th>Not Met</th>
-            <th>Not Assessed</th>
-            <th>Achieved %</th>
-            <th>Not Met %</th>
-            <th>Not Assessed %</th>
+            <th>Domain</th>
+            <th>Student % Meeting Program Target</th>
+            <th>Student % Meeting Course Target</th>
+            <th>Program Target Trend %</th>
+            <th>Program Target Status</th>
+            <th># Achieved Program Target</th>
+            <th># Not Met Program Target</th>
+            <th># Not Assessed Program Target</th>
+            <th>% Achieved Program Target</th>
+            <th>% Not Met Program Target</th>
+            <th>% Not Assessed Program Target</th>
           </tr>
         </thead>
         <tbody>
@@ -141,7 +199,34 @@
 
   <% if show_competency_detail && competency_items.any? %>
     <section class="report-export__section">
-      <h2 class="c-section-title">Competency Detail</h2>
+      <h2 class="c-section-title">Program Attainment Detail</h2>
+      <div class="chart-block">
+        <h3 class="c-h3">% Meeting Program Target by Competency</h3>
+        <div class="chart-legend">
+          <span class="chart-legend__item">
+            <span class="chart-legend__swatch" style="background-color: #500000"></span>
+            Student % Meeting Program Target
+          </span>
+          <span class="chart-legend__item">
+            <span class="chart-legend__swatch" style="background-color: #c2410c"></span>
+            Student % Meeting Course Target
+          </span>
+        </div>
+        <div class="space-y-3">
+          <% competency_items.each do |item| %>
+            <% student_value = percent_mode ? item[:student_target_percent].to_f : item[:student_average].to_f %>
+            <% course_value = percent_mode ? item[:course_target_percent].to_f : item[:course_average].to_f %>
+            <% student_width = score_scale.positive? ? (student_value / score_scale * 100.0) : 0.0 %>
+            <% course_width = score_scale.positive? ? (course_value / score_scale * 100.0) : 0.0 %>
+            <% student_width = [[student_width, 0.0].max, 100.0].min %>
+            <% course_width = [[course_width, 0.0].max, 100.0].min %>
+
+            <%= render "reports/metric_bar_card", title: item[:name], percent_mode:,
+                  student_value:, course_value:,
+                  student_width:, course_width: %>
+          <% end %>
+        </div>
+      </div>
 
       <div class="c-table-wrapper">
         <table class="c-table report-export__table">
@@ -149,14 +234,14 @@
           <tr>
             <th>Competency</th>
             <th>Domain</th>
-            <th>Student % Meeting Target</th>
-            <th>Course % Meeting Target</th>
-            <th>Achieved</th>
-            <th>Not Met</th>
-            <th>Not Assessed</th>
-            <th>Achieved %</th>
-            <th>Not Met %</th>
-            <th>Not Assessed %</th>
+            <th>Student % Meeting Program Target</th>
+            <th>Student % Meeting Course Target</th>
+            <th># Achieved Program Target</th>
+            <th># Not Met Program Target</th>
+            <th># Not Assessed Program Target</th>
+            <th>% Achieved Program Target</th>
+            <th>% Not Met Program Target</th>
+            <th>% Not Assessed Program Target</th>
           </tr>
         </thead>
         <tbody>
@@ -180,8 +265,8 @@
     </section>
   <% elsif show_competency_detail %>
     <section class="report-export__section">
-      <h2 class="c-section-title">Competency Detail</h2>
-      <p class="report-export__note">No competency detail available for the selected filters.</p>
+      <h2 class="c-section-title">Program Attainment Detail</h2>
+      <p class="report-export__note">No program attainment detail available for the selected filters.</p>
     </section>
   <% end %>
 
@@ -191,7 +276,7 @@
       <% tracks = Array(payload[:track_summary]) %>
       <% if tracks.any? %>
         <div class="chart-block">
-          <h3 class="c-h3">% All Competency Achieved by Track</h3>
+          <h3 class="c-h3">% All Competencies Achieved by Track at Program Level</h3>
           <div class="chart-legend">
             <span class="chart-legend__item">
               <span class="chart-legend__swatch" style="display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 999px; background-color: <%= status_colors[:achieved] %>"></span>
@@ -201,31 +286,24 @@
               <span class="chart-legend__swatch" style="display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 999px; background-color: <%= status_colors[:not_met] %>"></span>
               Not Met
             </span>
-            <span class="chart-legend__item">
-              <span class="chart-legend__swatch" style="display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 999px; background-color: <%= status_colors[:not_assessed] %>"></span>
-              Not Assessed
-            </span>
           </div>
           <div class="chart-horizontal">
             <% tracks.each do |entry| %>
               <% achieved_pct = [[entry[:achieved_percent].to_f, 0.0].max, 100.0].min %>
               <% not_met_pct = [[entry[:not_met_percent].to_f, 0.0].max, 100.0].min %>
-              <% not_assessed_pct = [[entry[:not_assessed_percent].to_f, 0.0].max, 100.0].min %>
-              <% total_pct = achieved_pct + not_met_pct + not_assessed_pct %>
+              <% total_pct = achieved_pct + not_met_pct %>
               <% if total_pct > 100.0 && total_pct.positive? %>
                 <% scale = 100.0 / total_pct %>
                 <% achieved_pct *= scale %>
                 <% not_met_pct *= scale %>
-                <% not_assessed_pct *= scale %>
               <% end %>
               <div class="chart-horizontal__row">
                 <div class="chart-horizontal__label">
-                  <%= entry[:track] %>
+                  <%= entry[:cohort_label].presence || entry[:track] %>
                 </div>
                 <div class="chart-horizontal__bar">
                   <div style="float: left; height: 100%; width: <%= format('%.2f', achieved_pct) %>%; background-color: <%= status_colors[:achieved] %>;"></div>
                   <div style="float: left; height: 100%; width: <%= format('%.2f', not_met_pct) %>%; background-color: <%= status_colors[:not_met] %>;"></div>
-                  <div style="float: left; height: 100%; width: <%= format('%.2f', not_assessed_pct) %>%; background-color: <%= status_colors[:not_assessed] %>;"></div>
                 </div>
                 <div class="chart-horizontal__value">
                   <%= entry[:achieved_percent].present? ? number_to_percentage(entry[:achieved_percent], precision: 1) : "—" %>
@@ -244,17 +322,21 @@
           <thead>
             <tr>
               <th>Track</th>
+              <th>Class</th>
+              <th>Students</th>
               <th>Submissions</th>
-              <th>Achieved</th>
-              <th>Not Met</th>
-              <th>Achieved %</th>
-              <th>Not Met %</th>
+              <th># Achieved Program Target</th>
+              <th># Not Met Program Target</th>
+              <th>% Achieved Program Target</th>
+              <th>% Not Met Program Target</th>
             </tr>
           </thead>
           <tbody>
             <% tracks.each do |entry| %>
               <tr>
                 <td><%= entry[:track] %></td>
+                <td><%= entry[:class_of].present? ? "Class of #{entry[:class_of]}" : "Class Unassigned" %></td>
+                <td><%= entry[:total_students] %></td>
                 <td><%= entry[:submissions] %></td>
                 <td><%= entry[:achieved_count] %></td>
                 <td><%= entry[:not_met_count] %></td>
@@ -269,71 +351,71 @@
     </section>
   <% end %>
 
-  <% if show_competency_detail && rating_level_items.any? %>
+  <% if show_program_attainment && rating_level_items.any? %>
     <section class="report-export__section">
-      <h2 class="c-section-title">Program-level Competency Attainment</h2>
+      <h2 class="c-section-title">Program-Level Competency Achievement</h2>
       <p class="report-export__note">
-        Proficiency scale: <%= rating_levels.map { |level, label| "#{level} = #{label}" }.join(", ") %>.
+        Proficiency scale: <%= rating_levels.map { |level, label| rating_level_label.call(level, label) }.join(", ") %>.
         Program-level target: at least <%= number_to_percentage(rating_level_distribution[:program_target_met_percent], precision: 0) %>
         of students meet or exceed each competency&rsquo;s configured target level.
       </p>
-
-      <div class="chart-block">
-        <h3 class="c-h3">% Achieved by Competency</h3>
-        <div class="chart-legend">
-          <span class="chart-legend__item">
-            <span class="chart-legend__swatch" style="display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 999px; background-color: <%= status_colors[:achieved] %>"></span>
-            Achieved
-          </span>
-          <span class="chart-legend__item">
-            <span class="chart-legend__swatch" style="display: inline-block; width: 0.85rem; height: 0.85rem; border-radius: 999px; background-color: <%= status_colors[:not_met] %>"></span>
-            Not Achieved
-          </span>
+      <% if rating_level_cohorts.any? %>
+        <div class="chart-block" style="margin-bottom: 1.25rem;">
+          <h3 class="c-h3">Overall Program Achievement by Track/Cohort</h3>
+          <div class="chart-legend">
+            <span class="chart-legend__item">
+              <span class="chart-legend__swatch" style="background-color: <%= status_colors[:achieved] %>"></span>
+              Achieved program target
+            </span>
+            <span class="chart-legend__item">
+              <span class="chart-legend__swatch" style="background-color: <%= status_colors[:not_met] %>"></span>
+              Did not achieve program target
+            </span>
+          </div>
+          <div class="chart-horizontal">
+            <% rating_level_cohorts.each do |entry| %>
+              <% achieved_pct = [[entry[:target_met_percent].to_f, 0.0].max, 100.0].min %>
+              <% not_met_pct = [[entry[:target_not_met_percent].to_f, 0.0].max, 100.0].min %>
+              <div class="chart-horizontal__row">
+                <div class="chart-horizontal__label"><%= entry[:cohort_label] %></div>
+                <div class="chart-horizontal__bar">
+                  <div style="float: left; height: 100%; width: <%= format('%.2f', achieved_pct) %>%; background-color: <%= status_colors[:achieved] %>;"></div>
+                  <div style="float: left; height: 100%; width: <%= format('%.2f', not_met_pct) %>%; background-color: <%= status_colors[:not_met] %>;"></div>
+                </div>
+                <div class="chart-horizontal__value"><%= entry[:target_met_percent].present? ? number_to_percentage(entry[:target_met_percent], precision: 1) : "—" %></div>
+              </div>
+            <% end %>
+          </div>
         </div>
-        <div class="chart-horizontal">
-          <% rating_level_items.each do |item| %>
-            <% achieved_pct = [[item[:target_met_percent].to_f, 0.0].max, 100.0].min %>
-            <% not_achieved_pct = [[item[:not_met_percent].to_f, 0.0].max, 100.0].min %>
-            <div class="chart-horizontal__row">
-              <div class="chart-horizontal__label">
-                <%= item[:name] %>
-              </div>
-              <div class="chart-horizontal__bar">
-                <div style="float: left; height: 100%; width: <%= format('%.2f', achieved_pct) %>%; background-color: <%= status_colors[:achieved] %>;"></div>
-                <div style="float: left; height: 100%; width: <%= format('%.2f', not_achieved_pct) %>%; background-color: <%= status_colors[:not_met] %>;"></div>
-              </div>
-              <div class="chart-horizontal__value">
-                <%= item[:target_met_percent].present? ? number_to_percentage(item[:target_met_percent], precision: 1) : "—" %>
-              </div>
-            </div>
-          <% end %>
-        </div>
-      </div>
-
+      <% end %>
       <div class="c-table-wrapper">
         <table class="c-table report-export__table">
         <thead>
           <tr>
+            <th>Track</th>
+            <th>Class</th>
             <th>Competency</th>
             <% rating_levels.each do |level, label| %>
-              <th><%= level %> <%= label %></th>
+              <th><%= rating_level_label.call(level, label) %></th>
             <% end %>
             <th>Total Students</th>
-            <th>% Achieved</th>
-            <th>% Not Achieved</th>
-            <th>Target Met</th>
+            <th>% Achieved Program Target</th>
+            <th>% Not Achieved Program Target</th>
+            <th>Benchmark Outcome</th>
           </tr>
         </thead>
         <tbody>
           <% rating_level_items.each do |item| %>
             <tr>
+              <td><%= item[:track] %></td>
+              <td><%= item[:class_of].present? ? "Class of #{item[:class_of]}" : "Class Unassigned" %></td>
               <td><%= item[:name] %></td>
               <% rating_levels.each_key do |level| %>
                 <td><%= item[:level_counts][level] || 0 %></td>
               <% end %>
               <td><%= item[:total_students] %></td>
               <td><%= item[:target_met_percent].present? ? number_to_percentage(item[:target_met_percent], precision: 1) : "—" %></td>
-              <td><%= item[:not_met_percent].present? ? number_to_percentage(item[:not_met_percent], precision: 1) : "—" %></td>
+              <td><%= item[:target_not_met_percent].present? ? number_to_percentage(item[:target_not_met_percent], precision: 1) : "—" %></td>
               <td><%= item[:target_met_percent].present? ? (item[:target_met] ? "Met" : "Not Met") : "—" %></td>
             </tr>
           <% end %>
@@ -344,39 +426,121 @@
   <% end %>
 
   <% course_contributions = Array(course_report[:course_contributions]) %>
-  <% if show_competency_detail && course_contributions.any? %>
+  <% if show_course_target %>
     <section class="report-export__section">
       <h2 class="c-section-title">Course-Level Competency Achievement</h2>
       <p class="report-export__note">
-        Student achievement against each course&rsquo;s own configured target level, not the end-of-program target
-        shown above. Useful for identifying where a specific course is under-supporting a competency.
+        Student achievement against each course&rsquo;s own configured target level, grouped by track and cohort.
+        No Course Target means the imported course evidence did not have a configured course target level.
       </p>
-      <div class="c-table-wrapper">
-        <table class="c-table report-export__table">
-        <thead>
-          <tr>
-            <th>Course</th>
-            <th>Competency</th>
-            <th>Students</th>
-            <th>Met</th>
-            <th>Below Target</th>
-            <th>Met %</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% course_contributions.each do |row| %>
-            <tr>
-              <td><%= row[:course_code] %></td>
-              <td><%= row[:competency_title] %></td>
-              <td><%= row[:student_count] %></td>
-              <td><%= row[:met_count] %></td>
-              <td><%= row[:below_count] %></td>
-              <td><%= row[:met_rate].present? ? number_to_percentage(row[:met_rate], precision: 1) : "—" %></td>
-            </tr>
-          <% end %>
-        </tbody>
-        </table>
-      </div>
+
+      <% if course_target_summary.any? %>
+        <div class="chart-block" style="margin-bottom: 1.25rem;">
+          <h3 class="c-h3">Course Target Achievement by Track/Cohort</h3>
+          <div class="chart-legend">
+            <span class="chart-legend__item">
+              <span class="chart-legend__swatch" style="background-color: <%= status_colors[:achieved] %>"></span>
+              Achieved course target
+            </span>
+            <span class="chart-legend__item">
+              <span class="chart-legend__swatch" style="background-color: <%= status_colors[:not_met] %>"></span>
+              Below course target
+            </span>
+          </div>
+          <div class="chart-horizontal">
+            <% course_target_summary.each do |entry| %>
+              <% achieved_pct = [[entry[:met_percent].to_f, 0.0].max, 100.0].min %>
+              <% below_pct = [[entry[:below_percent].to_f, 0.0].max, 100.0].min %>
+              <div class="chart-horizontal__row">
+                <div class="chart-horizontal__label"><%= entry[:cohort_label] %></div>
+                <div class="chart-horizontal__bar">
+                  <div style="float: left; height: 100%; width: <%= format('%.2f', achieved_pct) %>%; background-color: <%= status_colors[:achieved] %>;"></div>
+                  <div style="float: left; height: 100%; width: <%= format('%.2f', below_pct) %>%; background-color: <%= status_colors[:not_met] %>;"></div>
+                </div>
+                <div class="chart-horizontal__value"><%= entry[:met_percent].present? ? number_to_percentage(entry[:met_percent], precision: 1) : "—" %></div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="c-table-wrapper">
+          <table class="c-table report-export__table">
+            <thead>
+              <tr>
+                <th>Track</th>
+                <th>Class</th>
+                <th>Students</th>
+                <th>Evidence Rows</th>
+                <th># Achieved Course Target</th>
+                <th># Not Met Course Target</th>
+                <th>% Achieved Course Target</th>
+                <th>% Not Met Course Target</th>
+                <th>No Course Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% course_target_summary.each do |entry| %>
+                <tr>
+                  <td><%= entry[:track] %></td>
+                  <td><%= entry[:class_of].present? ? "Class of #{entry[:class_of]}" : "Class Unassigned" %></td>
+                  <td><%= entry[:student_count] %></td>
+                  <td><%= entry[:evidence_count] %></td>
+                  <td><%= entry[:met_count] %></td>
+                  <td><%= entry[:below_count] %></td>
+                  <td><%= entry[:met_percent].present? ? number_to_percentage(entry[:met_percent], precision: 1) : "—" %></td>
+                  <td><%= entry[:below_percent].present? ? number_to_percentage(entry[:below_percent], precision: 1) : "—" %></td>
+                  <td><%= entry[:no_target_count] %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="report-export__note">No course-level competency achievement data available for the selected filters.</p>
+      <% end %>
+
+      <% if course_contributions.any? %>
+        <div class="c-table-wrapper" style="margin-top: 1.25rem;">
+          <table class="c-table report-export__table">
+            <thead>
+              <tr>
+                <th>Course</th>
+                <th>Competency</th>
+                <th>Track</th>
+                <th>Class</th>
+                <th>Students</th>
+                <th>Evidence Rows</th>
+                <th>Course Achievement Levels</th>
+                <th>Course Target Levels</th>
+                <th># Achieved Course Target</th>
+                <th># Not Met Course Target</th>
+                <th>No Course Target</th>
+                <th>% Achieved Course Target</th>
+                <th>% Not Met Course Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% course_contributions.each do |row| %>
+                <tr>
+                  <td><%= row[:course_code] %></td>
+                  <td><%= row[:competency_title] %></td>
+                  <td><%= row[:tracks].presence || "—" %></td>
+                  <td><%= row[:class_years].present? ? "Class of #{row[:class_years]}" : "Class Unassigned" %></td>
+                  <td><%= row[:student_count] %></td>
+                  <td><%= row[:evidence_count] %></td>
+                  <td><%= row[:assessed_levels].presence || "—" %></td>
+                  <td><%= row[:course_target_levels].presence || "—" %></td>
+                  <td><%= row[:met_count] %></td>
+                  <td><%= row[:below_count] %></td>
+                  <td><%= row[:no_target_count] %></td>
+                  <td><%= row[:met_rate].present? ? number_to_percentage(row[:met_rate], precision: 1) : "—" %></td>
+                  <td><%= row[:below_rate].present? ? number_to_percentage(row[:below_rate], precision: 1) : "—" %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% end %>
     </section>
   <% end %>
 
@@ -412,6 +576,39 @@
           </tbody>
         </table>
       </div>
+
+      <% employment_cohorts = Array(employment[:cohorts]) %>
+      <% if employment_cohorts.any? %>
+        <div class="c-table-wrapper" style="margin-bottom: 1.25rem;">
+          <table class="c-table report-export__table">
+            <thead>
+              <tr>
+                <th>Track</th>
+                <th>Class</th>
+                <th>Respondents</th>
+                <th>Employment Rate</th>
+                <th>Employed</th>
+                <th>Not Employed</th>
+                <th>No Response</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% employment_cohorts.each do |row| %>
+                <% status_counts = Array(row[:status_counts]) %>
+                <tr>
+                  <td><%= row[:track] %></td>
+                  <td><%= row[:class_of].present? ? "Class of #{row[:class_of]}" : "Class Unassigned" %></td>
+                  <td><%= row[:total_respondents] %></td>
+                  <td><%= row[:employment_rate].present? ? number_to_percentage(row[:employment_rate], precision: 1) : "—" %></td>
+                  <td><%= status_counts.find { |entry| entry[:label] == "Employed" }&.dig(:count).to_i %></td>
+                  <td><%= status_counts.find { |entry| entry[:label] == "Not employed" }&.dig(:count).to_i %></td>
+                  <td><%= status_counts.find { |entry| entry[:label] == "No response" }&.dig(:count).to_i %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% end %>
 
       <% if employment_status_counts.any? %>
         <div class="chart-block" style="margin-bottom: 1.25rem;">
@@ -536,7 +733,4 @@
       </div>
     </section>
   <% end %>
-
-
-
 </section>

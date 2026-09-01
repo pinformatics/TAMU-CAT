@@ -42,12 +42,18 @@ class CompetencyTargetLevelsHelperTest < ActionView::TestCase
     assert_nil render_course_competency_context(nil)
     assert_nil render_course_competency_context({ released: true, entries: [] })
 
-    locked_html = render_course_competency_context({ released: false, release_label: nil }).to_s
+    locked_html = render_course_competency_context({
+      released: false,
+      release_label: nil,
+      program_target_level: 4
+    }).to_s
     assert_includes locked_html, "Course competency evidence"
     assert_includes locked_html, "Not released"
+    assert_includes locked_html, "End of program target level: 4"
 
     released_html = render_course_competency_context({
       released: true,
+      program_target_level: 4,
       entries: [
         {
           mastery_level: "4",
@@ -59,8 +65,9 @@ class CompetencyTargetLevelsHelperTest < ActionView::TestCase
       ]
     }).to_s
 
-    assert_includes released_html, "Mastery level: 4"
-    assert_includes released_html, "Course target: 3, 4"
+    assert_includes released_html, "Course achievement level: 4"
+    assert_includes released_html, "Course target level: 3, 4"
+    assert_includes released_html, "End of program target level: 4"
     assert_includes released_html, "2 sources"
 
     single_html = render_course_competency_context({
@@ -76,8 +83,8 @@ class CompetencyTargetLevelsHelperTest < ActionView::TestCase
       ]
     }).to_s
 
-    assert_includes single_html, "Mastery level: 3"
-    refute_includes single_html, "Course target:"
+    assert_includes single_html, "Course achievement level: 3"
+    refute_includes single_html, "Course target level:"
     refute_includes single_html, "source"
   end
 
