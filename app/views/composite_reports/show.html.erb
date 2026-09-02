@@ -100,9 +100,6 @@
 
     <% student_rating_numeric = selected_option_value.to_s[/\d+/] %>
 
-    <% feedback_for_question = Array(feedbacks_by_category[cat.id]).find { |fb| fb.question_id.to_i == question.id } %>
-    <% advisor_rating_numeric = feedback_for_question ? normalize_proficiency_value(feedback_for_question.average_score) : nil %>
-    <% advisor_rating_numeric = advisor_rating_numeric.to_s[/\d+/] if advisor_rating_numeric.present? %>
     <% grade_derived_entry = grade_derived_competencies[question.question_text.to_s] || {} %>
     <% grade_derived_provenance = Array(grade_derived_entry[:provenance]) %>
     <% course_target_levels = grade_derived_provenance.filter_map { |item| item[:course_target_level] }.uniq.sort %>
@@ -112,7 +109,6 @@
       target_level: target_level,
       course_target_levels: course_target_levels,
       student_rating: student_rating_numeric,
-      advisor_rating: advisor_rating_numeric,
       grade_derived_rating: grade_derived_entry[:aggregated_level],
       grade_derived_evidence_count: grade_derived_entry[:evidence_count],
       grade_derived_latest_at: grade_derived_entry[:latest_updated_at],
@@ -123,13 +119,11 @@
 <% end %>
 
 <% if competency_rows.any? %>
-  <% advisor_values = competency_rows.map { |row| row[:advisor_rating].to_s[/\d+/] }.compact.map(&:to_f) %>
-  <% show_advisor_rating_column = advisor_values.any? %>
   <% checkpoint_rows_by_competency = Array(checkpoint_progress&.dig(:rows)).index_by { |row| row[:competency] } %>
   <% checkpoint_labels = Array(checkpoint_progress&.dig(:checkpoints)) %>
   <% show_checkpoint_columns = checkpoint_labels.any? %>
   <% self_assessment_column_count = show_checkpoint_columns ? checkpoint_labels.size : 1 %>
-  <% competency_summary_colspan = 5 + self_assessment_column_count + (show_advisor_rating_column ? 1 : 0) %>
+  <% competency_summary_colspan = 5 + self_assessment_column_count %>
 
   <section class="pdf-section">
     <h2 class="c-section-title c-heading-inline">MHA Competency Self-Assessment</h2>
@@ -174,9 +168,6 @@
           <% else %>
             <th>Student Self-Assessment Level</th>
           <% end %>
-          <% if show_advisor_rating_column %>
-            <th>Advisor Rating</th>
-          <% end %>
         </tr>
       </thead>
       <tbody>
@@ -213,14 +204,33 @@
             <% else %>
               <td class="numeric"><%= row[:student_rating].present? ? row[:student_rating] : "—" %></td>
             <% end %>
-            <% if show_advisor_rating_column %>
-              <td class="numeric"><%= row[:advisor_rating].present? ? row[:advisor_rating] : "—" %></td>
-            <% end %>
           </tr>
         <% end %>
       </tbody>
     </table>
   </section>
+
+  <% if viewer_mode == :staff && meeting_recap.present? %>
+    <section class="pdf-section">
+      <h2 class="c-section-title c-heading-inline">Advisor Meeting Recap — <%= meeting_recap.meeting_type_label %></h2>
+      <p class="c-help">Recorded by the advisor for this checkpoint. Not shown to the student.</p>
+
+      <% if meeting_recap.academic_advising_notes.present? %>
+        <h3 class="c-h3">Academic Advising</h3>
+        <p><%= simple_format(meeting_recap.academic_advising_notes) %></p>
+      <% end %>
+
+      <% if meeting_recap.career_advising_notes.present? %>
+        <h3 class="c-h3">Career Advising</h3>
+        <p><%= simple_format(meeting_recap.career_advising_notes) %></p>
+      <% end %>
+
+      <% if meeting_recap.general_notes.present? %>
+        <h3 class="c-h3">General</h3>
+        <p><%= simple_format(meeting_recap.general_notes) %></p>
+      <% end %>
+    </section>
+  <% end %>
 <% end %>
 
 <section class="pdf-section">

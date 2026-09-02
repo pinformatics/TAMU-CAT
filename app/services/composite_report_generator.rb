@@ -10,7 +10,7 @@ class CompositeReportGenerator
 
   CACHE_TTL = 6.hours
   MAX_EVIDENCE_HISTORY = Integer(ENV.fetch("COMPOSITE_REPORT_MAX_EVIDENCE_HISTORY", 5))
-  PDF_RENDER_VERSION = 6
+  PDF_RENDER_VERSION = 8
 
   # Survey titles follow "<RMHA|EMHA> <Checkpoint> Competency Survey" (see
   # SurveyAssignments::AutoAssigner). No dedicated checkpoint column exists,
@@ -19,6 +19,15 @@ class CompositeReportGenerator
     "Initial" => /\binitial\b/i,
     "Mid-point" => /\bmid.?point\b/i,
     "Final" => /\bfinal\b/i
+  }.freeze
+
+  # Maps a CHECKPOINT_PATTERNS label to the AdvisorMeetingRecap#meeting_type
+  # key it corresponds to -- the two concepts describe the same three
+  # program checkpoints but were named independently.
+  MEETING_TYPE_BY_CHECKPOINT = {
+    "Initial" => "initial",
+    "Mid-point" => "midpoint",
+    "Final" => "final"
   }.freeze
 
   # Lightweight value object so callers can ensure temporary files are cleaned up.
@@ -236,6 +245,8 @@ class CompositeReportGenerator
       evidence_history_by_category: evidence_history_by_category,
       grade_derived_competencies: GradeImports::DerivedScorebook.for_student(student),
       checkpoint_progress: checkpoint_progress,
+      viewer_mode: viewer_mode,
+      meeting_recap: meeting_recap,
       generated_at: generated_at,
       answered_count: answered_count,
       total_questions: total_questions,
@@ -286,6 +297,25 @@ class CompositeReportGenerator
 
   def checkpoint_label_for(title)
     CHECKPOINT_PATTERNS.find { |_label, pattern| title.to_s.match?(pattern) }&.first
+  end
+
+  # The advisor's meeting recap for the checkpoint this survey represents,
+  # shown only in staff-viewer PDFs (see AdvisorMeetingRecap -- advisor/
+  # admin-authored, never shown to students). Returns nil when the survey's
+  # checkpoint can't be inferred, its program_semester is missing, or no
+  # recap has been recorded yet for that student/semester/checkpoint.
+  def meeting_recap
+    return nil unless viewer_mode == :staff
+    return nil if survey.program_semester_id.blank?
+
+    meeting_type = MEETING_TYPE_BY_CHECKPOINT[checkpoint_label_for(survey.title)]
+    return nil if meeting_type.blank?
+
+    AdvisorMeetingRecap.find_by(
+      student_id: student.student_id,
+      program_semester_id: survey.program_semester_id,
+      meeting_type: meeting_type
+    )
   end
 
   # @return [Hash{String => Integer}] competency title => self-assessment score, for one survey

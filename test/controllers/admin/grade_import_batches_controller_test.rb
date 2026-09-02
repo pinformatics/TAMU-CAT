@@ -982,7 +982,7 @@ class Admin::GradeImportBatchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Course target avg"
     assert_includes response.body, "Processed rows"
     assert_includes response.body, "Below target"
-    assert_includes response.body, "No target"
+    assert_includes response.body, "No Course Target Configured"
     assert_includes response.body, "50.0%"
   end
 

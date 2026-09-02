@@ -7,17 +7,10 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     @survey_response = SurveyResponse.build(student: @student, survey: @survey)
   end
 
-  test "composite report omits advisor rating column when no advisor ratings exist" do
-    html = render_competency_report_html
-
-    assert_no_match(/<th>\s*Advisor Rating\s*<\/th>/, html)
-  end
-
-  test "composite report keeps advisor rating column when advisor ratings exist" do
+  test "composite report never shows an advisor rating column, even when advisor feedback exists" do
     html = render_competency_report_html(advisor_score: 4)
 
-    assert_match(/<th>\s*Advisor Rating\s*<\/th>/, html)
-    assert_includes html, ">4<"
+    assert_no_match(/<th>\s*Advisor Rating\s*<\/th>/, html)
   end
 
   test "composite report renders polished report shell and handling language" do
@@ -77,6 +70,97 @@ class CompositeReportGeneratorTest < ActiveSupport::TestCase
     assert_includes html, ">4<"
     assert_includes html, ">5<"
     refute_includes html, "Progress Over Time"
+  end
+
+  test "staff PDF shows the advisor meeting recap for the survey's checkpoint" do
+    survey = Survey.create!(
+      title: "RMHA Initial Competency Survey #{SecureRandom.hex(4)}",
+      program_semester: program_semesters(:fall_2025),
+      is_active: true,
+      categories_attributes: [
+        { name: "Competency Ratings", questions_attributes: [ { question_text: "Placeholder", question_order: 1, question_type: "short_answer" } ] }
+      ]
+    )
+    survey_response = SurveyResponse.build(student: @student, survey: survey)
+    recap = advisor_meeting_recaps(:student_initial_fall_2025)
+
+    generator = CompositeReportGenerator.new(survey_response: survey_response, cache: false, viewer_mode: :staff)
+
+    assert_equal recap, generator.send(:meeting_recap)
+  end
+
+  test "meeting recap is nil for student viewer mode even when a recap exists" do
+    survey = Survey.create!(
+      title: "RMHA Initial Competency Survey #{SecureRandom.hex(4)}",
+      program_semester: program_semesters(:fall_2025),
+      is_active: true,
+      categories_attributes: [
+        { name: "Competency Ratings", questions_attributes: [ { question_text: "Placeholder", question_order: 1, question_type: "short_answer" } ] }
+      ]
+    )
+    survey_response = SurveyResponse.build(student: @student, survey: survey)
+
+    generator = CompositeReportGenerator.new(survey_response: survey_response, cache: false, viewer_mode: :student)
+
+    assert_nil generator.send(:meeting_recap)
+  end
+
+  test "meeting recap is nil when the survey's checkpoint can't be inferred" do
+    survey = Survey.create!(
+      title: "Untitled Survey #{SecureRandom.hex(4)}",
+      program_semester: program_semesters(:fall_2025),
+      is_active: true,
+      categories_attributes: [
+        { name: "Competency Ratings", questions_attributes: [ { question_text: "Placeholder", question_order: 1, question_type: "short_answer" } ] }
+      ]
+    )
+    survey_response = SurveyResponse.build(student: @student, survey: survey)
+
+    generator = CompositeReportGenerator.new(survey_response: survey_response, cache: false, viewer_mode: :staff)
+
+    assert_nil generator.send(:meeting_recap)
+  end
+
+  test "staff PDF HTML renders the meeting recap section, student PDF omits it" do
+    survey = Survey.create!(
+      title: "RMHA Initial Competency Survey #{SecureRandom.hex(4)}",
+      program_semester: program_semesters(:fall_2025),
+      is_active: true,
+      categories_attributes: [
+        {
+          name: "Competency Ratings",
+          questions_attributes: [
+            {
+              question_text: "Communication",
+              question_order: 1,
+              question_type: "dropdown",
+              is_required: false,
+              answer_options: [ [ "Proficient (3)", "3" ] ].to_json,
+              program_target_level: 3
+            }
+          ]
+        }
+      ]
+    )
+    section = SurveySection.create!(survey: survey, title: SurveySection::MHA_COMPETENCY_SECTION_TITLE, position: 0)
+    category = survey.categories.first
+    category.update!(section: section)
+    question = category.questions.first
+    StudentQuestion.new(student_id: @student.student_id, advisor_id: @student.advisor_id, question_id: question.id).tap do |response|
+      response.answer = "3"
+      response.save!(validate: false)
+    end
+
+    survey_response = SurveyResponse.build(student: @student, survey: survey)
+
+    staff_html = CompositeReportGenerator.new(survey_response: survey_response, cache: false, viewer_mode: :staff).send(:render_html)
+    assert_includes staff_html, "Advisor Meeting Recap"
+    assert_includes staff_html, "Discussed progress on core competencies."
+    assert_includes staff_html, "Reviewed resume draft."
+
+    student_html = CompositeReportGenerator.new(survey_response: survey_response, cache: false, viewer_mode: :student).send(:render_html)
+    refute_includes student_html, "Advisor Meeting Recap"
+    refute_includes student_html, "Discussed progress on core competencies."
   end
 
   test "result cleanup runs once" do
