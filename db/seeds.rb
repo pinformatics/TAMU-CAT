@@ -574,6 +574,15 @@ survey_templates.each do |definition|
       end
     end
 
+    # Same staleness problem as the offering schedule below: these are literal
+    # calendar dates from db/data/program_surveys.yml. For demo/test seeding,
+    # anchor them to "now" so surveys don't silently read as past-deadline
+    # once real time moves past the 2026 dates in that file.
+    if seed_demo_data && (survey.available_from.present? || survey.available_until.present?)
+      survey.available_from = 1.month.ago
+      survey.available_until = 3.months.from_now
+    end
+
     survey.save! if survey.changed?
 
     created_surveys << survey
@@ -645,6 +654,19 @@ if ActiveRecord::Base.connection.data_source_exists?("survey_offerings")
         parsed_review_end = raw_review_end.present? ? Time.zone.parse(raw_review_end) : nil
         offering.available_until = parsed_review_end&.change(hour: 23, min: 59)
       end
+    end
+
+    # The schedule above is a fixed, literal 2026 academic calendar (used as-is
+    # for real program data). For demo/test seeding it goes stale the moment
+    # "now" moves past those dates, which silently makes every offering
+    # unavailable (SurveyOffering.for_student filters on available_from/
+    # available_until) and breaks self-assessment seeding with no visible
+    # error. Keep portfolio_due_date/review_meetings_* as the original
+    # calendar-flavored dates for display, but anchor the actual availability
+    # window to "now" so demo offerings are always currently assignable.
+    if seed_demo_data && offering.respond_to?(:available_from) && offering.respond_to?(:available_until)
+      offering.available_from = 1.month.ago
+      offering.available_until = 3.months.from_now
     end
 
     offering.review_meetings_start = row[:review_start].present? ? Date.parse(row[:review_start].to_s) : nil
