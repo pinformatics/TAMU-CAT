@@ -102,7 +102,7 @@ group :test do
   # Pin below Minitest 6, which split minitest/mock into a separate gem and
   # breaks test_helper.rb's require. Revisit when the app is ready to adopt
   # Minitest 6 deliberately.
-  gem "minitest", "~> 5.25"
+  gem "minitest", "~> 6.0"
 
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"
