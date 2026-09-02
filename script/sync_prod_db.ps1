@@ -1,5 +1,5 @@
 param(
-  [string]$App = "mha501",
+  [string]$App = "",
   [string]$HerokuDatabase = "DATABASE_URL",
   [string]$LocalDatabase = "tamu_cat_development",
   [string]$DbService = "db",
@@ -7,7 +7,7 @@ param(
   [string]$DbPassword = "dev_pass",
   [string]$AppService = "web",
   [string]$RestoreClientImage = "postgres:17",
-  [string]$BackupFile = (Join-Path $env:TEMP "mha501-prod-latest.dump"),
+  [string]$BackupFile = (Join-Path $env:TEMP "tamu-cat-prod-latest.dump"),
   [switch]$SkipConfirm,
   [switch]$SkipMigrate,
   [switch]$PersistApiKey,
@@ -102,6 +102,10 @@ function Get-ComposeContainerId {
 
 Require-Command "docker"
 Require-Command "heroku"
+
+if ([string]::IsNullOrWhiteSpace($App)) {
+  throw "Pass -App <production-app-name> so the script does not assume an old Heroku app."
+}
 
 Set-HerokuApiKey
 Confirm-LocalDrop

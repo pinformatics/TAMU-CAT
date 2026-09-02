@@ -9,6 +9,7 @@
 
 # Ignore all environment files.
 /.env*
+!/.env.example
 
 # Local Docker overrides.
 /docker-compose.override.yml
@@ -94,7 +95,11 @@ mkcert_development_CA_*.crt
 
 .copilot-instructions.md
 
-MHA-Survey-Portal.wiki/
+# Local wiki clones.
+TAMU-CAT.wiki/
 
 # Generated grade import sample runs; keep canonical sample files only.
 /local_import_samples/folder_run_samples/*_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.xlsx
+
+# Ignore key files for decrypting credentials and more.
+/config/*.key

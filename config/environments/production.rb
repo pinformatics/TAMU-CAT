@@ -62,13 +62,17 @@ Rails.application.configure do
   # config.action_mailer.raise_delivery_errors = false
 
   email_notifications_enabled = ActiveModel::Type::Boolean.new.cast(ENV.fetch("EMAIL_NOTIFICATIONS_ENABLED", "false"))
-  if email_notifications_enabled && ENV["APP_HOST"].blank?
+  app_host = ENV["APP_HOST"].presence ||
+             ENV["HEROKU_APP_DEFAULT_DOMAIN_NAME"].presence ||
+             (ENV["HEROKU_APP_NAME"].present? ? "#{ENV["HEROKU_APP_NAME"]}.herokuapp.com" : nil)
+
+  if email_notifications_enabled && app_host.blank?
     raise "APP_HOST is required when EMAIL_NOTIFICATIONS_ENABLED=true so email links point to the correct app."
   end
 
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = {
-    host: ENV.fetch("APP_HOST", "localhost:3000"),
+    host: app_host || "localhost:3000",
     protocol: ENV.fetch("APP_PROTOCOL", "https")
   }
 
@@ -96,13 +100,4 @@ Rails.application.configure do
 
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
-
-  # Enable DNS rebinding protection and other `Host` header attacks.
-  # config.hosts = [
-  #   "example.com",     # Allow requests from example.com
-  #   /.*\.example\.com/ # Allow requests from subdomains like `www.example.com`
-  # ]
-  #
-  # Skip DNS rebinding protection for the default health check endpoint.
-  # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
 end

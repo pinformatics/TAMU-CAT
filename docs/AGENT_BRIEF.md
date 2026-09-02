@@ -28,8 +28,7 @@ Read only what matches the task:
 - Architecture map: [ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md)
 - Grade imports: [GRADE_IMPORTS.md](GRADE_IMPORTS.md)
 - Failed imports: [FAILED_IMPORT_TROUBLESHOOTING.md](FAILED_IMPORT_TROUBLESHOOTING.md)
-- Reports and full handoff context: [TECHNICAL_HANDOFF.md](TECHNICAL_HANDOFF.md)
-- Known risks and next work: [KNOWN_ISSUES.md](KNOWN_ISSUES.md), [NEXT_STEPS.md](NEXT_STEPS.md)
+- Reports, known risks, and full handoff context: [TECHNICAL_HANDOFF.md](TECHNICAL_HANDOFF.md)
 
 ## Local Workflow
 

@@ -11,6 +11,17 @@
     "RAILS_MASTER_KEY": {
       "required": true,
       "description": "Copy from config/master.key so Rails can boot in production mode."
+    },
+    "EMAIL_NOTIFICATIONS_ENABLED": {
+      "value": "false",
+      "description": "Leave outbound email disabled for new/review apps until APP_HOST and SMTP settings are confirmed."
+    },
+    "APP_HOST": {
+      "required": false,
+      "description": "Canonical host for generated email links; required when EMAIL_NOTIFICATIONS_ENABLED=true unless Heroku review-app metadata supplies the app hostname."
+    },
+    "APP_PROTOCOL": {
+      "value": "https"
     }
   },
   "addons": [

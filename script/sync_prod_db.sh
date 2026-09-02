@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP="mha501"
+APP="${HEROKU_APP:-}"
 HEROKU_DATABASE="DATABASE_URL"
 LOCAL_DATABASE="tamu_cat_development"
 DB_SERVICE="db"
@@ -9,7 +9,7 @@ DB_USER="dev_user"
 DB_PASSWORD="dev_pass"
 APP_SERVICE="web"
 RESTORE_CLIENT_IMAGE="postgres:17"
-BACKUP_FILE="${TMPDIR:-/tmp}/mha501-prod-latest.dump"
+BACKUP_FILE="${TMPDIR:-/tmp}/tamu-cat-prod-latest.dump"
 SKIP_CONFIRM=0
 SKIP_MIGRATE=0
 USE_LATEST_BACKUP=0
@@ -19,7 +19,7 @@ usage() {
 Usage: script/sync_prod_db.sh [options]
 
 Options:
-  --app NAME              Heroku app name. Default: mha501
+  --app NAME              Heroku app name. Required unless HEROKU_APP is set.
   --heroku-db NAME        Heroku database attachment. Default: DATABASE_URL
   --local-db NAME         Local database name. Default: tamu_cat_development
   --db-service NAME       Docker Compose Postgres service. Default: db
@@ -27,7 +27,7 @@ Options:
   --db-password VALUE     Local Postgres password. Default: dev_pass
   --app-service NAME      Docker Compose Rails service for migrations. Default: web
   --restore-image IMAGE   pg_restore client image. Default: postgres:17
-  --backup-file PATH      Local backup download path. Default: /tmp/mha501-prod-latest.dump
+  --backup-file PATH      Local backup download path. Default: /tmp/tamu-cat-prod-latest.dump
   --use-latest-backup     Download latest existing Heroku backup instead of capturing a fresh one
   --skip-migrate          Do not run local Rails migrations after restore
   --skip-confirm          Do not prompt before dropping local DB
@@ -127,6 +127,11 @@ compose_container_id() {
 
 require_command docker
 require_command heroku
+
+if [[ -z "$APP" ]]; then
+  echo "Pass --app <production-app-name> or set HEROKU_APP so the script does not assume an old Heroku app." >&2
+  exit 1
+fi
 
 if [[ -z "${HEROKU_API_KEY:-}" ]]; then
   read -rsp "Paste Heroku API key for read-only prod backup download: " HEROKU_API_KEY

@@ -18,8 +18,7 @@ Then read only the deeper docs that match the task:
 - Grade imports: `docs/GRADE_IMPORTS.md`
 - Failed imports: `docs/FAILED_IMPORT_TROUBLESHOOTING.md`
 - Architecture: `docs/ARCHITECTURE_MAP.md`
-- Full operational handoff: `docs/TECHNICAL_HANDOFF.md`
-- Known risks / next work: `docs/KNOWN_ISSUES.md`, `docs/NEXT_STEPS.md`
+- Full operational handoff, known risks, and next work: `docs/TECHNICAL_HANDOFF.md`
 
 ## Operating Rules
 

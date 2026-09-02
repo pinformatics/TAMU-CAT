@@ -1,6 +1,6 @@
 # TAMU Competency Assessment Tracking
 
-Need deeper walkthroughs for environment variables, setup screenshots, or deployment runbooks? Jump into the [project wiki](https://github.com/rockey1006/MHA-Survey-Portal/wiki) for extended guides.
+Need deeper walkthroughs for environment variables, setup screenshots, or deployment runbooks? Jump into the [project wiki](https://github.com/pinformatics/TAMU-CAT/wiki) for extended guides.
 
 ## Table of Contents
 
@@ -48,7 +48,7 @@ Need deeper walkthroughs for environment variables, setup screenshots, or deploy
 | `RAILS_MASTER_KEY` | Unlocks encrypted credentials files. |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `OAUTH_REDIRECT_URI` | Google OAuth client settings. |
 | `EMAIL_NOTIFICATIONS_ENABLED` | Enables outbound notification emails when set to `true`. |
-| `APP_HOST`, `APP_PROTOCOL` | Host and protocol used in generated email links. `APP_HOST` is required when email notifications are enabled. |
+| `APP_HOST`, `APP_PROTOCOL` | Host and protocol used in generated email links. `APP_HOST` is required when email notifications are enabled unless Heroku injects its app hostname. |
 | `MAILER_FROM`, `SMTP_ADDRESS`, `SMTP_PORT`, `SMTP_DOMAIN`, `SMTP_USER_NAME`, `SMTP_PASSWORD` | SMTP sender and delivery settings for production email. |
 | `ENABLE_ROLE_SWITCH` | QA-only impersonation toggle. |
 | `PORT` | Custom dev server port (defaults to `3000`). |
@@ -58,16 +58,19 @@ Encrypted credentials live in `config/credentials/*.yml.enc`; request the `confi
 ## Installation & Setup
 
 ```bash
-git clone https://github.com/rockey1006/MHA-Survey-Portal.git
-cd MHA-Survey-Portal/
+git clone https://github.com/pinformatics/TAMU-CAT.git
+cd TAMU-CAT/
 ```
 
 ### Recommended setup: Docker
 
 ```bash
+cp .env.example .env
 docker compose run --rm web bin/rails db:prepare
 docker compose up --build
 ```
+
+Fill in Google OAuth values in `.env` when testing TAMU sign-in locally.
 
 Then open:
 
@@ -107,7 +110,7 @@ bin/dev
 
 If you use custom Postgres credentials, set `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_HOST`, and `DATABASE_PORT` (see `config/database.yml`).
 
-➡️ Detailed screenshots and troubleshooting tips live in the wiki’s [Getting Started](https://github.com/rockey1006/MHA-Survey-Portal/wiki/Getting-Started) article—use it if you need more context than the quick steps below.
+Detailed screenshots and troubleshooting tips live in the wiki's [Getting Started](https://github.com/pinformatics/TAMU-CAT/wiki/Getting-Started) article. Use it if you need more context than the quick steps below.
 
 ### Deep-dive checklist
 
@@ -145,12 +148,12 @@ docker compose up --build
 
 ### Optional: sync local DB from Heroku production
 
-Use this when you need production-like student/import data locally instead of seeded demo data. The script downloads a Heroku Postgres backup from app `mha501`, drops only the local Docker development database, restores the backup into local Postgres, runs migrations, backfills missing completed survey assignment timestamps, and checks V6 schema/data readiness.
+Use this when you need production-like student/import data locally instead of seeded demo data. The script downloads a Heroku Postgres backup from the app you pass in, drops only the local Docker development database, restores the backup into local Postgres, runs migrations, backfills missing completed survey assignment timestamps, and checks V6 schema/data readiness.
 
 Windows PowerShell:
 
 ```powershell
-.\script\sync_prod_db.ps1
+.\script\sync_prod_db.ps1 -App <production-app-name>
 docker compose up web css
 ```
 
@@ -158,7 +161,7 @@ Linux/macOS Bash:
 
 ```bash
 chmod +x script/sync_prod_db.sh
-script/sync_prod_db.sh
+script/sync_prod_db.sh --app <production-app-name>
 docker compose up web css
 ```
 
@@ -184,13 +187,13 @@ Important:
 
 ### Refresh Heroku dev from production
 
-Use this when `mha-dev-eaa62d47718a` needs production-like data for QA. This overwrites only the Heroku dev database; production app `mha501` is the source and is not modified.
+Use this when a Heroku dev app needs production-like data for QA. This overwrites only the Heroku dev database; the production app is the source and is not modified.
 
 ```powershell
-heroku pg:copy mha501::DATABASE_URL DATABASE_URL --app mha-dev-eaa62d47718a --confirm mha-dev-eaa62d47718a
-heroku run rails db:migrate --app mha-dev-eaa62d47718a
-heroku run rails survey_assignments:backfill_completed --app mha-dev-eaa62d47718a
-heroku run rails v6:readiness --app mha-dev-eaa62d47718a
+heroku pg:copy <production-app-name>::DATABASE_URL DATABASE_URL --app <dev-app-name> --confirm <dev-app-name>
+heroku run rails db:migrate --app <dev-app-name>
+heroku run rails survey_assignments:backfill_completed --app <dev-app-name>
+heroku run rails v6:readiness --app <dev-app-name>
 ```
 
 - Repository mounts into the app container for live reloads.
@@ -261,14 +264,13 @@ The main admin workflows in the current application are:
 
 If you are onboarding to this project or taking over maintenance, start here:
 
-1. [`docs/HANDOFF.md`](docs/HANDOFF.md)
+1. [`docs/AGENT_BRIEF.md`](docs/AGENT_BRIEF.md)
 2. [`docs/TECHNICAL_HANDOFF.md`](docs/TECHNICAL_HANDOFF.md)
-3. [`docs/ADMIN_WALKTHROUGH.md`](docs/ADMIN_WALKTHROUGH.md)
-4. [`docs/ARCHITECTURE_MAP.md`](docs/ARCHITECTURE_MAP.md)
-5. [`docs/GRADE_IMPORTS.md`](docs/GRADE_IMPORTS.md)
-6. [`docs/PERMISSIONS_AUDIT.md`](docs/PERMISSIONS_AUDIT.md)
-7. [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
-8. [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md)
+3. [`docs/ARCHITECTURE_MAP.md`](docs/ARCHITECTURE_MAP.md)
+4. [`docs/GRADE_IMPORTS.md`](docs/GRADE_IMPORTS.md)
+5. [`docs/FAILED_IMPORT_TROUBLESHOOTING.md`](docs/FAILED_IMPORT_TROUBLESHOOTING.md)
+6. [`docs/ADMIN_WALKTHROUGH.md`](docs/ADMIN_WALKTHROUGH.md)
+7. [`docs/PERMISSIONS_AUDIT.md`](docs/PERMISSIONS_AUDIT.md)
 
 Important operational notes:
 
@@ -282,22 +284,20 @@ Important operational notes:
 
 The GitHub Wiki is the authoritative knowledge base:
 
-- [Project Overview](https://github.com/rockey1006/MHA-Survey-Portal/wiki/Project-Overview)
-- [Architecture](https://github.com/rockey1006/MHA-Survey-Portal/wiki/Architecture)
-- [Getting Started](https://github.com/rockey1006/MHA-Survey-Portal/wiki/Getting-Started)
-- [Student / Advisor / Administrator playbooks](https://github.com/rockey1006/MHA-Survey-Portal/wiki)
-- [System Administration & Deployment](https://github.com/rockey1006/MHA-Survey-Portal/wiki/System-Administration)
+- [Project Overview](https://github.com/pinformatics/TAMU-CAT/wiki/Project-Overview)
+- [Architecture](https://github.com/pinformatics/TAMU-CAT/wiki/Architecture)
+- [Getting Started](https://github.com/pinformatics/TAMU-CAT/wiki/Getting-Started)
+- [Student / Advisor / Administrator playbooks](https://github.com/pinformatics/TAMU-CAT/wiki)
+- [System Administration & Deployment](https://github.com/pinformatics/TAMU-CAT/wiki/System-Administration)
 
 `/about` in the app links directly to these articles. Update the wiki to keep in-app help accurate.
 
 Repo-local handoff docs:
 
 - [`docs/README.md`](docs/README.md)
-- [`docs/HANDOFF.md`](docs/HANDOFF.md)
 - [`docs/TECHNICAL_HANDOFF.md`](docs/TECHNICAL_HANDOFF.md)
 - [`docs/GRADE_IMPORTS.md`](docs/GRADE_IMPORTS.md)
-- [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
-- [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md)
+- [`docs/FAILED_IMPORT_TROUBLESHOOTING.md`](docs/FAILED_IMPORT_TROUBLESHOOTING.md)
 
 ## Credits & Acknowledgements
 
