@@ -48,14 +48,14 @@ class ReportsController < ApplicationController
   def overview_and_user_guide
     return pdf_unavailable unless defined?(WickedPdf)
 
-    html = render_to_string(template: "reports/overview_and_user_guide", layout: "report_pdf", formats: [:html])
+    html = render_to_string(template: "reports/overview_and_user_guide", layout: "report_pdf", formats: [ :html ])
     send_document_pdf(html, "TAMU-CAT-Overview-and-User-Guide.pdf", "reports_user_guide_pdf")
   end
 
   def example_reports
     return pdf_unavailable unless defined?(WickedPdf)
 
-    html = render_to_string(template: "reports/example_reports", layout: "report_pdf", formats: [:html])
+    html = render_to_string(template: "reports/example_reports", layout: "report_pdf", formats: [ :html ])
     send_document_pdf(html, "TAMU-CAT-Example-Reports.pdf", "reports_example_reports_pdf")
   end
 
