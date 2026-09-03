@@ -28,8 +28,8 @@ mha_competency_tooltip: &mha_competency_tooltip |
   - They cannot perform job duties independently, and their performance generally fails to meet expectations even with guidance.
   - They require constant and direct supervision for all tasks.
 
-  ## Not able to assess (0) [Advisor Only]
-  - Advisor only option for cases where a rating cannot be provided.
+  ## Not able to assess (0)
+  - Use when a competency cannot be assessed at this checkpoint.
 
 mha_competency_dropdown_options: &mha_competency_dropdown_options
   - ["Mastery (5)", "5"]
@@ -37,6 +37,7 @@ mha_competency_dropdown_options: &mha_competency_dropdown_options
   - ["Capable (3)", "3"]
   - ["Emerging (2)", "2"]
   - ["Beginner (1)", "1"]
+  - ["Not able to assess (0)", "0"]
 
 templates:
   mha_section: &mha_section

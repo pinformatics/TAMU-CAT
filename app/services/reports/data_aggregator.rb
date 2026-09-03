@@ -2025,7 +2025,7 @@ module Reports
 
     def build_dataset_row(record, is_advisor_entry: false)
       value = parse_numeric(record.response_value)
-      return nil unless value
+      return nil unless value && value.positive?
 
       effective_target_level = competency_target_level_for_record(record)
 

@@ -181,6 +181,19 @@ class Question < ApplicationRecord
     pairs
   end
 
+  # Returns student-facing options for the standard competency scale.
+  # Existing surveys may predate the N/A option in the seed template.
+  #
+  # @return [Array<Array(String, String)>]
+  def student_answer_option_pairs
+    pairs = answer_option_pairs
+    values = pairs.map { |(_label, value)| value.to_s }
+    return pairs unless question_type_dropdown? && values.sort == %w[1 2 3 4 5]
+    return pairs if values.include?("0")
+
+    pairs + [ [ "Not able to assess (0)", "0" ] ]
+  end
+
   # Returns a normalized list of answer option definitions including metadata.
   #
   # Supports answer_options stored as:

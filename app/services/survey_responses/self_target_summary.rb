@@ -26,6 +26,7 @@ module SurveyResponses
       comparable_rows = rows.select { |row| row[:status].in?(%i[met below_target]) }
       met_count = rows.count { |row| row[:status] == :met }
       below_count = rows.count { |row| row[:status] == :below_target }
+      not_assessable_count = rows.count { |row| row[:status] == :not_assessable }
       missing_self_count = rows.count { |row| row[:status] == :not_rated }
       missing_target_count = rows.count { |row| row[:status] == :no_target }
 
@@ -35,6 +36,7 @@ module SurveyResponses
         comparable_count: comparable_rows.size,
         met_count: met_count,
         below_count: below_count,
+        not_assessable_count: not_assessable_count,
         missing_self_count: missing_self_count,
         missing_target_count: missing_target_count,
         met_rate: comparable_rows.any? ? ((met_count.to_f / comparable_rows.size) * 100).round(1) : nil
@@ -90,13 +92,13 @@ module SurveyResponses
       normalized = SurveyQuestionRules.normalize_answer_value(value)
       return nil if normalized.blank?
 
-      explicit = normalized.match(/\A([1-5])(?:\.0+)?\z/)
+      explicit = normalized.match(/\A([0-5])(?:\.0+)?\z/)
       return explicit[1].to_i if explicit
 
-      parenthetical = normalized.match(/\(([1-5])\)/)
+      parenthetical = normalized.match(/\(([0-5])\)/)
       return parenthetical[1].to_i if parenthetical
 
-      embedded = normalized.match(/\b([1-5])\b/)
+      embedded = normalized.match(/\b([0-5])\b/)
       embedded ? embedded[1].to_i : nil
     end
 
@@ -110,6 +112,7 @@ module SurveyResponses
     end
 
     def target_status(self_rating, target_level)
+      return :not_assessable if self_rating&.zero?
       return :no_target if target_level.blank?
       return :not_rated if self_rating.blank?
 
@@ -122,6 +125,8 @@ module SurveyResponses
         "Target met"
       when :below_target
         "Below target"
+      when :not_assessable
+        "Not able to assess"
       when :no_target
         "Target not set"
       else
