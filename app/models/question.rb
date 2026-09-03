@@ -188,7 +188,11 @@ class Question < ApplicationRecord
   def student_answer_option_pairs
     pairs = answer_option_pairs
     values = pairs.map { |(_label, value)| value.to_s }
-    return pairs unless question_type_dropdown? && values.sort == %w[1 2 3 4 5]
+    proficiency_label = pairs.any? do |label, _value|
+      label.to_s.match?(/\b(beginner|emerging|capable|experienced|mastery)\b/i)
+    end
+    proficiency_values = values.select { |value| value.match?(/\A[1-5]\z/) }
+    return pairs unless question_type_dropdown? && proficiency_label && proficiency_values.size == values.size && proficiency_values.any?
     return pairs if values.include?("0")
 
     pairs + [ [ "Not able to assess (0)", "0" ] ]

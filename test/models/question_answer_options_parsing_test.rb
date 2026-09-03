@@ -37,6 +37,15 @@ class QuestionAnswerOptionsParsingTest < ActiveSupport::TestCase
     assert_includes q.student_answer_option_pairs, [ "Not able to assess (0)", "0" ]
   end
 
+  test "student_answer_option_pairs leaves unrelated numeric dropdowns unchanged" do
+    q = Question.new(
+      question_type: "dropdown",
+      answer_options: [ [ "One", "1" ], [ "Two", "2" ] ].to_json
+    )
+
+    refute_includes q.student_answer_option_pairs, [ "Not able to assess (0)", "0" ]
+  end
+
   test "answer_options_list parses newline-separated options" do
     q = Question.new(
       question_type: "multiple_choice",
