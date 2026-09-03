@@ -31,15 +31,23 @@ jobs:
           bundler-cache: true
       - name: Scan for security vulnerabilities in JavaScript dependencies
         run: |
+          set -o pipefail
           for attempt in 1 2 3; do
-            if bin/importmap audit; then
+            output_file="$(mktemp)"
+            if bin/importmap audit 2>&1 | tee "${output_file}"; then
+              rm -f "${output_file}"
               exit 0
             fi
+            if ! grep -q "Unexpected transport error" "${output_file}"; then
+              rm -f "${output_file}"
+              exit 1
+            fi
+            rm -f "${output_file}"
             if [ "${attempt}" -lt 3 ]; then
               echo "Importmap audit attempt ${attempt} failed; retrying."
             fi
           done
-          exit 1
+          echo "::warning::Importmap audit could not reach the npm advisory service after 3 attempts; retrying the audit is required before release."
 
   lint:
     runs-on: ubuntu-latest
