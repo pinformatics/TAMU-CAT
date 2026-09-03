@@ -30,7 +30,16 @@ jobs:
           ruby-version: .ruby-version
           bundler-cache: true
       - name: Scan for security vulnerabilities in JavaScript dependencies
-        run: bin/importmap audit
+        run: |
+          for attempt in 1 2 3; do
+            if bin/importmap audit; then
+              exit 0
+            fi
+            if [ "${attempt}" -lt 3 ]; then
+              echo "Importmap audit attempt ${attempt} failed; retrying."
+            fi
+          done
+          exit 1
 
   lint:
     runs-on: ubuntu-latest
