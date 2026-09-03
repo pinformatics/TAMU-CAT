@@ -189,6 +189,7 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
                   assert_equal 3.0, midpoint[:course_average]
                   assert_nil checkpoints.find { |checkpoint| checkpoint[:key] == "initial" }[:self_average]
                 end
+              end
             end
           end
         end
