@@ -606,7 +606,7 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
 
   test "documentation PDFs require admin access" do
     get reports_overview_and_user_guide_path
-    assert_redirected_to new_user_session_path
+    assert_response :unauthorized
 
     sign_in @advisor
     get reports_overview_and_user_guide_path
