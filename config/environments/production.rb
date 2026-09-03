@@ -27,12 +27,10 @@ Rails.application.configure do
   if active_storage_service == :local
     raise "ACTIVE_STORAGE_SERVICE=local is not supported in production; configure a durable service."
   end
-  if active_storage_service == :amazon
+  if active_storage_service == :amazon && ENV["DYNO"].present?
     raise "AWS_S3_BUCKET is required when ACTIVE_STORAGE_SERVICE=amazon." if ENV["AWS_S3_BUCKET"].blank?
-    if ENV["DYNO"].present? || ENV["HEROKU_APP_NAME"].present?
-      %w[AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY].each do |name|
-        raise "#{name} is required for Heroku S3 access." if ENV[name].blank?
-      end
+    %w[AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY].each do |name|
+      raise "#{name} is required for Heroku S3 access." if ENV[name].blank?
     end
   end
   config.active_storage.service = active_storage_service
