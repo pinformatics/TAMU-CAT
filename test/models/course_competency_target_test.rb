@@ -98,13 +98,13 @@ class CourseCompetencyTargetTest < ActiveSupport::TestCase
     assert_nil target.semester_name
   end
 
-  test "schema is folded into the v6 foundation migration" do
+  test "schema is represented in the current baseline migration" do
     assert ActiveRecord::Base.connection.table_exists?(:course_competency_targets)
     refute File.exist?(Rails.root.join("db/migrate/20260602103000_create_course_competency_targets.rb"))
 
-    migration = Rails.root.join("db/migrate/20260520160000_add_phase_two_data_model_foundations.rb").read
-    assert_includes migration, "def create_course_competency_targets"
-    assert_includes migration, "create_table :course_competency_targets"
+    migration = Rails.root.join("db/migrate/20260903170000_baseline_current_schema.rb").read
+    assert_includes migration, "REQUIRED_TABLES"
+    assert_includes migration, "course_competency_targets"
   end
 
   test "data source readiness reports missing v6 course target tables" do

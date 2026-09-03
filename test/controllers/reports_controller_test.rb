@@ -604,6 +604,36 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
+  test "documentation PDFs require admin access" do
+    get reports_overview_and_user_guide_path
+    assert_response :unauthorized
+
+    sign_in @advisor
+    get reports_overview_and_user_guide_path
+    assert_redirected_to reports_path
+    assert_equal "Administrator access is required for these documents.", flash[:alert]
+  end
+
+  test "admin can download the user guide PDF" do
+    sign_in @admin
+
+    get reports_overview_and_user_guide_path
+
+    assert_response :success
+    assert_equal "application/pdf", @response.content_type
+    assert_match(/attachment;.*TAMU-CAT-Overview-and-User-Guide\.pdf/, @response.headers["Content-Disposition"])
+  end
+
+  test "admin can download the example reports PDF" do
+    sign_in @admin
+
+    get reports_example_reports_path
+
+    assert_response :success
+    assert_equal "application/pdf", @response.content_type
+    assert_match(/attachment;.*TAMU-CAT-Example-Reports\.pdf/, @response.headers["Content-Disposition"])
+  end
+
   # Access Control Tests - export_excel action
   test "export_excel requires authentication" do
     get export_reports_excel_path

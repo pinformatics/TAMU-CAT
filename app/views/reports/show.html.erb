@@ -11,6 +11,8 @@
         <div class="u-actions">
           <% if current_user&.respond_to?(:role_admin?) && current_user.role_admin? %>
             <%= link_to "Back", admin_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "User Guide PDF", reports_overview_and_user_guide_path, class: button_classes(:secondary), data: { turbo: false } %>
+            <%= link_to "Example Reports PDF", reports_example_reports_path, class: button_classes(:primary), data: { turbo: false, turbo_confirm: ferpa_export_confirmation("TAMU-CAT example reports") } %>
           <% else %>
             <%= link_to "Back", advisor_dashboard_path, class: button_classes(:secondary), data: { turbo: false } %>
           <% end %>

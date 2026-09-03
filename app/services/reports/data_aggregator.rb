@@ -2025,7 +2025,7 @@ module Reports
 
     def build_dataset_row(record, is_advisor_entry: false)
       value = parse_numeric(record.response_value)
-      return nil unless value && value.positive?
+      return nil unless value
 
       effective_target_level = competency_target_level_for_record(record)
 
@@ -2260,7 +2260,7 @@ module Reports
       not_met = 0
 
       student_rows_group.each_value do |entries|
-        score_avg = average(entries.map { |row| row[:score] })
+        score_avg = average(entries.map { |row| row[:score] }.reject(&:zero?))
         next if score_avg.nil?
 
         target_levels = entries.map { |row| row[:program_target_level] }.compact.map(&:to_f)
