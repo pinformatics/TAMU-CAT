@@ -66,6 +66,13 @@ jobs:
           ruby-version: .ruby-version
           bundler-cache: true
 
+      - name: Prepare disposable test credentials
+        env:
+          RAILS_ENV: test
+        run: |
+          rm -f config/credentials/test.yml.enc config/credentials/test.key
+          EDITOR=true bin/rails credentials:edit --environment test
+
       - name: Setup DB
         env:
           PGUSER: postgres

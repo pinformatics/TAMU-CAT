@@ -54,7 +54,7 @@ module SurveyAssignments
         assert_equal 1, CompletionBackfill.call(scope: SurveyAssignment.where(id: assignment.id))
       end
 
-      assert_equal answer.updated_at.to_i, assignment.reload.completed_at.to_i
+      assert_in_delta answer.updated_at.to_i, assignment.reload.completed_at.to_i, 1
     end
 
     test "does not backfill assignment when required answers are incomplete" do

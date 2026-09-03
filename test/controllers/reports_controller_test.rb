@@ -608,10 +608,28 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     get reports_overview_and_user_guide_path
     assert_response :unauthorized
 
+    get reports_example_reports_path
+    assert_response :unauthorized
+
     sign_in @advisor
     get reports_overview_and_user_guide_path
     assert_redirected_to reports_path
     assert_equal "Administrator access is required for these documents.", flash[:alert]
+
+    sign_in @student
+    get reports_overview_and_user_guide_path
+    assert_redirected_to dashboard_path
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
+
+    sign_in @advisor
+    get reports_example_reports_path
+    assert_redirected_to reports_path
+    assert_equal "Administrator access is required for these documents.", flash[:alert]
+
+    sign_in @student
+    get reports_example_reports_path
+    assert_redirected_to dashboard_path
+    assert_equal ApplicationController::STAFF_ONLY_MESSAGE, flash[:alert]
   end
 
   test "admin can download the user guide PDF" do
@@ -632,6 +650,100 @@ class ReportsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "application/pdf", @response.content_type
     assert_match(/attachment;.*TAMU-CAT-Example-Reports\.pdf/, @response.headers["Content-Disposition"])
+  end
+
+  test "example reports document Carla's report-only not-assessed semantics" do
+    template = Rails.root.join("app/views/reports/example_reports.html.erb").read
+
+    assert_includes template, "0 / Not able to assess"
+    assert_includes template, "advisor/report-only"
+    assert_includes template, "1 / Beginner"
+    assert_includes template, "5 / Mastery"
+    assert_includes template, "Achievement percentages use assessed students only"
+    assert_includes template, "configured program target is 4"
+    export_template = Rails.root.join("app/views/reports/export.html.erb").read
+    assert_includes export_template, "Achieved and not achieved percentages use assessed students only"
+    assert_includes export_template, "<th>Assessed</th>"
+    assert_includes export_template, "<th>Not Assessed</th>"
+    assert_includes export_template, "item[:assessed_students]"
+    assert_includes template, "Residential</td><td>Class of 2027</td><td>Financial Management</td><td>2"
+    assert_includes template, "Executive</td><td>Class of 2027</td><td>Financial Management</td><td>1"
+    assert_includes template, "72.7%"
+    assert_includes template, "52.9%"
+    assert_includes template, "width: 72.7%"
+    assert_includes template, "width: 52.9%"
+    assert_includes template, "It contains no live student data"
+    assert_includes template, "A cohort with only not-assessed results has no achieved or not-achieved percentage"
+    assert_includes template, "Residential, Class of 2027"
+    assert_includes template, "Executive, Class of 2027"
+    assert_includes template, "Not able to assess is reported separately"
+  end
+
+  test "program report export renders Carla's assessed-only distribution fields" do
+    captured_html = nil
+    rating_levels = {
+      0 => "Not able to assess",
+      1 => "Beginner",
+      2 => "Emerging",
+      3 => "Capable",
+      4 => "Experienced",
+      5 => "Mastery"
+    }
+    payload = {
+      generated_at: Time.current,
+      filters: {},
+      benchmark: { cards: [] },
+      competency_summary: [],
+      rating_level_distribution: {
+        levels: rating_levels,
+        program_target_met_percent: 75,
+        cohorts: [],
+        items: [ {
+          track: "Residential",
+          class_of: 2027,
+          name: "Financial Management",
+          level_counts: rating_levels.keys.index_with { |level| level.zero? ? 2 : 0 },
+          total_students: 2,
+          assessed_students: 0,
+          not_assessed_count: 2,
+          target_met_percent: nil,
+          target_not_met_percent: nil,
+          target_met: false
+        } ]
+      },
+      employment_summary: {}
+    }
+    fake_aggregator = Struct.new(:export_payload).new(payload)
+    fake_course_report = Object.new
+    fake_course_report.define_singleton_method(:call) { {} }
+    fake_pdf = Object.new
+    fake_pdf.define_singleton_method(:pdf_from_string) do |html, *_args|
+      captured_html = html
+      "%PDF-1.4"
+    end
+
+    sign_in @admin
+
+    Reports::DataAggregator.stub(:new, ->(*) { fake_aggregator }) do
+      Reports::CourseCompetencyReport.stub(:new, ->(*) { fake_course_report }) do
+        WickedPdf.stub(:new, fake_pdf) do
+          get export_reports_pdf_path(section: "program_attainment")
+        end
+      end
+    end
+
+    assert_response :success
+    assert_equal "%PDF-1.4", response.body
+    assert_includes captured_html, "0/Not able to assess"
+    assert_includes captured_html, "<th>Assessed</th>"
+    assert_includes captured_html, "<th>Not Assessed</th>"
+    assert_includes captured_html, "0 / Not able to assess remains visible and is excluded from both denominators"
+    fragment = Nokogiri::HTML.fragment(captured_html)
+    distribution_table = fragment.at_css("table.report-export__rating-level-table")
+    row = distribution_table.css("tbody tr").first
+    assert_equal [
+      "Residential", "Class of 2027", "Financial Management", "2", "0", "0", "0", "0", "0", "2", "0", "2", "—", "—", "—"
+    ], row.css("td").map { |cell| cell.text.strip }
   end
 
   # Access Control Tests - export_excel action

@@ -511,16 +511,25 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
       executive = distribution[:cohorts].find do |item|
         item[:cohort_label] == "Executive, Class of 2027"
       end
+      residential_cohort = distribution[:cohorts].find do |item|
+        item[:cohort_label] == "Residential, Class of 2026"
+      end
 
       assert_equal "Not able to assess", distribution[:levels][0]
       assert_equal 75.0, distribution[:program_target_met_percent]
       assert_equal 1, residential[:level_counts][0]
       assert_equal 1, residential[:level_counts][5]
+      assert_equal 2, residential[:total_students]
+      assert_equal 1, residential[:assessed_students]
+      assert_equal 1, residential[:not_assessed_count]
       assert_equal 1, residential[:target_met_count]
-      assert_equal 1, residential[:target_not_met_count]
-      assert_equal 50.0, residential[:target_met_percent]
-      assert_equal 50.0, residential[:target_not_met_percent]
-      assert_equal false, residential[:target_met]
+      assert_equal 0, residential[:target_not_met_count]
+      assert_equal 100.0, residential[:target_met_percent]
+      assert_equal 0.0, residential[:target_not_met_percent]
+      assert_equal true, residential[:target_met]
+      assert_equal 2, residential_cohort[:total_students]
+      assert_equal 1, residential_cohort[:total_assessments]
+      assert_equal 1, residential_cohort[:not_assessed_count]
       assert_equal 100.0, executive[:target_met_percent]
       assert_equal 0.0, executive[:target_not_met_percent]
     end

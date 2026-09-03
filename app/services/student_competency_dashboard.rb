@@ -36,6 +36,7 @@ class StudentCompetencyDashboard
       domain_averages: domain_averages,
       summary: student_summary,
       change_summary: change_summary,
+      checkpoint_progress: checkpoint_progress,
       radar_chart: radar_chart,
       trend_chart: trend_chart,
       course_released: course_released?,
@@ -608,6 +609,47 @@ class StudentCompetencyDashboard
     }
   end
 
+  def checkpoint_progress
+    @checkpoint_progress ||= begin
+      semester_self = self_trend_by_semester
+      semester_course = course_trend_by_semester
+      stages = { "initial" => "Initial", "midpoint" => "Mid-point", "final" => "Final" }
+      return stages.map { |stage_key, label| { key: stage_key, label: label, semesters: [], self_average: nil, course_average: nil, available: false } } unless SurveyOffering.data_source_ready?
+
+      track_label = ProgramTrack.name_for_key(student.track_key) || student.track.to_s
+      matching_offerings = SurveyOffering
+        .where("LOWER(survey_offerings.track) = ?", track_label.downcase)
+        .where(class_of: [ nil, student.program_year ])
+        .joins(survey: :program_semester)
+        .merge(Survey.active)
+        .includes(survey: :program_semester)
+        .select do |offering|
+          semester_name = offering.survey.program_semester&.name
+          semester_name.present? && (semester_self.key?(semester_name) || semester_course.key?(semester_name) || offering.active? && offering_available_now?(offering))
+        end
+
+      stages.map do |stage_key, label|
+        offerings = matching_offerings.select { |offering| offering.stage == stage_key }
+        semester_names = offerings.map { |offering| offering.survey.program_semester&.name }.compact.uniq
+
+        {
+          key: stage_key,
+          label: label,
+          semesters: semester_names,
+          self_average: average(semester_names.filter_map { |name| semester_self[name] }),
+          course_average: average(semester_names.filter_map { |name| semester_course[name] }),
+          available: semester_names.any?
+        }
+      end
+    end
+  end
+
+  def offering_available_now?(offering)
+    now = Time.zone.now
+    (offering.available_from.blank? || offering.available_from <= now) &&
+      (offering.available_until.blank? || offering.available_until >= now)
+  end
+
   def self_trend_by_semester
     @self_trend_by_semester ||= begin
       rows = self_rating_scope
@@ -971,6 +1013,10 @@ class StudentCompetencyDashboard
         { name: domain[:name], score: score }
       end
 
+      ranked_domains = ranked_domains.sort_by { |row| -row[:score].to_f }
+      summary_count = ranked_domains.empty? ? 0 : [ 2, ranked_domains.size / 2 ].min
+      summary_count = 1 if summary_count.zero? && ranked_domains.any?
+
       growth_rows = domain_rows.flat_map { |domain| domain[:competencies] }.filter_map do |competency|
         target = competency[:end_program_target]
         next if target.blank?
@@ -990,8 +1036,8 @@ class StudentCompetencyDashboard
       end
 
       {
-        strongest_domains: ranked_domains.sort_by { |row| -row[:score].to_f }.first(2),
-        lowest_domains: ranked_domains.sort_by { |row| row[:score].to_f }.first(2),
+        strongest_domains: ranked_domains.first(summary_count),
+        lowest_domains: ranked_domains.last(summary_count).reverse,
         growth_areas: growth_rows.sort_by { |row| -row[:gap].to_f }.first(3),
         missing_self_count: count_competencies_with_status(:self_status, "missing"),
         no_course_evidence_count: count_competencies_with_status(:course_status, "no_evidence"),

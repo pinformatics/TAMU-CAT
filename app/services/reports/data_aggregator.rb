@@ -1418,6 +1418,7 @@ module Reports
         level_counts = RATING_LEVEL_LABELS.keys.index_with { 0 }
         target_met_count = 0
         assessed_count = 0
+        not_assessed_count = 0
 
         student_group.each_value do |entries|
           score_avg = average(entries.map { |row| row[:score] })
@@ -1425,6 +1426,11 @@ module Reports
 
           level = score_avg.round.clamp(RATING_LEVEL_LABELS.keys.min, RATING_LEVEL_LABELS.keys.max)
           level_counts[level] += 1
+          if level.zero?
+            not_assessed_count += 1
+            next
+          end
+
           assessed_count += 1
 
           target_avg = average(entries.map { |row| row[:program_target_level] }.compact.map(&:to_f))
@@ -1445,7 +1451,9 @@ module Reports
           cohort_label: cohort[:label],
           level_counts: level_counts,
           student_ids: student_group.keys,
-          total_students: assessed_count,
+          total_students: student_group.size,
+          assessed_students: assessed_count,
+          not_assessed_count: not_assessed_count,
           target_met_count: target_met_count,
           target_not_met_count: target_not_met_count,
           target_met_percent: target_met_percent,
@@ -1514,9 +1522,10 @@ module Reports
       grouped = Array(items).group_by { |item| [ item[:track], item[:class_of], item[:cohort_label] ] }
 
       rows = grouped.map do |(track, class_of, cohort_label), cohort_items|
-        total_assessments = cohort_items.sum { |item| item[:total_students].to_i }
+        total_assessments = cohort_items.sum { |item| item[:assessed_students].to_i }
         target_met_count = cohort_items.sum { |item| item[:target_met_count].to_i }
         target_not_met_count = cohort_items.sum { |item| item[:target_not_met_count].to_i }
+        not_assessed_count = cohort_items.sum { |item| item[:not_assessed_count].to_i }
         target_met_percent = safe_percent(target_met_count, total_assessments)
         target_not_met_percent = target_met_percent.nil? ? nil : (100.0 - target_met_percent)
 
@@ -1526,6 +1535,7 @@ module Reports
           cohort_label: cohort_label,
           total_students: cohort_items.flat_map { |item| Array(item[:student_ids]) }.compact.uniq.size,
           total_assessments: total_assessments,
+          not_assessed_count: not_assessed_count,
           target_met_count: target_met_count,
           target_not_met_count: target_not_met_count,
           target_met_percent: target_met_percent,

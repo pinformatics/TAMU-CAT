@@ -358,6 +358,7 @@
         Proficiency scale: <%= rating_levels.map { |level, label| rating_level_label.call(level, label) }.join(", ") %>.
         Program-level target: at least <%= number_to_percentage(rating_level_distribution[:program_target_met_percent], precision: 0) %>
         of students meet or exceed each competency&rsquo;s configured target level.
+        Achieved and not achieved percentages use assessed students only; 0 / Not able to assess remains visible and is excluded from both denominators.
       </p>
       <% if rating_level_cohorts.any? %>
         <div class="chart-block" style="margin-bottom: 1.25rem;">
@@ -389,7 +390,7 @@
         </div>
       <% end %>
       <div class="c-table-wrapper">
-        <table class="c-table report-export__table">
+        <table class="c-table report-export__table report-export__rating-level-table">
         <thead>
           <tr>
             <th>Track</th>
@@ -399,6 +400,8 @@
               <th><%= rating_level_label.call(level, label) %></th>
             <% end %>
             <th>Total Students</th>
+            <th>Assessed</th>
+            <th>Not Assessed</th>
             <th>% Achieved Program Target</th>
             <th>% Not Achieved Program Target</th>
             <th>Benchmark Outcome</th>
@@ -414,6 +417,8 @@
                 <td><%= item[:level_counts][level] || 0 %></td>
               <% end %>
               <td><%= item[:total_students] %></td>
+              <td><%= item[:assessed_students] || item[:total_students].to_i - item[:not_assessed_count].to_i %></td>
+              <td><%= item[:not_assessed_count] || 0 %></td>
               <td><%= item[:target_met_percent].present? ? number_to_percentage(item[:target_met_percent], precision: 1) : "—" %></td>
               <td><%= item[:target_not_met_percent].present? ? number_to_percentage(item[:target_not_met_percent], precision: 1) : "—" %></td>
               <td><%= item[:target_met_percent].present? ? (item[:target_met] ? "Met" : "Not Met") : "—" %></td>
