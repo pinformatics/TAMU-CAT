@@ -4,6 +4,7 @@ require "csv"
 
 class ReportsController < ApplicationController
   before_action :ensure_reports_access!
+  before_action :ensure_admin_access!, only: %i[ overview_and_user_guide example_reports ]
 
   def show
     @report_tab = normalize_report_tab(params[:report_tab])
@@ -42,6 +43,20 @@ class ReportsController < ApplicationController
               filename: "health-reports-#{Time.current.strftime('%Y%m%d-%H%M')}.pdf",
               disposition: "attachment",
               type: "application/pdf"
+  end
+
+  def overview_and_user_guide
+    return pdf_unavailable unless defined?(WickedPdf)
+
+    html = render_to_string(template: "reports/overview_and_user_guide", layout: "report_pdf")
+    send_document_pdf(html, "TAMU-CAT-Overview-and-User-Guide.pdf", "reports_user_guide_pdf")
+  end
+
+  def example_reports
+    return pdf_unavailable unless defined?(WickedPdf)
+
+    html = render_to_string(template: "reports/example_reports", layout: "report_pdf")
+    send_document_pdf(html, "TAMU-CAT-Example-Reports.pdf", "reports_example_reports_pdf")
   end
 
   # Generates one PDF per (track, program year) cohort combination the
@@ -161,6 +176,27 @@ class ReportsController < ApplicationController
     return if current_user.role_admin? || current_user.role_advisor?
 
     redirect_to dashboard_path, alert: STAFF_ONLY_MESSAGE
+  end
+
+  def ensure_admin_access!
+    return if current_user&.role_admin?
+
+    redirect_to reports_path, alert: "Administrator access is required for these documents."
+  end
+
+  def pdf_unavailable
+    render plain: "PDF export unavailable. WickedPdf is not configured.", status: :service_unavailable
+  end
+
+  def send_document_pdf(html, filename, export_type)
+    pdf = WickedPdf.new.pdf_from_string(html, page_size: "Letter", orientation: "Portrait")
+    record_export_audit!(
+      export_type: export_type,
+      description: "Exported TAMU-CAT documentation PDF.",
+      metadata: { filters: reports_filter_params.to_h }
+    )
+
+    send_data pdf, filename: filename, disposition: "attachment", type: "application/pdf"
   end
 
   def aggregator
