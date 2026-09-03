@@ -48,7 +48,6 @@ class SurveysControllerTest < ActionDispatch::IntegrationTest
     assert_select "input[type=radio][name=?]", "answers[#{mc.id}]", minimum: 2
     assert_select "select[name=?] option", "answers[#{dd.id}]", text: "Beginner (1)"
     assert_select "select[name=?] option", "answers[#{dd.id}]", text: "Mastery (5)"
-    assert_select "select[name=?] option", "answers[#{dd.id}]", text: "Not able to assess (0)"
 
     assert_select "div[data-controller=?] textarea[name=?][maxlength=?]", "character-counter", "answers[#{short.id}]", StudentQuestion::TEXT_MAX_LENGTH.to_s
     assert_select "div[data-controller=?] input[name=?][maxlength=?]", "character-counter", "answers[#{evidence.id}]", StudentQuestion::TEXT_MAX_LENGTH.to_s

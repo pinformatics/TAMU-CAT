@@ -22,30 +22,6 @@ class QuestionAnswerOptionsParsingTest < ActiveSupport::TestCase
     assert_equal [ [ "Other — Please describe", "0" ] ], q.answer_option_pairs
   end
 
-  test "student_answer_option_pairs adds not assessable to legacy competency scales" do
-    q = Question.new(
-      question_type: "dropdown",
-      answer_options: [
-        [ "Beginner (1)", "1" ],
-        [ "Emerging (2)", "2" ],
-        [ "Capable (3)", "3" ],
-        [ "Experienced (4)", "4" ],
-        [ "Mastery (5)", "5" ]
-      ].to_json
-    )
-
-    assert_includes q.student_answer_option_pairs, [ "Not able to assess (0)", "0" ]
-  end
-
-  test "student_answer_option_pairs leaves unrelated numeric dropdowns unchanged" do
-    q = Question.new(
-      question_type: "dropdown",
-      answer_options: [ [ "One", "1" ], [ "Two", "2" ] ].to_json
-    )
-
-    refute_includes q.student_answer_option_pairs, [ "Not able to assess (0)", "0" ]
-  end
-
   test "answer_options_list parses newline-separated options" do
     q = Question.new(
       question_type: "multiple_choice",

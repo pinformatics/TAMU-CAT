@@ -181,23 +181,6 @@ class Question < ApplicationRecord
     pairs
   end
 
-  # Returns student-facing options for the standard competency scale.
-  # Existing surveys may predate the N/A option in the seed template.
-  #
-  # @return [Array<Array(String, String)>]
-  def student_answer_option_pairs
-    pairs = answer_option_pairs
-    values = pairs.map { |(_label, value)| value.to_s }
-    proficiency_label = pairs.any? do |label, _value|
-      label.to_s.match?(/\b(beginner|emerging|capable|experienced|mastery)\b/i)
-    end
-    proficiency_values = values.select { |value| value.match?(/\A[1-5]\z/) }
-    return pairs unless question_type_dropdown? && proficiency_label && proficiency_values.size == values.size && proficiency_values.any?
-    return pairs if values.include?("0")
-
-    pairs + [ [ "Not able to assess (0)", "0" ] ]
-  end
-
   # Returns a normalized list of answer option definitions including metadata.
   #
   # Supports answer_options stored as:

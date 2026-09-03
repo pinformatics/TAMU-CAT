@@ -252,7 +252,7 @@
               </div>
 
             <% when "dropdown" %>
-              <% option_pairs = question.student_answer_option_pairs %>
+              <% option_pairs = question.answer_option_pairs %>
               <%= select_tag field_name,
                              options_for_select(option_pairs.map { |label, value| [label, value] }, current_value.to_s),
                              include_blank: true,
