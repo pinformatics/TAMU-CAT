@@ -166,7 +166,7 @@ body.high-contrast .flash a:visited {
   text-decoration: underline;
 }
 
-/* High-contrast: hero + inverse �chip/tile� components */
+/* High-contrast: hero + inverse chip/tile components */
 body.high-contrast .c-hero,
 body.high-contrast .c-hero--maroon {
   background: #000000 !important;
