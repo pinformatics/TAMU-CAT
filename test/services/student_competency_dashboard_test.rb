@@ -195,7 +195,6 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
       end
     end
   end
-  end
 
   test "checkpoint progress is unavailable when offering data is missing" do
     service = StudentCompetencyDashboard.new(student: @student)
