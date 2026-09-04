@@ -27,7 +27,9 @@ Rails.application.configure do
   if active_storage_service == :local
     raise "ACTIVE_STORAGE_SERVICE=local is not supported in production; configure a durable service."
   end
-  if active_storage_service == :amazon && ENV["DYNO"].present?
+  assets_precompile = ENV["SECRET_KEY_BASE_DUMMY"].present? ||
+                      (Rake.respond_to?(:application) && Rake.application.top_level_tasks.include?("assets:precompile"))
+  if active_storage_service == :amazon && !assets_precompile
     raise "AWS_S3_BUCKET is required when ACTIVE_STORAGE_SERVICE=amazon." if ENV["AWS_S3_BUCKET"].blank?
     %w[AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY].each do |name|
       raise "#{name} is required for Heroku S3 access." if ENV[name].blank?
