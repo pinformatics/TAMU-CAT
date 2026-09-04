@@ -387,6 +387,11 @@ Required or commonly used:
 - Durable S3-compatible object storage for Active Storage uploads.
 - TAMU SMTP or another production SMTP service for email delivery.
 
+The database sync script may receive custom local credentials or a custom
+database name; it generates the encoded `LOCAL_DATABASE_URL` automatically.
+For manual Compose overrides, set `LOCAL_DATABASE_URL` explicitly with any
+URI-reserved credential characters percent-encoded.
+
 ## Admin Access
 
 ### How admin privileges work
