@@ -29,7 +29,8 @@ Rails.application.configure do
   end
   assets_precompile = ENV["SECRET_KEY_BASE_DUMMY"].present? ||
                       (Rake.respond_to?(:application) && Rake.application.top_level_tasks.include?("assets:precompile"))
-  if active_storage_service == :amazon && !assets_precompile
+  validate_storage = ENV["SKIP_STORAGE_VALIDATION"] != "1"
+  if active_storage_service == :amazon && !assets_precompile && validate_storage
     raise "AWS_S3_BUCKET is required when ACTIVE_STORAGE_SERVICE=amazon." if ENV["AWS_S3_BUCKET"].blank?
     %w[AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY].each do |name|
       raise "#{name} is required for Heroku S3 access." if ENV[name].blank?

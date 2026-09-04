@@ -123,10 +123,12 @@ The Heroku path is the clearest current deployment workflow.
    git push heroku main
    ```
 
-7. Let the Heroku `release` process run:
+7. Let the Heroku `release` process run. The release command skips only
+   runtime storage validation because migrations do not access Active Storage;
+   web and worker dynos still validate the S3 configuration on boot:
 
    ```bash
-   bundle exec rails db:prepare
+   SKIP_STORAGE_VALIDATION=1 bundle exec rails db:prepare
    ```
 
 8. Before switching traffic, migrate existing Active Storage blobs to the
