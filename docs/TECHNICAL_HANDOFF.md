@@ -294,7 +294,7 @@ After rotating Google OAuth credentials:
 - `GradeImports::BatchProcessor` should be decomposed.
 - Legacy course-derived ratings without an import batch semester should be assigned a semester before relying on semester-filtered views.
 - Production background jobs: decision made to keep the app-wide adapter `:inline` and opt individual job classes into Solid Queue (`self.queue_adapter = :solid_queue`) as they're found to need real async processing, rather than flipping every job to async at once with no incremental verification. `GradeImports::BatchImportJob` is the first job to do this. Revisit whether other `.perform_later` call sites (survey notifications, auto-assignment, etc.) should follow the same path.
-- Production Active Storage requires durable S3-compatible object storage; local disk is rejected by the production configuration.
+- Production Active Storage requires durable S3-compatible object storage. Local disk is rejected unless `ALLOW_EPHEMERAL_STORAGE=true` is explicitly set for a disposable demo/dev app; never use that opt-in for real student uploads.
 - Mailer host and SMTP settings should be confirmed in production before depending on email delivery.
 - Keep development OAuth credentials out of committed config; use local environment variables for developer-only sign-in testing.
 - Admin UI remains the densest surface and needs continued smoke coverage.

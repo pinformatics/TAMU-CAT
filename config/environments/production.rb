@@ -24,7 +24,8 @@ Rails.application.configure do
   # Production must use shared durable storage; local disk is ephemeral on Heroku
   # and is not shared with a separate import worker.
   active_storage_service = ENV.fetch("ACTIVE_STORAGE_SERVICE", "amazon").to_sym
-  if active_storage_service == :local
+  allow_ephemeral_storage = ActiveModel::Type::Boolean.new.cast(ENV.fetch("ALLOW_EPHEMERAL_STORAGE", "false"))
+  if active_storage_service == :local && !allow_ephemeral_storage
     raise "ACTIVE_STORAGE_SERVICE=local is not supported in production; configure a durable service."
   end
   assets_precompile = ENV["SECRET_KEY_BASE_DUMMY"].present? ||
