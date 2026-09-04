@@ -289,6 +289,31 @@
     </div>
   </section>
 
+  <section class="c-card c-card--tight c-checkpoint-progress" aria-labelledby="checkpoint-progress-title">
+    <div class="c-panel-header">
+      <h2 id="checkpoint-progress-title" class="c-section-title c-heading-inline">Progress by Checkpoint</h2>
+      <span class="c-muted">Initial, Mid-point, and Final</span>
+    </div>
+    <p class="c-help">Compare your available self-assessment and released course results across the program checkpoints.</p>
+    <div class="c-table-wrapper">
+      <table class="c-table c-table--sm">
+        <thead>
+          <tr><th>Checkpoint</th><th>Semester</th><th>Self-assessment</th><th>Course result</th></tr>
+        </thead>
+        <tbody>
+          <% Array(@payload[:checkpoint_progress]).each do |checkpoint| %>
+            <tr>
+              <th scope="row"><%= checkpoint[:label] %></th>
+              <td><%= checkpoint[:semesters].presence&.join(", ") || "Not available" %></td>
+              <td><%= checkpoint[:self_average].presence || "Not available" %></td>
+              <td><%= checkpoint[:course_average].presence || "Not available" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <% if staff_competency_view %>
     <section class="c-print-section">
       <%= render "staff/competencies/comparison", domains: @payload[:domains] %>

@@ -10,6 +10,7 @@ gem "propshaft"
 gem "tailwindcss-rails"
 # Use postgresql as the database for Active Record
 gem "pg", "~> 1.1"
+gem "aws-sdk-s3", require: false
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", ">= 5.0"
 # Use JavaScript with ESM import maps [https://github.com/rails/importmap-rails]
@@ -99,10 +100,10 @@ group :development do
 end
 
 group :test do
-  # Pin below Minitest 6, which split minitest/mock into a separate gem and
-  # breaks test_helper.rb's require. Revisit when the app is ready to adopt
-  # Minitest 6 deliberately.
-  gem "minitest", "~> 5.25"
+  # Minitest 6 extracts minitest/mock to its own gem; keep both present for
+  # tests that use Object#stub and Minitest::Mock.
+  gem "minitest", "~> 6.0"
+  gem "minitest-mock", "~> 5.27"
 
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"

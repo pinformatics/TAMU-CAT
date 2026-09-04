@@ -30,7 +30,24 @@ jobs:
           ruby-version: .ruby-version
           bundler-cache: true
       - name: Scan for security vulnerabilities in JavaScript dependencies
-        run: bin/importmap audit
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            output_file="$(mktemp)"
+            if bin/importmap audit 2>&1 | tee "${output_file}"; then
+              rm -f "${output_file}"
+              exit 0
+            fi
+            if ! grep -q "Unexpected transport error" "${output_file}"; then
+              rm -f "${output_file}"
+              exit 1
+            fi
+            rm -f "${output_file}"
+            if [ "${attempt}" -lt 3 ]; then
+              echo "Importmap audit attempt ${attempt} failed; retrying."
+            fi
+          done
+          echo "::warning::Importmap audit could not reach the npm advisory service after 3 attempts; retrying the audit is required before release."
 
   lint:
     runs-on: ubuntu-latest
@@ -65,6 +82,13 @@ jobs:
         with:
           ruby-version: .ruby-version
           bundler-cache: true
+
+      - name: Prepare disposable test credentials
+        env:
+          RAILS_ENV: test
+        run: |
+          rm -f config/credentials/test.yml.enc config/credentials/test.key
+          EDITOR=true bin/rails credentials:edit --environment test
 
       - name: Setup DB
         env:

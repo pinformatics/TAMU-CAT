@@ -163,6 +163,58 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
     refute_includes payload[:csv], "Course Rating"
   end
 
+  test "checkpoint progress maps matching offerings to named stages" do
+    service = StudentCompetencyDashboard.new(student: @student)
+    offering = Struct.new(:stage, :survey, :active?, :available_from, :available_until).new(
+      "midpoint",
+      Struct.new(:program_semester).new(program_semesters(:fall_2025)),
+      false,
+      2.days.ago,
+      1.day.ago
+    )
+
+    SurveyOffering.stub(:data_source_ready?, true) do
+      SurveyOffering.stub(:where, SurveyOffering) do
+        SurveyOffering.stub(:joins, SurveyOffering) do
+          SurveyOffering.stub(:merge, SurveyOffering) do
+            SurveyOffering.stub(:includes, [ offering ]) do
+              service.stub(:self_trend_by_semester, { "Fall 2025" => 4.0 }) do
+                service.stub(:course_trend_by_semester, { "Fall 2025" => 3.0 }) do
+                  checkpoints = service.send(:checkpoint_progress)
+
+                  midpoint = checkpoints.find { |checkpoint| checkpoint[:key] == "midpoint" }
+                  assert_equal %w[initial midpoint final], checkpoints.map { |checkpoint| checkpoint[:key] }
+                  assert_equal [ "Fall 2025" ], midpoint[:semesters]
+                  assert_equal 4.0, midpoint[:self_average]
+                  assert_equal 3.0, midpoint[:course_average]
+                  assert_nil checkpoints.find { |checkpoint| checkpoint[:key] == "initial" }[:self_average]
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  test "checkpoint progress is unavailable when offering data is missing" do
+    service = StudentCompetencyDashboard.new(student: @student)
+
+    SurveyOffering.stub(:data_source_ready?, false) do
+      service.stub(:self_trend_by_semester, { "Fall 2025" => 4.0 }) do
+        service.stub(:course_trend_by_semester, { "Fall 2025" => 3.0 }) do
+          checkpoints = service.send(:checkpoint_progress)
+
+          assert_equal %w[initial midpoint final], checkpoints.map { |checkpoint| checkpoint[:key] }
+          assert checkpoints.all? { |checkpoint| checkpoint[:semesters].empty? }
+          assert checkpoints.all? { |checkpoint| checkpoint[:self_average].nil? }
+          assert checkpoints.all? { |checkpoint| checkpoint[:course_average].nil? }
+          refute checkpoints.any? { |checkpoint| checkpoint[:available] }
+        end
+      end
+    end
+  end
+
   test "summary and row metadata include domain averages timestamps and below target flags" do
     updated_at = Time.zone.local(2026, 5, 1, 10, 0, 0)
     create_self_rating(value: 2, updated_at: updated_at)
@@ -182,6 +234,28 @@ class StudentCompetencyDashboardTest < ActiveSupport::TestCase
     assert competency[:self_below_target]
     assert_includes payload[:summary][:growth_areas].map { |area| area[:title] }, @competency_title
     assert payload[:domain_averages].values.any? { |averages| averages[:self].present? }
+  end
+
+  test "summary keeps strongest and lowest domains separate for small domain sets" do
+    [
+      { rows: [], strongest: [], lowest: [] },
+      { rows: [ [ "Only", 3.5 ] ], strongest: [ "Only" ], lowest: [ "Only" ] },
+      { rows: [ [ "Strong", 4.5 ], [ "Low", 2.5 ] ], strongest: [ "Strong" ], lowest: [ "Low" ] },
+      { rows: [ [ "Strong", 4.5 ], [ "Middle", 3.5 ], [ "Low", 2.5 ] ], strongest: [ "Strong" ], lowest: [ "Low" ] },
+      { rows: [ [ "Strong", 5.0 ], [ "Next", 4.0 ], [ "Second lowest", 2.0 ], [ "Low", 1.0 ] ], strongest: [ "Strong", "Next" ], lowest: [ "Low", "Second lowest" ] }
+    ].each do |definition|
+      service = StudentCompetencyDashboard.new(student: @student)
+      rows = definition[:rows].map do |name, score|
+        { name: name, averages: { self: score, course: nil }, competencies: [] }
+      end
+
+      service.stub(:domain_rows, rows) do
+        summary = service.send(:student_summary)
+
+        assert_equal definition[:strongest], summary[:strongest_domains].map { |domain| domain[:name] }
+        assert_equal definition[:lowest], summary[:lowest_domains].map { |domain| domain[:name] }
+      end
+    end
   end
 
   test "all semesters view uses graduated student's latest data semester target" do

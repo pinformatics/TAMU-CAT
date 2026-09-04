@@ -40,6 +40,14 @@
       <div class="c-stat__subtext">needs review</div>
     </div>
 
+    <% if summary[:not_assessable_count].to_i.positive? %>
+      <div class="c-stat c-stat--muted" aria-label="Not able to assess <%= summary[:not_assessable_count] %>">
+        <div class="c-stat__label">Not assessable</div>
+        <div class="c-stat__value"><%= summary[:not_assessable_count] %></div>
+        <div class="c-stat__subtext">not covered yet</div>
+      </div>
+    <% end %>
+
     <% if summary[:missing_target_count].to_i.positive? %>
       <div class="c-stat c-stat--muted" aria-label="No target <%= summary[:missing_target_count] %>">
         <div class="c-stat__label">No target</div>

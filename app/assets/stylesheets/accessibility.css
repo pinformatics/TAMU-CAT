@@ -166,7 +166,7 @@ body.high-contrast .flash a:visited {
   text-decoration: underline;
 }
 
-/* High-contrast: hero + inverse “chip/tile” components */
+/* High-contrast: hero + inverse chip/tile components */
 body.high-contrast .c-hero,
 body.high-contrast .c-hero--maroon {
   background: #000000 !important;
@@ -205,22 +205,22 @@ body.high-contrast .c-avatar-tile--inverse {
    ============================================================ */
 
 /* Top nav links */
-body.high-contrast .nav-link,
-body.high-contrast .nav-link:visited {
+body.high-contrast .c-nav-link,
+body.high-contrast .c-nav-link:visited {
   color: #ffffff !important;              /* white on black -> 21:1 */
 }
 
-body.high-contrast .nav-link:hover,
-body.high-contrast .nav-link:focus,
-body.high-contrast .nav-link.active {
+body.high-contrast .c-nav-link:hover,
+body.high-contrast .c-nav-link:focus,
+body.high-contrast .c-nav-link.active {
   background-color: #ffff00 !important;   /* yellow bg, black text */
   color: #000000 !important;
   text-decoration: none;
 }
 
 /* Generic links (not styled as nav/buttons) */
-body.high-contrast a:not(.nav-link):not(.btn),
-body.high-contrast a:not(.nav-link):not(.btn):visited {
+body.high-contrast a:not(.c-nav-link):not(.btn),
+body.high-contrast a:not(.c-nav-link):not(.btn):visited {
   color: #000000 !important;              /* black text on white bg */
   text-decoration: underline;
 }

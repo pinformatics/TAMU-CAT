@@ -2460,6 +2460,14 @@ function bindGoogleTranslateToggle() {
     if (isHidden) mountWhenVisible()
   })
 
+  window.addEventListener("scroll", () => {
+    if (!googleTranslatePanelVisible()) return
+
+    panel.style.display = "none"
+    panel.setAttribute("aria-hidden", "true")
+    button.setAttribute("aria-expanded", "false")
+  }, { passive: true })
+
   const wrapper = button.closest(".translate-nav")
   wrapper?.addEventListener("mouseenter", mountWhenVisible)
   wrapper?.addEventListener("focusin", mountWhenVisible)

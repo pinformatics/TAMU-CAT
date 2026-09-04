@@ -58,7 +58,8 @@ module SurveyResponses
         survey: @survey,
         answers_override: {
           @communication.id => "5 - Strong",
-          @policy.id => "2"
+          @policy.id => "2",
+          @unknown.id => "0"
         }
       )
       service = SelfTargetSummary.new(survey_response:)
@@ -80,6 +81,26 @@ module SurveyResponses
       end
     end
 
+    test "classifies zero self-ratings as not assessable" do
+      survey_response = SurveyResponse.build(
+        student: @student,
+        survey: @survey,
+        answers_override: { @communication.id => "0" }
+      )
+      service = SelfTargetSummary.new(survey_response:)
+
+      service.stub(:effective_competency_target_level, 3) do
+        summary = service.build
+
+        assert_equal :not_assessable, summary[:rows].first[:status]
+        assert_equal "Not able to assess", summary[:rows].first[:status_label]
+        assert_equal 0, summary[:comparable_count]
+        assert_equal 0, summary[:met_count]
+        assert_equal 0, summary[:below_count]
+        assert_equal 1, summary[:not_assessable_count]
+      end
+    end
+
     test "private helpers cover title rating level and label fallbacks" do
       service = SelfTargetSummary.new(survey_response: SurveyResponse.build(student: @student, survey: @survey))
 
@@ -94,6 +115,7 @@ module SurveyResponses
       assert_equal 5, service.send(:normalized_self_rating, "5.0")
       assert_equal 4, service.send(:normalized_self_rating, "Strong (4)")
       assert_equal 3, service.send(:normalized_self_rating, "Level 3 - developing")
+      assert_equal 0, service.send(:normalized_self_rating, "Not able to assess (0)")
       assert_nil service.send(:normalized_self_rating, "No rating")
 
       assert_nil service.send(:normalized_level, nil)
@@ -104,10 +126,13 @@ module SurveyResponses
 
       assert_equal :no_target, service.send(:target_status, 4, nil)
       assert_equal :not_rated, service.send(:target_status, nil, 3)
+      assert_equal :not_assessable, service.send(:target_status, 0, 3)
+      assert_equal :not_assessable, service.send(:target_status, 0, nil)
       assert_equal :met, service.send(:target_status, 4, 3)
       assert_equal :below_target, service.send(:target_status, 2, 3)
       assert_equal "Target not set", service.send(:target_status_label, 4, nil)
       assert_equal "No self-rating", service.send(:target_status_label, nil, 3)
+      assert_equal "Not able to assess", service.send(:target_status_label, 0, 3)
     end
 
     test "summary rows use unassigned domain fallback for detached category data" do

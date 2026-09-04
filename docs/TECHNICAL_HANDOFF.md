@@ -51,7 +51,8 @@ This document summarizes the current operating state of TAMU Competency Assessme
 - **A second safety net covers what the memory guard can't catch: an outright dyno-level kill mid-attempt.** That still bypasses the job's own `rescue`/`ensure` entirely (the whole process dies, not just a Ruby exception is raised), abandoning the batch at `status: "processing"` with no continuation ever scheduled. `GradeImports::StaleBatchWatchdog` (recurring task in `config/recurring.yml`, every 15 minutes) marks any such batch as `"failed"` and notifies admins. It's keyed off `updated_at` (batch and its files, whichever is more recent) rather than total elapsed time since `started_at` -- a healthy multi-chunk auto-resuming import can legitimately stay `"processing"` for a long time in wall-clock terms, but every live chunk touches the batch or file well within `STALE_AFTER` (20 minutes) via a periodic heartbeat (`grade_file.touch`) in the same row-loop check as the memory guard.
 - `Procfile`'s `release` step now runs `db:prepare` (not `db:migrate`) specifically so a never-before-migrated database like `queue` gets its schema loaded on first deploy, not just pending migrations applied.
 - Production SMTP is configured through environment variables. Confirm `APP_HOST`, `APP_PROTOCOL`, `MAILER_FROM`, and the `SMTP_*` settings before relying on email delivery.
-- `config.active_storage.service = :local` in production. On Heroku this is not persistent across dyno restarts and is not shared with a separate worker dyno, so uploads should be moved to S3/GCS/Azure or another durable service before relying on long-term retention or worker-only grade imports.
+- Production Active Storage must use the `amazon` S3-compatible service. Configure `ACTIVE_STORAGE_SERVICE=amazon`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_S3_BUCKET` before starting the production dyno. Optional `AWS_S3_ENDPOINT` and `AWS_S3_FORCE_PATH_STYLE=true` support S3-compatible providers. Production rejects `ACTIVE_STORAGE_SERVICE=local` because Heroku disk is ephemeral and is not shared with a worker dyno. Before cutover, migrate existing blobs, verify private bucket access and lifecycle/retention policy, and run upload/download plus grade-import worker smoke tests.
+- For non-Heroku AWS deployments using an IAM role or instance profile, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` may be omitted; the AWS SDK credential chain is used. Heroku has no automatic IAM role, so configure both keys there. `AWS_S3_BUCKET` is always required when `ACTIVE_STORAGE_SERVICE=amazon`. Keep the bucket private and use Active Storage's signed URLs rather than public object access.
 - `config/deploy.yml` is still a Kamal template with placeholder values such as `your-user`, `192.168.0.1`, and `app.example.com`. Do not treat it as production-ready without replacing those values.
 - Development Google OAuth credentials are not committed. Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in a local `.env` file or shell environment when local Google sign-in testing is needed.
 - Seeded development data is useful but not representative enough for all import behavior. Import validation is most reliable against a sanitized production-like database clone.
@@ -105,6 +106,11 @@ The Heroku path is the clearest current deployment workflow.
    heroku config:set APP_HOST=<app-name>.herokuapp.com
    heroku config:set APP_PROTOCOL=https
    heroku config:set APP_TIME_ZONE="Central Time (US & Canada)"
+   heroku config:set ACTIVE_STORAGE_SERVICE=amazon
+   heroku config:set AWS_S3_BUCKET=<private-bucket>
+   heroku config:set AWS_REGION=<bucket-region>
+   heroku config:set AWS_ACCESS_KEY_ID=<access-key-id>
+   heroku config:set AWS_SECRET_ACCESS_KEY=<secret-access-key>
    ```
 
    Leave `EMAIL_NOTIFICATIONS_ENABLED=false` until `APP_HOST`, `MAILER_FROM`, and SMTP settings are confirmed.
@@ -117,34 +123,41 @@ The Heroku path is the clearest current deployment workflow.
    git push heroku main
    ```
 
-7. Let the Heroku `release` process run:
+7. Let the Heroku `release` process run. The release command skips only
+   runtime storage validation because migrations do not access Active Storage;
+   web and worker dynos still validate the S3 configuration on boot:
 
    ```bash
-   bundle exec rails db:migrate
+   SKIP_STORAGE_VALIDATION=1 bundle exec rails db:prepare
    ```
 
-8. Verify the app boots:
+8. Before switching traffic, migrate existing Active Storage blobs to the
+   private bucket and verify an upload/download plus a worker-run grade import.
+
+9. Verify the app boots:
 
    ```bash
    heroku ps
    heroku logs --tail
    ```
 
-9. Visit `/up` on the production domain and confirm a healthy response.
-10. Sign in with a TAMU admin account and smoke-test:
+10. Visit `/up` on the production domain and confirm a healthy response.
+11. Sign in with a TAMU admin account and smoke-test:
     - Admin dashboard
     - People Management
     - Survey Builder index
     - Grade Import Batches index
     - Competencies index
     - Reports page
-11. For review apps, `app.json` runs:
+12. For review apps, `app.json` runs:
 
     ```bash
     bundle exec rails db:prepare db:seed
     ```
 
-    Review apps require `RAILS_MASTER_KEY`.
+   Review apps require `RAILS_MASTER_KEY`, `AWS_S3_BUCKET`,
+   `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` because the production
+   configuration rejects ephemeral local storage.
 
 ### Docker deployment
 
@@ -164,13 +177,19 @@ The production `Dockerfile` builds a Rails image with Ruby 3.4.6, PostgreSQL cli
      -e DATABASE_URL=<postgres-url> \
      -e GOOGLE_OAUTH_CLIENT_ID=<google-client-id> \
      -e GOOGLE_OAUTH_CLIENT_SECRET=<google-client-secret> \
+   -e ACTIVE_STORAGE_SERVICE=amazon \
+   -e AWS_S3_BUCKET=<private-bucket> \
+   -e AWS_REGION=<bucket-region> \
+   -e AWS_ACCESS_KEY_ID=<access-key-id> \
+   -e AWS_SECRET_ACCESS_KEY=<secret-access-key> \
      --name tamu_cat tamu_cat
    ```
 
 3. Confirm the container boots and `/up` responds.
-4. Confirm persistent storage. The image uses local Active Storage by default, so a production Docker deployment needs either:
-   - a mounted persistent volume for `/rails/storage`, or
-   - a move to cloud object storage.
+4. Configure durable Active Storage before starting the container. Set
+   `ACTIVE_STORAGE_SERVICE=amazon`, `AWS_S3_BUCKET`, `AWS_REGION`, and the
+   provider credentials (or an IAM-compatible credential source), then verify
+   an upload/download. The production image intentionally refuses local disk.
 
 ### Kamal deployment
 
@@ -275,7 +294,7 @@ After rotating Google OAuth credentials:
 - `GradeImports::BatchProcessor` should be decomposed.
 - Legacy course-derived ratings without an import batch semester should be assigned a semester before relying on semester-filtered views.
 - Production background jobs: decision made to keep the app-wide adapter `:inline` and opt individual job classes into Solid Queue (`self.queue_adapter = :solid_queue`) as they're found to need real async processing, rather than flipping every job to async at once with no incremental verification. `GradeImports::BatchImportJob` is the first job to do this. Revisit whether other `.perform_later` call sites (survey notifications, auto-assignment, etc.) should follow the same path.
-- Production Active Storage needs durable object storage or explicit persistent volume management.
+- Production Active Storage requires durable S3-compatible object storage. Local disk is rejected unless `ALLOW_EPHEMERAL_STORAGE=true` is explicitly set for a disposable demo/dev app; never use that opt-in for real student uploads.
 - Mailer host and SMTP settings should be confirmed in production before depending on email delivery.
 - Keep development OAuth credentials out of committed config; use local environment variables for developer-only sign-in testing.
 - Admin UI remains the densest surface and needs continued smoke coverage.
@@ -286,7 +305,7 @@ After rotating Google OAuth credentials:
 ### Runtime platform
 
 - Ruby `3.4.6`
-- Rails `~> 8.0.3`
+- Rails `~> 8.1.0` (lockfile currently resolves `8.1.3.1`)
 - PostgreSQL `17` in the Docker development stack; CI uses PostgreSQL `15`
 - Puma
 - Linux packages for production image:
@@ -328,6 +347,10 @@ Required or commonly used:
 | `RAILS_ENV` | Runtime environment, usually `production`, `development`, or `test`. |
 | `RAILS_MASTER_KEY` | Unlocks encrypted Rails credentials. Required in production/review apps. |
 | `DATABASE_URL` | Production database URL, especially on Heroku. |
+| `ACTIVE_STORAGE_SERVICE` | Production storage service; use `amazon` for durable S3-compatible storage. |
+| `AWS_S3_BUCKET`, `AWS_REGION` | Private Active Storage bucket and its region. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Required on Heroku for S3 access; optional when an external AWS IAM credential provider is available. |
+| `AWS_S3_ENDPOINT`, `AWS_S3_FORCE_PATH_STYLE` | Optional S3-compatible provider endpoint and path-style setting. |
 | `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth app client ID. |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth app client secret. |
 | `APP_HOST` | Host used in generated mailer links. Required when email notifications are enabled unless Heroku injects its app hostname. |
@@ -361,8 +384,13 @@ Required or commonly used:
 - Heroku, if using the current Heroku deployment path.
 - GitHub Actions for CI.
 - Docker registry and host infrastructure if using Docker/Kamal.
-- Optional future durable object storage for Active Storage uploads.
+- Durable S3-compatible object storage for Active Storage uploads.
 - TAMU SMTP or another production SMTP service for email delivery.
+
+The database sync script may receive custom local credentials or a custom
+database name; it generates the encoded `LOCAL_DATABASE_URL` automatically.
+For manual Compose overrides, set `LOCAL_DATABASE_URL` explicitly with any
+URI-reserved credential characters percent-encoded.
 
 ## Admin Access
 

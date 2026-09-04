@@ -511,16 +511,25 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
       executive = distribution[:cohorts].find do |item|
         item[:cohort_label] == "Executive, Class of 2027"
       end
+      residential_cohort = distribution[:cohorts].find do |item|
+        item[:cohort_label] == "Residential, Class of 2026"
+      end
 
       assert_equal "Not able to assess", distribution[:levels][0]
       assert_equal 75.0, distribution[:program_target_met_percent]
       assert_equal 1, residential[:level_counts][0]
       assert_equal 1, residential[:level_counts][5]
+      assert_equal 2, residential[:total_students]
+      assert_equal 1, residential[:assessed_students]
+      assert_equal 1, residential[:not_assessed_count]
       assert_equal 1, residential[:target_met_count]
-      assert_equal 1, residential[:target_not_met_count]
-      assert_equal 50.0, residential[:target_met_percent]
-      assert_equal 50.0, residential[:target_not_met_percent]
-      assert_equal false, residential[:target_met]
+      assert_equal 0, residential[:target_not_met_count]
+      assert_equal 100.0, residential[:target_met_percent]
+      assert_equal 0.0, residential[:target_not_met_percent]
+      assert_equal true, residential[:target_met]
+      assert_equal 2, residential_cohort[:total_students]
+      assert_equal 1, residential_cohort[:total_assessments]
+      assert_equal 1, residential_cohort[:not_assessed_count]
       assert_equal 100.0, executive[:target_met_percent]
       assert_equal 0.0, executive[:target_not_met_percent]
     end
@@ -793,6 +802,11 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
       assert_equal 3, row[:program_target_level]
       assert_equal 55, row[:advisor_id]
     end
+
+    record.response_value = "0"
+    aggregator.stub(:competency_target_level_for_record, 3) do
+      assert_equal 0.0, aggregator.send(:build_dataset_row, record, is_advisor_entry: false)[:score]
+    end
   end
 
   test "export_filters falls back and resolves selected filter labels" do
@@ -976,19 +990,20 @@ class DataAggregatorAdditionalCoverageTest < ActiveSupport::TestCase
       ],
       2 => [ { score: 2, program_target_level: 4 } ],
       3 => [ { score: 5, program_target_level: nil } ],
-      4 => []
+      4 => [],
+      5 => [ { score: 0, program_target_level: 4 } ]
     }
 
-    counts = aggregator.send(:attainment_counts_for_group, rows_by_student, total_students: 3)
+    counts = aggregator.send(:attainment_counts_for_group, rows_by_student, total_students: 4)
     assert_equal 1, counts[:achieved_count]
     assert_equal 1, counts[:not_met_count]
-    assert_equal 1, counts[:not_assessed_count]
-    assert_equal 3, counts[:total_students]
+    assert_equal 2, counts[:not_assessed_count]
+    assert_equal 4, counts[:total_students]
 
     percentages = aggregator.send(:attainment_percentages, counts)
-    assert_equal 33.33333333333333, percentages[:achieved_percent]
-    assert_equal 33.33333333333333, percentages[:not_met_percent]
-    assert_equal 33.33333333333333, percentages[:not_assessed_percent]
+    assert_equal 25.0, percentages[:achieved_percent]
+    assert_equal 25.0, percentages[:not_met_percent]
+    assert_equal 50.0, percentages[:not_assessed_percent]
 
     assert_equal(
       { achieved_percent: nil, not_met_percent: nil, not_assessed_percent: nil },

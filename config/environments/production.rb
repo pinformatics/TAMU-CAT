@@ -21,8 +21,23 @@ Rails.application.configure do
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   # config.asset_host = "http://assets.example.com"
 
-  # Store uploaded files on the local file system (see config/storage.yml for options).
-  config.active_storage.service = :local
+  # Production must use shared durable storage; local disk is ephemeral on Heroku
+  # and is not shared with a separate import worker.
+  active_storage_service = ENV.fetch("ACTIVE_STORAGE_SERVICE", "amazon").to_sym
+  allow_ephemeral_storage = ActiveModel::Type::Boolean.new.cast(ENV.fetch("ALLOW_EPHEMERAL_STORAGE", "false"))
+  if active_storage_service == :local && !allow_ephemeral_storage
+    raise "ACTIVE_STORAGE_SERVICE=local is not supported in production; configure a durable service."
+  end
+  assets_precompile = ENV["SECRET_KEY_BASE_DUMMY"].present? ||
+                      (Rake.respond_to?(:application) && Rake.application.top_level_tasks.include?("assets:precompile"))
+  validate_storage = ENV["SKIP_STORAGE_VALIDATION"] != "1"
+  if active_storage_service == :amazon && !assets_precompile && validate_storage
+    raise "AWS_S3_BUCKET is required when ACTIVE_STORAGE_SERVICE=amazon." if ENV["AWS_S3_BUCKET"].blank?
+    %w[AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY].each do |name|
+      raise "#{name} is required for Heroku S3 access." if ENV[name].blank?
+    end
+  end
+  config.active_storage.service = active_storage_service
 
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
   config.assume_ssl = true

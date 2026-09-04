@@ -22,6 +22,26 @@
     },
     "APP_PROTOCOL": {
       "value": "https"
+    },
+    "ACTIVE_STORAGE_SERVICE": {
+      "value": "amazon",
+      "description": "Production uploads must use durable S3-compatible storage."
+    },
+    "AWS_S3_BUCKET": {
+      "required": true,
+      "description": "Private bucket for Active Storage blobs; migrate existing blobs before cutover."
+    },
+    "AWS_REGION": {
+      "value": "us-east-1",
+      "description": "S3 bucket region."
+    },
+    "AWS_ACCESS_KEY_ID": {
+      "required": true,
+      "description": "AWS access key with private-bucket read/write access."
+    },
+    "AWS_SECRET_ACCESS_KEY": {
+      "required": true,
+      "description": "AWS secret key paired with AWS_ACCESS_KEY_ID."
     }
   },
   "addons": [
